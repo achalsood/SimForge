@@ -1,6 +1,6 @@
 #pragma once
 
-#include <simforge/world/entity.hpp>
+#include <simforge/world/world_snapshot.hpp>
 
 #include <limits>
 #include <stdexcept>
@@ -23,19 +23,24 @@ class SparseSet
 public:
     void reserve(std::size_t count)
     {
-        sparse_.reserve(count);
-        entities_.reserve(count);
-        components_.reserve(count);
+        reserve(count, count);
     }
 
-    [[nodiscard]] bool has(Entity entity) const noexcept
+    void reserve(std::size_t sparse_count, std::size_t dense_count)
+    {
+        sparse_.reserve(sparse_count);
+        entities_.reserve(dense_count);
+        components_.reserve(dense_count);
+    }
+
+    [[nodiscard]] bool has(EntityId entity) const noexcept
     {
         return entity.index < sparse_.size() && sparse_[entity.index] != missing &&
                entities_[sparse_[entity.index]] == entity;
     }
 
     template<class... Args>
-    T& emplace(Entity entity, Args&&... args)
+    T& emplace(EntityId entity, Args&&... args)
     {
         if (has(entity))
         {
@@ -58,19 +63,19 @@ public:
         return components_.back();
     }
 
-    [[nodiscard]] T& get(Entity entity)
+    [[nodiscard]] T& get(EntityId entity)
     {
         if (!has(entity)) throw std::out_of_range("Entity has no such component");
         return components_[sparse_[entity.index]];
     }
 
-    [[nodiscard]] const T& get(Entity entity) const
+    [[nodiscard]] const T& get(EntityId entity) const
     {
         if (!has(entity)) throw std::out_of_range("Entity has no such component");
         return components_[sparse_[entity.index]];
     }
 
-    bool remove(Entity entity) noexcept
+    bool remove(EntityId entity) noexcept
     {
         if (!has(entity)) return false;
         const auto dense = sparse_[entity.index];
@@ -89,19 +94,19 @@ public:
 
     void clear() noexcept
     {
-        for (Entity entity : entities_) sparse_[entity.index] = missing;
+        for (EntityId entity : entities_) sparse_[entity.index] = missing;
         entities_.clear();
         components_.clear();
     }
 
     [[nodiscard]] std::size_t size() const noexcept { return components_.size(); }
-    [[nodiscard]] Entity entity_at(std::size_t index) const noexcept { return entities_[index]; }
+    [[nodiscard]] EntityId entity_at(std::size_t index) const noexcept { return entities_[index]; }
     [[nodiscard]] T& component_at(std::size_t index) noexcept { return components_[index]; }
     [[nodiscard]] const T& component_at(std::size_t index) const noexcept { return components_[index]; }
 
 private:
     std::vector<std::size_t> sparse_;
-    std::vector<Entity> entities_;
+    std::vector<EntityId> entities_;
     std::vector<T> components_;
 };
 

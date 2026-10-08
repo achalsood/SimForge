@@ -6,6 +6,10 @@ add_library(simforge_engine STATIC
     src/simulation/simulation_clock.cpp
     src/simulation/movement_system.cpp
     src/world/world.cpp
+    src/world/world_snapshot.cpp
+    src/simulation/simulation_snapshot.cpp
+    src/simulation/snapshot_serialization.cpp
+    src/simulation/state_comparison.cpp
 )
 
 target_compile_features(simforge_engine PUBLIC cxx_std_23)

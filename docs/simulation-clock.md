@@ -2,7 +2,7 @@
 
 `simforge::simulation::SimulationClock` schedules fixed updates independently of
 the rendering frame clock. The default is 60 Hz; construction accepts integer
-rates from 1 to 1,000,000,000 Hz. Rate is immutable so elapsed simulation time
+rates from 1 to 1,000,000,000 Hz. Rate changes only on snapshot restore; elapsed simulation time
 always equals `tick_count() / ticks_per_second()`. The seconds accessor is a
 floating-point presentation of that ratio, not an accumulated floating-point sum.
 
@@ -27,6 +27,12 @@ call. Splitting scaled input into different batches can therefore change results
 Invalid inputs and overflow throw before modifying timing state. `reset()` clears
 ticks, remainder and pause while retaining rate and scale. Instances require
 external synchronization if shared between threads.
+
+`capture_snapshot()` preserves rate, ticks, remainder, pause and scale without
+wall timestamps. `restore_snapshot()` validates before applying all fields,
+including rate. Simulated elapsed time is derived from restored ticks/rate.
+Single-step executes immediately; there is no pending step state. See
+[snapshots and replay](snapshots-replay.md) for combined World/clock restoration.
 
 The engine exposes its simulation clock and provides initialized-state-checked
 `advance_simulation` and `advance_simulation_ticks` methods. `begin_frame()` still

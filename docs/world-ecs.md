@@ -38,7 +38,8 @@ world state or tick counts if application updates fail.
 
 ## Entity identity and lifetime
 
-An Entity is an index and a 32-bit generation, with value equality. Generation
+An Entity is an index, a 32-bit generation and a private World ownership token.
+Value equality includes ownership. Generation
 zero and the default handle are invalid. Indices `0` through `UINT32_MAX - 1` are
 available; `UINT32_MAX` is the free-list sentinel. `valid` and `has<T>` return
 false for invalid/stale handles. Mutating operations and `get<T>` throw
@@ -55,13 +56,16 @@ lets tests exercise the real exhaustion path without billions of iterations.
 `clear()` invalidates all live handles, clears components, and retains slot
 generation history, retired slots, and allocated capacities. It does not reset
 generations or free history. It is O(slot count + component count) and can be
-called repeatedly. A new world requires destruction and construction.
+called repeatedly. Releasing all generation history requires destruction or
+snapshot restoration, which replaces ownership identity.
 
-Handles are local to their originating World and valid only during its lifetime.
-There is no world identifier in the handle; a handle from another World can have
-the same index/generation and must not be passed in. World is noncopyable and
-nonmovable. `entity_count()` reports only living entities. `reserve(count)` can
-preallocate slots and all currently supported component arrays.
+Handles are checked against their originating World's current ownership token.
+Matching index/generation pairs from another World are rejected. Successful
+snapshot restoration invalidates all previous handles and component references;
+reacquire intentionally using `handle_at(index)`. World is noncopyable and nonmovable.
+`entity_count()` reports only living entities. `reserve(count)` can preallocate
+slots and all currently supported component arrays. See
+[snapshots and replay](snapshots-replay.md) for token lifetimes and restore semantics.
 
 ## Component storage and references
 
@@ -97,13 +101,16 @@ Reference/pointer lifetime follows packed-vector storage:
 - Destroy has the same effect on every attached type; clear invalidates all
   component references. Always reacquire by Entity after structural mutation.
 
-`each<First, Rest...>(callback)` supplies Entity and component references for
+`each<First, Rest...>(callback)` supplies an owned Entity and component references for
 entities possessing every requested type. Mutable and const overloads are
 provided. The callback walks First's dense order; insertion appends, removal moves
 the last entry into the removed entry's position. Identical ordered lifecycle
 operations give identical iteration order, but order is not sorted by entity ID.
+Copy the callback handle if retaining it after the callback. `each_components`
+supplies only the component references and avoids creating ownership-bearing
+handles; MovementSystem uses this path. Internal storage uses compact logical IDs.
 
-A scoped iteration guard rejects create/destroy/emplace/remove/clear/reserve
+A scoped iteration guard rejects create/destroy/emplace/remove/clear/reserve/restore
 during any active iteration, including mutations through aliases during const or
 nested iteration. Value edits and nested reads are allowed. Exceptions release
 the guard, so later structural edits remain possible. This prevents storage
@@ -124,8 +131,9 @@ For identical initial data, ordered lifecycle operations, and fixed tick inputs,
 the same supported execution environment produces identical results. Floating-
 point state is not guaranteed bitwise identical across compilers, CPU architectures,
 or compiler settings. Record input/control operations for replay. World state
-serialization, stable world identities, random-seed policies, and transactional
-updates remain future work.
+serialization and movement replay are implemented with documented ownership and
+versioned state. Domain random-seed policies and transactional updates remain future
+work. See [snapshot design](snapshots-replay.md) for the exact current guarantees.
 
 ## Running and testing
 
@@ -163,6 +171,7 @@ cmake --preset windows-release
 cmake --build --preset windows-release
 ctest --test-dir build/windows-release --output-on-failure
 build/windows-release/benchmarks/simforge_world_benchmark.exe
+build/windows-release/benchmarks/simforge_snapshot_benchmark.exe
 ```
 
 The independent benchmark refuses Debug execution. It performs one warmup and
@@ -174,6 +183,6 @@ Every final position is validated outside timing and checksums are printed to
 consume results. Destruction cleanup and stale handles are also validated.
 Do not compare the pre-reserved sandbox setup against benchmark insertion.
 
-See [initial measured results](ecs-benchmark-results.md). This is a baseline,
-not a speedup claim. Profiling, snapshots/replay, and validated scenario input are
-reasonable next milestones; none are implemented here.
+See [initial measured results](ecs-benchmark-results.md) and
+[snapshot benchmarks and ownership costs](snapshot-benchmark-results.md).
+Profiling and validated scenario input are reasonable next milestones.

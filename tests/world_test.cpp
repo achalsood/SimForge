@@ -214,11 +214,11 @@ void clock_integration()
     };
     first.pause(); second.pause();
     advance(a, first, 1s); advance(b, second, 1s);
-    check(a.get<Transform>(Entity{0, 1}).position.x == 0 && first.tick_count() == 0);
+    check(a.get<Transform>(a.handle_at(0)).position.x == 0 && first.tick_count() == 0);
     first.single_step(); second.single_step();
     MovementSystem::update(a, first.fixed_step_seconds());
     MovementSystem::update(b, second.fixed_step_seconds());
-    near(a.get<Transform>(Entity{0, 1}).position.x, 1.0 / 60);
+    near(a.get<Transform>(a.handle_at(0)).position.x, 1.0 / 60);
     first.resume(); second.resume();
     first.set_time_scale(0.5); second.set_time_scale(0.5);
     advance(a, first, 1s); advance(b, second, 1s);
@@ -232,15 +232,15 @@ void clock_integration()
         advance(b, second, std::chrono::nanoseconds{i * 7919});
     }
     check(first.tick_count() == second.tick_count());
-    std::vector<Entity> order_a, order_b;
+    std::vector<EntityId> order_a, order_b;
     a.each<Velocity, Transform>([&](Entity entity, const Velocity&, const Transform& transform)
     {
-        order_a.push_back(entity);
-        check(transform.position == b.get<Transform>(entity).position);
+        order_a.push_back({entity.index, entity.generation});
+        check(transform.position == b.get<Transform>(b.handle_at(entity.index)).position);
     });
-    b.each<Velocity, Transform>([&](Entity entity, const Velocity&, const Transform&) { order_b.push_back(entity); });
+    b.each<Velocity, Transform>([&](Entity entity, const Velocity&, const Transform&) { order_b.push_back({entity.index, entity.generation}); });
     check(order_a == order_b);
-    near(a.get<Transform>(Entity{0, 1}).position.x, first.elapsed_seconds());
+    near(a.get<Transform>(a.handle_at(0)).position.x, first.elapsed_seconds());
 }
 
 void large_world()

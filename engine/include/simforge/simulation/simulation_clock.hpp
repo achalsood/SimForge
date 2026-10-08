@@ -6,6 +6,18 @@
 namespace simforge::simulation
 {
 
+struct ClockSnapshot
+{
+    std::uint32_t version{1};
+    std::uint32_t ticks_per_second{60};
+    std::uint64_t ticks{0};
+    std::uint64_t remainder{0};
+    bool paused{false};
+    double time_scale{1.0};
+};
+
+void validate_snapshot(const ClockSnapshot& snapshot);
+
 // Scheduling is repeatable for identical inputs and control operations in the
 // same execution environment. This does not make simulation state deterministic.
 class SimulationClock
@@ -23,6 +35,8 @@ public:
     void set_time_scale(double scale);
     // Clears progress and pause; preserves rate and scale.
     void reset() noexcept;
+    [[nodiscard]] ClockSnapshot capture_snapshot() const noexcept;
+    void restore_snapshot(const ClockSnapshot& snapshot);
 
     [[nodiscard]] bool paused() const noexcept { return paused_; }
     [[nodiscard]] double time_scale() const noexcept { return time_scale_; }

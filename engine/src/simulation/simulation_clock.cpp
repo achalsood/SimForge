@@ -91,4 +91,27 @@ double SimulationClock::elapsed_seconds() const noexcept
 {
     return static_cast<double>(ticks_) / rate_;
 }
+
+void validate_snapshot(const ClockSnapshot& snapshot)
+{
+    if (snapshot.version != 1 || snapshot.ticks_per_second == 0 ||
+        snapshot.ticks_per_second > units_per_second || snapshot.remainder >= units_per_second ||
+        !std::isfinite(snapshot.time_scale) || snapshot.time_scale < 0)
+        throw std::invalid_argument("Invalid or unsupported clock snapshot");
+}
+
+ClockSnapshot SimulationClock::capture_snapshot() const noexcept
+{
+    return {1, rate_, ticks_, remainder_, paused_, time_scale_};
+}
+
+void SimulationClock::restore_snapshot(const ClockSnapshot& snapshot)
+{
+    validate_snapshot(snapshot);
+    rate_ = snapshot.ticks_per_second;
+    ticks_ = snapshot.ticks;
+    remainder_ = snapshot.remainder;
+    paused_ = snapshot.paused;
+    time_scale_ = snapshot.time_scale;
+}
 } // namespace simforge::simulation

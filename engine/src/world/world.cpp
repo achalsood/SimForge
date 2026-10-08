@@ -27,16 +27,23 @@ Entity World::create_entity()
     slot.alive = true;
     slot.next_free = no_slot;
     ++live_count_;
-    return Entity{index, slot.generation};
+    return Entity{index, slot.generation, owner_};
 }
 
-bool World::valid(Entity entity) const noexcept
+bool World::valid(const Entity& entity) const noexcept
 {
-    return entity.generation != 0 && entity.index < slots_.size() &&
+    return entity.owner_ == owner_ && entity.generation != 0 && entity.index < slots_.size() &&
            slots_[entity.index].alive && slots_[entity.index].generation == entity.generation;
 }
 
-void World::require_valid(Entity entity) const
+Entity World::handle_at(std::uint32_t index) const
+{
+    if (index >= slots_.size() || !slots_[index].alive)
+        throw std::out_of_range("No living entity at this index");
+    return Entity{index, slots_[index].generation, owner_};
+}
+
+void World::require_valid(const Entity& entity) const
 {
     if (!valid(entity)) throw std::invalid_argument("Invalid or stale entity handle");
 }
@@ -57,14 +64,16 @@ void World::release_slot(std::uint32_t index) noexcept
         slot.next_free = free_head_;
         free_head_ = index;
     }
+    else slot.retired = true;
     --live_count_;
 }
 
-void World::destroy_entity(Entity entity)
+void World::destroy_entity(const Entity& entity)
 {
     require_structural_access();
     require_valid(entity);
-    std::apply([&](auto&... storage) { (storage.remove(entity), ...); }, components_);
+    const EntityId id{entity.index, entity.generation};
+    std::apply([&](auto&... storage) { (storage.remove(id), ...); }, components_);
     release_slot(entity.index);
 }
 

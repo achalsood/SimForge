@@ -39,7 +39,7 @@ Sample run(std::size_t count)
     const auto creation_start = timer::now();
     for (std::size_t i = 0; i < count; ++i) entities.push_back(world.create_entity());
     const auto creation_end = timer::now();
-    for (Entity entity : entities)
+    for (const Entity& entity : entities)
     {
         world.emplace<Transform>(entity);
         world.emplace<Velocity>(entity, Vec3{1, 2, 3});
@@ -67,11 +67,11 @@ Sample run(std::size_t count)
         world.component_count<Velocity>() != count || clock.elapsed_seconds() != 2)
         throw std::runtime_error("Benchmark setup validation failed");
     const auto destruction_start = timer::now();
-    for (Entity entity : entities) world.destroy_entity(entity);
+    for (const Entity& entity : entities) world.destroy_entity(entity);
     const auto destruction_end = timer::now();
     if (world.entity_count() != 0 || world.component_count<Transform>() != 0 || world.component_count<Velocity>() != 0)
         throw std::runtime_error("Benchmark cleanup validation failed");
-    for (Entity entity : entities)
+    for (const Entity& entity : entities)
         if (world.valid(entity)) throw std::runtime_error("Benchmark stale handle validation failed");
     return {milliseconds(creation_start, creation_end), milliseconds(creation_end, insertion_end),
             milliseconds(insertion_end, update_end), milliseconds(destruction_start, destruction_end), checksum};

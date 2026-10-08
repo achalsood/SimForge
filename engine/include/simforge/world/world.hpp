@@ -1,7 +1,9 @@
 #pragma once
 
 #include <simforge/world/components.hpp>
+#include <simforge/world/entity.hpp>
 #include <simforge/world/sparse_set.hpp>
+#include <simforge/world/world_snapshot.hpp>
 
 #include <functional>
 #include <tuple>
@@ -20,46 +22,49 @@ public:
     World& operator=(World&&) = delete;
 
     [[nodiscard]] Entity create_entity();
-    void destroy_entity(Entity entity);
-    [[nodiscard]] bool valid(Entity entity) const noexcept;
+    void destroy_entity(const Entity& entity);
+    [[nodiscard]] bool valid(const Entity& entity) const noexcept;
+    [[nodiscard]] Entity handle_at(std::uint32_t index) const;
+    [[nodiscard]] WorldSnapshot capture_snapshot() const;
+    void restore_snapshot(const WorldSnapshot& snapshot);
     void clear();
     void reserve(std::size_t entities);
     [[nodiscard]] std::size_t entity_count() const noexcept { return live_count_; }
 
     template<class T, class... Args>
-    T& emplace(Entity entity, Args&&... args)
+    T& emplace(const Entity& entity, Args&&... args)
     {
         require_structural_access();
         require_valid(entity);
-        return storage<T>().emplace(entity, std::forward<Args>(args)...);
+        return storage<T>().emplace({entity.index, entity.generation}, std::forward<Args>(args)...);
     }
 
     template<class T>
-    bool remove(Entity entity)
+    bool remove(const Entity& entity)
     {
         require_structural_access();
         require_valid(entity);
-        return storage<T>().remove(entity);
+        return storage<T>().remove({entity.index, entity.generation});
     }
 
     template<class T>
-    [[nodiscard]] bool has(Entity entity) const noexcept
+    [[nodiscard]] bool has(const Entity& entity) const noexcept
     {
-        return valid(entity) && storage<T>().has(entity);
+        return valid(entity) && storage<T>().has({entity.index, entity.generation});
     }
 
     template<class T>
-    [[nodiscard]] T& get(Entity entity)
-    {
-        require_valid(entity);
-        return storage<T>().get(entity);
-    }
-
-    template<class T>
-    [[nodiscard]] const T& get(Entity entity) const
+    [[nodiscard]] T& get(const Entity& entity)
     {
         require_valid(entity);
-        return storage<T>().get(entity);
+        return storage<T>().get({entity.index, entity.generation});
+    }
+
+    template<class T>
+    [[nodiscard]] const T& get(const Entity& entity) const
+    {
+        require_valid(entity);
+        return storage<T>().get({entity.index, entity.generation});
     }
 
     template<class T>
@@ -74,9 +79,10 @@ public:
         auto& first = storage<First>();
         for (std::size_t i = 0; i < first.size(); ++i)
         {
-            const Entity entity = first.entity_at(i);
-            if ((storage<Rest>().has(entity) && ...))
-                std::invoke(function, entity, first.component_at(i), storage<Rest>().get(entity)...);
+            const EntityId id = first.entity_at(i);
+            if ((storage<Rest>().has(id) && ...))
+                std::invoke(function, Entity{id.index, id.generation, owner_},
+                            first.component_at(i), storage<Rest>().get(id)...);
         }
     }
 
@@ -87,20 +93,44 @@ public:
         const auto& first = storage<First>();
         for (std::size_t i = 0; i < first.size(); ++i)
         {
-            const Entity entity = first.entity_at(i);
-            if ((storage<Rest>().has(entity) && ...))
-                std::invoke(function, entity, first.component_at(i), storage<Rest>().get(entity)...);
+            const EntityId id = first.entity_at(i);
+            if ((storage<Rest>().has(id) && ...))
+                std::invoke(function, Entity{id.index, id.generation, owner_},
+                            first.component_at(i), storage<Rest>().get(id)...);
+        }
+    }
+
+    // Same dense traversal/structural guard, without constructing public handles.
+    // Systems that only need component values avoid ownership-token copies.
+    template<class First, class... Rest, class Function>
+    void each_components(Function&& function)
+    {
+        IterationGuard guard{*this};
+        auto& first = storage<First>();
+        for (std::size_t i = 0; i < first.size(); ++i)
+        {
+            const EntityId id = first.entity_at(i);
+            if ((storage<Rest>().has(id) && ...))
+                std::invoke(function, first.component_at(i), storage<Rest>().get(id)...);
+        }
+    }
+
+    template<class First, class... Rest, class Function>
+    void each_components(Function&& function) const
+    {
+        IterationGuard guard{*this};
+        const auto& first = storage<First>();
+        for (std::size_t i = 0; i < first.size(); ++i)
+        {
+            const EntityId id = first.entity_at(i);
+            if ((storage<Rest>().has(id) && ...))
+                std::invoke(function, first.component_at(i), storage<Rest>().get(id)...);
         }
     }
 
 private:
     static constexpr auto no_slot = std::numeric_limits<std::uint32_t>::max();
-    struct Slot
-    {
-        std::uint32_t generation{1};
-        std::uint32_t next_free{no_slot};
-        bool alive{false};
-    };
+    using Slot = SlotSnapshot;
 
     struct IterationGuard
     {
@@ -123,11 +153,12 @@ private:
         return std::get<detail::SparseSet<T>>(components_);
     }
 
-    void require_valid(Entity entity) const;
+    void require_valid(const Entity& entity) const;
     void require_structural_access() const;
     void release_slot(std::uint32_t index) noexcept;
 
     std::vector<Slot> slots_;
+    std::shared_ptr<const std::byte> owner_{std::make_shared<const std::byte>()};
     std::tuple<detail::SparseSet<Transform>, detail::SparseSet<Velocity>> components_;
     std::uint32_t generation_limit_;
     std::uint32_t free_head_{no_slot};

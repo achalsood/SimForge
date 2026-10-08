@@ -23,15 +23,19 @@ AI will not invent simulation outcomes. It will create structured simulation def
 
 Early development.
 
-The fixed-step simulation clock and World/ECS foundation are implemented:
+The fixed-step simulation clock, World/ECS, and snapshot/replay foundation are implemented:
 generation-based entity handles, packed sparse-set Transform/Velocity storage,
-and a movement system driven by explicit fixed ticks. Core simulation has no SDL
+and a movement system driven by explicit fixed ticks. Snapshots preserve full
+logical lifecycle/component/clock state and support independent branches,
+versioned serialization, and exact replay comparison. Core simulation has no SDL
 or Vulkan dependency. Handles are local to a World; stale handles are rejected,
-and exhausted generations retire rather than wrap.
+and exhausted generations retire rather than wrap. Restoring invalidates all old
+handles through a fresh ownership token.
 
 See [World architecture and usage](docs/world-ecs.md),
 [simulation timing](docs/simulation-clock.md), and
-[Release benchmark results](docs/ecs-benchmark-results.md) for ownership,
+[snapshot design and schema](docs/snapshots-replay.md), and
+[snapshot benchmark results](docs/snapshot-benchmark-results.md) for ownership,
 reference lifetimes, determinism limits, and initial performance measurements.
 
 ```powershell
@@ -43,13 +47,45 @@ build/windows-debug/apps/sandbox/simforge_sandbox.exe --headless --entities 1000
 cmake --preset windows-release
 cmake --build --preset windows-release
 build/windows-release/benchmarks/simforge_world_benchmark.exe
+build/windows-release/benchmarks/simforge_snapshot_benchmark.exe
 ```
 
 Run the sandbox without arguments for the SDL window mode. Headless mode reports
 entity/tick counts, simulated elapsed time, separate setup/update wall durations,
 and a position checksum. Fixed-step scheduling does not guarantee cross-platform
-bitwise simulation determinism. Rendering, physics, AI integration, and snapshots
+bitwise simulation determinism. Rendering, physics, and AI integration
 are future milestones.
+
+Capture, run, restore, and replay the same movement workload:
+
+```cpp
+#include <simforge/world/world.hpp>
+#include <simforge/simulation/simulation_snapshot.hpp>
+#include <iostream>
+
+simforge::world::World world;
+simforge::simulation::SimulationClock clock;
+const auto entity = world.create_entity();
+world.emplace<simforge::world::Transform>(entity);
+world.emplace<simforge::world::Velocity>(entity, simforge::world::Vec3{1, 0, 0});
+const auto initial = simforge::simulation::capture_snapshot(world, clock);
+simforge::simulation::replay_fixed_ticks(world, clock, 120);
+const auto expected = simforge::simulation::capture_snapshot(world, clock);
+
+const auto bytes = simforge::simulation::serialize_snapshot(initial);
+simforge::simulation::restore_snapshot(world, clock,
+    simforge::simulation::deserialize_snapshot(bytes));
+// 'entity' is now invalid; use world.handle_at(entity.index) if a handle is needed.
+simforge::simulation::replay_fixed_ticks(world, clock, 120);
+const auto actual = simforge::simulation::capture_snapshot(world, clock);
+if (auto mismatch = simforge::simulation::first_difference(expected, actual))
+    std::cerr << *mismatch << '\n';
+```
+
+Replay assumes identical logical state, inputs, system order and supported execution
+environment. Snapshot input is validated and bounded to 64 MiB / 1M slots. The
+binary schema preserves finite doubles and detects accidental corruption; it does
+not authenticate data. No third-party serialization dependency was added.
 
 ## Project Structure
 
