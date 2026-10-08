@@ -3,5 +3,5 @@
   "name": "Warehouse Baseline",
   "domain": "warehouse",
   "simulation": {"tick_rate": 60, "duration_seconds": 28800, "random_seed": 12345},
-  "warehouse": {"loading_bays": 3, "workers": 10, "forklifts": 2, "shipment_interval_seconds": 300}
+  "warehouse": {"loading_bays": 3, "workers": 10, "forklifts": 2, "shipment_interval_seconds": 300, "processing_duration_seconds": 900}
 }

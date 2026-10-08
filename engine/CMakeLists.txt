@@ -15,6 +15,9 @@ add_library(simforge_engine STATIC
     src/scenario/scenario.cpp
     src/simulation/input_recording.cpp
     src/scenario/recording_json.cpp
+    src/warehouse/event_scheduler.cpp
+    src/warehouse/resource_manager.cpp
+    src/warehouse/warehouse_simulation.cpp
 )
 
 target_compile_features(simforge_engine PUBLIC cxx_std_23)

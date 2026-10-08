@@ -3,11 +3,13 @@
 #include <simforge/simulation/movement_system.hpp>
 #include <simforge/world/world.hpp>
 #include <simforge/simulation/input_recording.hpp>
+#include <simforge/warehouse/warehouse_simulation.hpp>
 
 #include <charconv>
 #include <algorithm>
 #include <filesystem>
 #include <optional>
+#include <iomanip>
 #include <chrono>
 #include <cstdint>
 #include <iostream>
@@ -87,8 +89,43 @@ int scenario_workflow(const Options& options)
     std::cout << "Validated scenario: " << definition.name << '\n';
     if (std::holds_alternative<scenario::WarehouseConfig>(definition.domain))
     {
-        if (options.record || options.replay) throw std::invalid_argument("Warehouse runtime/commands are not implemented");
-        std::cout << "Warehouse configuration retained. Warehouse simulation is not implemented.\n";
+        if (options.record || options.replay) throw std::invalid_argument("Warehouse command recording/replay is not implemented; use movement recording");
+        using timer = std::chrono::steady_clock;
+        const auto begin = timer::now();
+        warehouse::WarehouseSimulation simulation{definition};
+        const auto initialized = timer::now();
+        simulation.run();
+        const auto executed = timer::now();
+        const auto metrics = simulation.metrics();
+        const auto finalized = timer::now();
+        const auto& config = std::get<scenario::WarehouseConfig>(definition.domain);
+        std::cout << std::fixed << std::setprecision(3)
+                  << "SimForge Warehouse Simulation\n"
+                  << "Tick rate: " << definition.simulation.tick_rate << " Hz\n"
+                  << "Duration: " << definition.simulation.duration_seconds << " seconds ("
+                  << static_cast<double>(definition.simulation.duration_seconds) / 3600 << " simulated hours)\n"
+                  << "Loading bays: " << config.loading_bays << " | Workers: " << config.workers << " | Forklifts: " << config.forklifts << '\n'
+                  << "Arrival interval: " << config.shipment_interval_seconds << " seconds | Processing: " << config.processing_duration_seconds << " seconds\n"
+                  << "Arrivals: " << metrics.arrived << " | Started: " << metrics.started << " | Completed: " << metrics.completed
+                  << " | Waiting: " << metrics.waiting << " | In progress: " << metrics.in_progress << '\n';
+        const auto print_metric = [](const char* label, std::optional<double> value, double factor, const char* unit)
+        {
+            std::cout << label << ": ";
+            if (value) std::cout << *value * factor << ' ' << unit;
+            else std::cout << "unavailable";
+            std::cout << '\n';
+        };
+        print_metric("Throughput", metrics.throughput_per_hour, 1, "shipments/hour");
+        print_metric("Average queue wait (started)", metrics.average_wait_seconds, 1.0 / 60, "minutes");
+        print_metric("Maximum queue wait (started)", metrics.maximum_wait_seconds, 1.0 / 60, "minutes");
+        print_metric("Average processing (completed)", metrics.average_processing_seconds, 1, "seconds");
+        std::cout << "Total processing (completed): " << metrics.completed_processing_seconds << " seconds\n";
+        print_metric("Loading bay utilization", metrics.loading_bay_utilization, 100, "%");
+        print_metric("Worker utilization", metrics.worker_utilization, 100, "%");
+        print_metric("Forklift utilization", metrics.forklift_utilization, 100, "%");
+        std::cout << "Initialization: " << std::chrono::duration<double, std::milli>{initialized - begin}.count() << " ms\n"
+                  << "Execution: " << std::chrono::duration<double, std::milli>{executed - initialized}.count() << " ms\n"
+                  << "Metric finalization: " << std::chrono::duration<double, std::milli>{finalized - executed}.count() << " ms\n";
         return 0;
     }
     world::World world;

@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "name": "Warehouse Resource Constrained",
+  "domain": "warehouse",
+  "simulation": {"tick_rate": 60, "duration_seconds": 28800, "random_seed": 12345},
+  "warehouse": {"loading_bays": 3, "workers": 10, "forklifts": 1, "shipment_interval_seconds": 300, "processing_duration_seconds": 900}
+}

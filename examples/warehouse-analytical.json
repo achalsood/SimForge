@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "name": "Warehouse Analytical Example",
+  "domain": "warehouse",
+  "simulation": {"tick_rate": 60, "duration_seconds": 10, "random_seed": 0},
+  "warehouse": {"loading_bays": 1, "workers": 1, "forklifts": 1, "shipment_interval_seconds": 2, "processing_duration_seconds": 3}
+}

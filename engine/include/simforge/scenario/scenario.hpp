@@ -13,6 +13,7 @@ namespace simforge::scenario
 {
 inline constexpr std::size_t max_scenario_bytes = 4 * 1024 * 1024;
 inline constexpr std::uint64_t max_execution_ticks = 10'000'000;
+inline constexpr std::uint32_t max_warehouse_shipments = 100000;
 
 struct SimulationConfig
 {
@@ -23,6 +24,7 @@ struct SimulationConfig
 struct WarehouseConfig
 {
     std::uint32_t loading_bays{0}, workers{0}, forklifts{0}, shipment_interval_seconds{1};
+    std::uint32_t processing_duration_seconds{600};
 };
 struct InitialEntity
 {

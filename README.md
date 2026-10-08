@@ -33,11 +33,20 @@ and exhausted generations retire rather than wrap. Restoring invalidates all old
 handles through a fresh ownership token.
 
 Versioned scenario JSON and typed input recording are implemented. Warehouse
-definitions are validated configuration only; the movement adapter is executable.
+scenarios execute a deterministic operational model with FIFO shipments,
+bay/worker/forklift reservations, processing and actual queue/utilization/throughput
+metrics. The ECS movement adapter remains executable independently.
 Recordings preserve a known initial snapshot, ordered accepted commands, and an
 expected final snapshot for exact replay verification. See
 [scenario and input contracts](docs/scenarios-inputs.md) and
 [performance investigation/results](docs/input-performance.md).
+
+See [warehouse model and numerical example](docs/warehouse-simulation.md) and
+[warehouse benchmark results](docs/warehouse-benchmarks.md). Schema v1 accepts
+optional `processing_duration_seconds` (legacy default 600 seconds); warehouse
+arrival workloads are bounded to 100K. Shipments/events are domain state rather
+than forced ECS entities. Warehouse snapshots/command recordings are future work;
+existing movement snapshots and recordings remain supported.
 
 See [World architecture and usage](docs/world-ecs.md),
 [simulation timing](docs/simulation-clock.md), and
@@ -56,6 +65,7 @@ cmake --build --preset windows-release
 build/windows-release/benchmarks/simforge_world_benchmark.exe
 build/windows-release/benchmarks/simforge_snapshot_benchmark.exe
 build/windows-release/benchmarks/simforge_input_benchmark.exe
+build/windows-release/benchmarks/simforge_warehouse_benchmark.exe
 ```
 
 Run the sandbox without arguments for the SDL window mode. Headless mode reports
@@ -66,6 +76,9 @@ are future milestones.
 
 ```powershell
 build/windows-debug/apps/sandbox/simforge_sandbox.exe --headless --scenario examples/warehouse-baseline.json
+build/windows-debug/apps/sandbox/simforge_sandbox.exe --headless --scenario examples/warehouse-constrained.json
+build/windows-debug/apps/sandbox/simforge_sandbox.exe --headless --scenario examples/warehouse-higher-capacity.json
+build/windows-debug/apps/sandbox/simforge_sandbox.exe --headless --scenario examples/warehouse-analytical.json
 build/windows-debug/apps/sandbox/simforge_sandbox.exe --headless --scenario examples/movement-baseline.json --record build/my-movement-inputs.json
 build/windows-debug/apps/sandbox/simforge_sandbox.exe --headless --replay build/my-movement-inputs.json
 build/windows-debug/apps/sandbox/simforge_sandbox.exe --headless --replay examples/movement-inputs.json
@@ -75,7 +88,8 @@ Recording output must be a new file. Scenario workflows reject conflicting
 `--entities`/`--ticks` overrides. JSON requires explicit simulation configuration;
 unknown fields, duplicate keys, invalid numeric types, oversized input and
 incompatible recordings fail before execution. Random seeds are retained but the
-current movement adapter has no random behavior or warehouse performance metrics.
+current movement and warehouse models have no random behavior. Warehouse metrics
+describe the implemented fixed-duration model, not calibrated real-world predictions.
 
 Capture, run, restore, and replay the same movement workload:
 

@@ -5,6 +5,10 @@ SDL, Vulkan, rendering, wall-clock or AI dependency. The sandbox composes World,
 Engine's SimulationClock, and MovementSystem; Engine does not own a World or choose
 which systems run. Tests and benchmarks link only `simforge_engine`.
 
+The [warehouse runtime](warehouse-simulation.md) owns abstract shipments, event
+scheduling and resource counters independently of ECS entities. Warehouse state
+is not part of World component storage, World snapshots, or movement input recordings.
+
 ## Usage
 
 ```cpp

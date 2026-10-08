@@ -29,6 +29,11 @@ void validate(const ScenarioDefinition& definition)
             invalid("warehouse", "total resources must not exceed 100000");
         if (warehouse->shipment_interval_seconds == 0 || warehouse->shipment_interval_seconds > 604800)
             invalid("warehouse.shipment_interval_seconds", "must be 1..604800 integer seconds");
+        if (warehouse->processing_duration_seconds == 0 || warehouse->processing_duration_seconds > 604800)
+            invalid("warehouse.processing_duration_seconds", "must be 1..604800 integer seconds");
+        const auto arrivals = 1 + (config.duration_seconds - 1) / warehouse->shipment_interval_seconds;
+        if (arrivals > max_warehouse_shipments)
+            invalid("warehouse.shipment_interval_seconds", "scenario exceeds 100000 arrivals before horizon");
     }
     else
     {
@@ -68,12 +73,15 @@ ScenarioDefinition parse_scenario(std::string_view text)
     {
         if (!json.contains("warehouse") || json.contains("initial_world")) invalid("warehouse", "required; initial_world is unsupported in warehouse v1");
         const auto& warehouse = json.at("warehouse");
-        fields(warehouse, {"loading_bays", "workers", "forklifts", "shipment_interval_seconds"}, {}, "warehouse");
+        fields(warehouse, {"loading_bays", "workers", "forklifts", "shipment_interval_seconds"},
+               {"processing_duration_seconds"}, "warehouse");
         definition.domain = WarehouseConfig{
             static_cast<std::uint32_t>(integer(warehouse.at("loading_bays"), 100000, "warehouse.loading_bays")),
             static_cast<std::uint32_t>(integer(warehouse.at("workers"), 100000, "warehouse.workers")),
             static_cast<std::uint32_t>(integer(warehouse.at("forklifts"), 100000, "warehouse.forklifts")),
-            static_cast<std::uint32_t>(integer(warehouse.at("shipment_interval_seconds"), 604800, "warehouse.shipment_interval_seconds"))};
+            static_cast<std::uint32_t>(integer(warehouse.at("shipment_interval_seconds"), 604800, "warehouse.shipment_interval_seconds")),
+            warehouse.contains("processing_duration_seconds")
+                ? static_cast<std::uint32_t>(integer(warehouse.at("processing_duration_seconds"), 604800, "warehouse.processing_duration_seconds")) : 600};
     }
     else if (domain == "movement")
     {
@@ -122,7 +130,8 @@ std::string serialize_scenario(const ScenarioDefinition& definition)
     {
         json["domain"] = "warehouse";
         json["warehouse"] = {{"loading_bays", warehouse->loading_bays}, {"workers", warehouse->workers},
-            {"forklifts", warehouse->forklifts}, {"shipment_interval_seconds", warehouse->shipment_interval_seconds}};
+            {"forklifts", warehouse->forklifts}, {"shipment_interval_seconds", warehouse->shipment_interval_seconds},
+            {"processing_duration_seconds", warehouse->processing_duration_seconds}};
     }
     else
     {
@@ -152,7 +161,7 @@ simulation::SimulationSnapshot initial_state(const ScenarioDefinition& definitio
 {
     validate(definition);
     const auto* movement = std::get_if<MovementConfig>(&definition.domain);
-    if (!movement) invalid("domain", "warehouse configuration is validated but has no executable runtime");
+    if (!movement) invalid("domain", "initial_state constructs only movement ECS snapshots; use WarehouseSimulation for warehouse execution");
     world::World world;
     world.reserve(movement->entities.size());
     for (const auto& record : movement->entities)
