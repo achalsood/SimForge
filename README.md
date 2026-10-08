@@ -56,6 +56,15 @@ interventions for bottleneck evidence. Results export to reproducible JSON and C
 See [scenario comparison contracts and actual results](docs/scenario-comparison.md)
 and [comparison performance measurements](docs/comparison-benchmarks.md).
 
+The custom Vulkan foundation presents a dark blue-gray clear color through SDL3,
+handles resize/minimize/restore, and keeps GPU resources separate from simulation.
+It does not draw a 3D scene yet. See [renderer architecture and setup](docs/vulkan-renderer.md).
+Graphics builds require the official Vulkan SDK (headers 1.4.335 or newer), a Vulkan
+1.1 runtime, and a driver supporting swapchain-maintenance1 presentation fences.
+The manifest enables SDL3's `vulkan` feature. Use an x64 Visual Studio developer
+terminal with `VCPKG_ROOT` and `VULKAN_SDK` set; reopen the terminal after installing
+the SDK. Configure with `-DSIMFORGE_BUILD_RENDERER=OFF` to build without the SDK.
+
 See [World architecture and usage](docs/world-ecs.md),
 [simulation timing](docs/simulation-clock.md), and
 [snapshot design and schema](docs/snapshots-replay.md), and
@@ -78,11 +87,22 @@ build/windows-release/benchmarks/simforge_warehouse_snapshot_benchmark.exe
 build/windows-release/benchmarks/simforge_comparison_benchmark.exe
 ```
 
-Run the sandbox without arguments for the SDL window mode. Headless mode reports
+Run the sandbox without arguments for the Vulkan clear-color window:
+
+```powershell
+build/windows-debug/apps/sandbox/simforge_sandbox.exe
+# Opt-in visible-window test: requires GPU, display, and Khronos validation layers.
+build/windows-debug/apps/sandbox/simforge_sandbox.exe --graphics-smoke 180
+# Stronger headless isolation: this target links neither SDL nor Vulkan.
+build/windows-release/apps/sandbox/simforge_headless.exe --headless --scenario examples/warehouse-baseline.json
+```
+
+The existing `simforge_sandbox --headless` commands also work without graphics
+initialization. Headless mode reports
 entity/tick counts, simulated elapsed time, separate setup/update wall durations,
 and a position checksum. Fixed-step scheduling does not guarantee cross-platform
-bitwise simulation determinism. Rendering, physics, and AI integration
-are future milestones.
+bitwise simulation determinism. 3D visualization, physics, and AI integration
+remain future milestones.
 
 ```powershell
 build/windows-debug/apps/sandbox/simforge_sandbox.exe --headless --scenario examples/warehouse-baseline.json

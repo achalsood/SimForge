@@ -2,11 +2,20 @@
 
 #include <cstdint>
 #include <string>
+#include <memory>
 
 struct SDL_Window;
 
 namespace simforge::platform
 {
+struct WindowState;
+class VulkanWindow;
+enum class WindowMode { Standard, Vulkan };
+struct PixelSize
+{
+    std::uint32_t width{0}, height{0};
+    bool operator==(const PixelSize&) const = default;
+};
 
 class Window
 {
@@ -24,10 +33,11 @@ public:
     void create(
         std::string title,
         std::uint32_t width,
-        std::uint32_t height
+        std::uint32_t height,
+        WindowMode mode = WindowMode::Standard
     );
 
-    void destroy();
+    void destroy() noexcept;
 
     [[nodiscard]] bool is_open() const noexcept;
 
@@ -36,15 +46,18 @@ public:
     [[nodiscard]] std::uint32_t width() const noexcept;
     [[nodiscard]] std::uint32_t height() const noexcept;
 
+    // Borrowed handle; callers must not destroy it or quit SDL video themselves.
     [[nodiscard]] SDL_Window* native_handle() const noexcept;
+    [[nodiscard]] PixelSize pixel_size() const;
+    void resize(std::uint32_t width, std::uint32_t height);
+    void minimize();
+    void restore();
+    void request_close();
 
 private:
-    SDL_Window* window_{nullptr};
-
-    std::uint32_t width_{0};
-    std::uint32_t height_{0};
-
-    bool open_{false};
+    friend class VulkanWindow;
+    // Leases keep the native window/video subsystem alive through Vulkan cleanup.
+    std::shared_ptr<WindowState> state_;
 };
 
 } // namespace simforge::platform

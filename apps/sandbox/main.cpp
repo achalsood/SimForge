@@ -1,5 +1,7 @@
 #include <simforge/core/engine.hpp>
-#include <simforge/platform/window.hpp>
+#if SIMFORGE_HAS_RENDERER
+#include "graphics.hpp"
+#endif
 #include <simforge/simulation/movement_system.hpp>
 #include <simforge/world/world.hpp>
 #include <simforge/simulation/input_recording.hpp>
@@ -32,6 +34,7 @@ struct Options
     std::optional<std::pair<std::uint32_t, std::uint32_t>> compare_forklifts;
     std::optional<std::uint64_t> checkpoint_seconds;
     std::optional<std::filesystem::path> experiment, export_json, export_csv;
+    std::optional<std::uint64_t> graphics_smoke;
 };
 
 std::uint64_t parse_count(std::string_view value)
@@ -51,7 +54,14 @@ Options parse_options(int argc, char* argv[])
     for (int i = 1; i < argc; ++i)
     {
         const std::string_view argument{argv[i]};
-        if (argument == "--experiment" || argument == "--export-json" || argument == "--export-csv")
+        if (argument == "--graphics-smoke" && !options.graphics_smoke)
+        {
+            if (++i == argc) throw std::invalid_argument("Missing --graphics-smoke frame count");
+            options.graphics_smoke = parse_count(argv[i]);
+            if (*options.graphics_smoke < 120 || *options.graphics_smoke > 10000)
+                throw std::invalid_argument("Graphics smoke requires 120..10000 frames");
+        }
+        else if (argument == "--experiment" || argument == "--export-json" || argument == "--export-csv")
         {
             auto& destination = argument == "--experiment" ? options.experiment : argument == "--export-json" ? options.export_json : options.export_csv;
             if (destination) throw std::invalid_argument("Duplicate experiment/export option");
@@ -116,6 +126,9 @@ Options parse_options(int argc, char* argv[])
     if (options.export_json && options.export_csv && std::filesystem::absolute(*options.export_json).lexically_normal() ==
         std::filesystem::absolute(*options.export_csv).lexically_normal())
         throw std::invalid_argument("JSON and CSV output paths must differ");
+    if (options.graphics_smoke && (options.headless || options.scenario || options.record || options.replay || options.warehouse_replay ||
+        options.experiment || options.compare_forklifts || options.checkpoint_seconds || options.export_json || options.export_csv || entities_seen || ticks_seen))
+        throw std::invalid_argument("--graphics-smoke conflicts with headless/simulation options");
     return options;
 }
 
@@ -327,54 +340,39 @@ int run(const Options& options)
     if (options.experiment) return experiment_workflow(options);
     if (options.warehouse_replay) return warehouse_replay_workflow(options);
     if (options.scenario || options.replay) return scenario_workflow(options);
+    if (!options.headless)
+    {
+#if SIMFORGE_HAS_RENDERER
+        return run_graphics(options.graphics_smoke);
+#else
+        throw std::invalid_argument("This executable has no renderer; use --headless or build with SIMFORGE_BUILD_RENDERER=ON");
+#endif
+    }
     using timer = std::chrono::steady_clock;
     simforge::Engine engine;
     engine.initialize();
     simforge::world::World world;
     const auto setup_start = timer::now();
-    populate(world, options.headless ? options.entities : 1);
+    populate(world, options.entities);
     const auto setup_end = timer::now();
-    if (options.headless)
+    const auto update_start = timer::now();
+    for (std::uint64_t tick = 0; tick < options.ticks; ++tick)
     {
-        const auto update_start = timer::now();
-        for (std::uint64_t tick = 0; tick < options.ticks; ++tick)
-        {
-            simforge::simulation::MovementSystem::update(world, engine.simulation_clock().fixed_step_seconds());
-            engine.advance_simulation_ticks(1);
-        }
-        const auto update_end = timer::now();
-        double checksum = 0.0;
-        world.each<simforge::world::Transform>([&](simforge::world::Entity, const auto& transform)
-        {
-            checksum += transform.position.x;
-        });
-        std::cout << "Entities: " << world.entity_count()
-                  << " | Ticks: " << engine.simulation_clock().tick_count()
-                  << " | simulated seconds: " << engine.simulation_clock().elapsed_seconds()
-                  << "\nSetup wall seconds: " << std::chrono::duration<double>{setup_end - setup_start}.count()
-                  << "\nSimulation update wall seconds: " << std::chrono::duration<double>{update_end - update_start}.count()
-                  << "\nPosition checksum: " << checksum << '\n';
-        return 0;
+        simforge::simulation::MovementSystem::update(world, engine.simulation_clock().fixed_step_seconds());
+        engine.advance_simulation_ticks(1);
     }
-
-    simforge::platform::Window window;
-    window.create("SimForge Sandbox", 1280, 720);
-    std::cout << "SimForge Engine initialized\n";
-    while (engine.running() && window.is_open())
+    const auto update_end = timer::now();
+    double checksum = 0.0;
+    world.each<simforge::world::Transform>([&](simforge::world::Entity, const auto& transform)
     {
-        const double delta_time = engine.begin_frame();
-        window.poll_events();
-        if (!window.is_open()) engine.request_exit();
-        const auto ticks = engine.advance_simulation(std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::duration<double>{delta_time}));
-        for (std::uint64_t tick = 0; tick < ticks; ++tick)
-            simforge::simulation::MovementSystem::update(world, engine.simulation_clock().fixed_step_seconds());
-        engine.end_frame();
-        if (engine.frame_count() % 300 == 0)
-            std::cout << "Frame " << engine.frame_count() << " | dt: " << delta_time
-                      << " s | Simulation ticks: " << engine.simulation_clock().tick_count() << '\n';
-    }
-    window.destroy();
+        checksum += transform.position.x;
+    });
+    std::cout << "Entities: " << world.entity_count()
+              << " | Ticks: " << engine.simulation_clock().tick_count()
+              << " | simulated seconds: " << engine.simulation_clock().elapsed_seconds()
+              << "\nSetup wall seconds: " << std::chrono::duration<double>{setup_end - setup_start}.count()
+              << "\nSimulation update wall seconds: " << std::chrono::duration<double>{update_end - update_start}.count()
+              << "\nPosition checksum: " << checksum << '\n';
     engine.shutdown();
     return 0;
 }
@@ -391,7 +389,8 @@ int main(int argc, char* argv[])
                   << "  --headless --replay FILE [--scenario FILE]\n";
         std::cerr << "  --headless --scenario FILE --compare-forklifts A,B --checkpoint-seconds S [--record OUTPUT]\n"
                   << "  --headless --warehouse-replay FILE [--scenario FILE]\n"
-                  << "  --headless --experiment FILE [--export-json NEW_FILE] [--export-csv NEW_FILE]\n";
+                  << "  --headless --experiment FILE [--export-json NEW_FILE] [--export-csv NEW_FILE]\n"
+                  << "  --graphics-smoke FRAMES (120..10000; display/GPU/validation required)\n";
         return 1;
     }
 }

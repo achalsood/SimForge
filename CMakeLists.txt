@@ -13,6 +13,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(SIMFORGE_BUILD_TESTS "Build SimForge tests" ON)
 option(SIMFORGE_BUILD_BENCHMARKS "Build SimForge benchmarks" ON)
+option(SIMFORGE_BUILD_RENDERER "Build the SDL/Vulkan graphics sandbox and renderer" ON)
+option(SIMFORGE_GRAPHICS_TESTS "Enable display/GPU integration smoke tests" OFF)
 
 add_subdirectory(engine)
 add_subdirectory(apps/sandbox)
