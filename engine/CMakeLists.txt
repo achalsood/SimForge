@@ -18,6 +18,11 @@ add_library(simforge_engine STATIC
     src/warehouse/event_scheduler.cpp
     src/warehouse/resource_manager.cpp
     src/warehouse/warehouse_simulation.cpp
+    src/warehouse/warehouse_state.cpp
+    src/warehouse/warehouse_snapshot.cpp
+    src/warehouse/warehouse_serialization.cpp
+    src/warehouse/warehouse_input.cpp
+    src/scenario/warehouse_recording_json.cpp
 )
 
 target_compile_features(simforge_engine PUBLIC cxx_std_23)

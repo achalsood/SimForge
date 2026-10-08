@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <limits>
 #include <stdexcept>
+#include <utility>
 
 namespace simforge::warehouse
 {
@@ -21,17 +22,18 @@ std::size_t pending_limit(const scenario::WarehouseConfig& config, std::uint32_t
 }
 WarehouseSimulation::Parameters WarehouseSimulation::parameters(const scenario::ScenarioDefinition& definition)
 {
-    scenario::validate(definition);
+    auto identity = scenario::serialize_scenario(definition); // Canonicalization also validates the definition.
     const auto* config = std::get_if<scenario::WarehouseConfig>(&definition.domain);
     if (!config) throw std::invalid_argument("WarehouseSimulation requires a warehouse scenario");
     return {*config, definition.simulation.tick_rate,
             1 + (definition.simulation.duration_seconds - 1) / config->shipment_interval_seconds,
-            static_cast<std::uint64_t>(definition.simulation.duration_seconds) * definition.simulation.tick_rate};
+            static_cast<std::uint64_t>(definition.simulation.duration_seconds) * definition.simulation.tick_rate,
+            std::move(identity)};
 }
 WarehouseSimulation::WarehouseSimulation(const scenario::ScenarioDefinition& definition)
     : WarehouseSimulation{parameters(definition)} {}
 WarehouseSimulation::WarehouseSimulation(Parameters params)
-    : config_{params.config}, clock_{params.rate}, horizon_ticks_{params.horizon},
+    : config_{params.config}, scenario_identity_{std::move(params.identity)}, clock_{params.rate}, horizon_ticks_{params.horizon},
       arrival_interval_ticks_{static_cast<std::uint64_t>(config_.shipment_interval_seconds) * params.rate},
       processing_ticks_{static_cast<std::uint64_t>(config_.processing_duration_seconds) * params.rate},
       arrival_limit_{params.arrivals},
@@ -47,6 +49,10 @@ void WarehouseSimulation::move_clock_to(std::uint64_t tick)
     const auto delta = tick - clock_.tick_count();
     // Counts * horizon are bounded by validated scenario limits (< 1e12 ticks).
     occupied_resource_ticks_ += static_cast<std::uint64_t>(resources_.active_count()) * delta;
+    const auto capacity = resources_.capacity();
+    available_bay_ticks_ += static_cast<std::uint64_t>(capacity.loading_bays) * delta;
+    available_worker_ticks_ += static_cast<std::uint64_t>(capacity.workers) * delta;
+    available_forklift_ticks_ += static_cast<std::uint64_t>(capacity.forklifts) * delta;
     clock_.advance_ticks(delta);
 }
 void WarehouseSimulation::start_waiting()
@@ -109,6 +115,13 @@ void WarehouseSimulation::advance_to(std::uint64_t tick)
         process(*event);
     }
     move_clock_to(tick);
+    settled_ = true;
+}
+void WarehouseSimulation::advance_by(std::uint64_t ticks)
+{
+    if (ticks > horizon_ticks_ - clock_.tick_count())
+        throw std::invalid_argument("Warehouse advance exceeds horizon");
+    advance_to(clock_.tick_count() + ticks);
 }
 WarehouseMetrics WarehouseSimulation::metrics() const
 {
@@ -135,19 +148,20 @@ WarehouseMetrics WarehouseSimulation::metrics() const
         result.average_processing_seconds = result.completed_processing_seconds / static_cast<double>(completed_);
     if (result.elapsed_ticks != 0)
         result.throughput_per_hour = static_cast<double>(completed_) * 3600.0 * rate / static_cast<double>(result.elapsed_ticks);
-    const auto utilization = [&](std::uint32_t capacity) -> std::optional<double>
+    const auto utilization = [&](std::uint64_t available_ticks) -> std::optional<double>
     {
-        if (capacity == 0 || result.elapsed_ticks == 0) return {};
-        return static_cast<double>(occupied_resource_ticks_) / (static_cast<double>(capacity) * static_cast<double>(result.elapsed_ticks));
+        if (available_ticks == 0) return {};
+        return static_cast<double>(occupied_resource_ticks_) / static_cast<double>(available_ticks);
     };
-    result.loading_bay_utilization = utilization(config_.loading_bays);
-    result.worker_utilization = utilization(config_.workers);
-    result.forklift_utilization = utilization(config_.forklifts);
+    result.loading_bay_utilization = utilization(available_bay_ticks_);
+    result.worker_utilization = utilization(available_worker_ticks_);
+    result.forklift_utilization = utilization(available_forklift_ticks_);
     return result;
 }
 std::size_t WarehouseSimulation::approximate_storage_bytes() const noexcept
 {
     return shipments_.capacity() * sizeof(ShipmentRecord) + waiting_queue_.capacity() * sizeof(ShipmentId) +
-           resources_.approximate_storage_bytes() + scheduler_.approximate_storage_bytes();
+           resources_.approximate_storage_bytes() + scheduler_.approximate_storage_bytes() +
+           scenario_identity_.capacity() + capacity_changes_.capacity() * sizeof(CapacityChange);
 }
 } // namespace simforge::warehouse

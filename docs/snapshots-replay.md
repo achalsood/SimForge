@@ -3,6 +3,8 @@
 [Scenario definitions and recorded inputs](scenarios-inputs.md) build on this
 runtime snapshot format. Definitions, snapshots and command recordings remain
 separate concepts; recordings wrap binary snapshots without changing schema v1.
+Warehouse operational state uses its own [snapshot and replay format](warehouse-snapshots.md).
+It is not placed in ECS components or included implicitly in World snapshots.
 
 Snapshots are deep copies of logical simulation state. `WorldSnapshot` contains
 every slot (living, free or retired), generations, the generation ceiling, free

@@ -25,6 +25,7 @@ public:
     [[nodiscard]] bool reserved(ShipmentId shipment) const noexcept;
     [[nodiscard]] std::size_t approximate_storage_bytes() const noexcept { return (held_.capacity() + 7) / 8; }
 private:
+    friend class WarehouseSimulation;
     ResourceCounts capacity_;
     std::uint32_t concurrency_, active_{0};
     std::vector<bool> held_;

@@ -203,5 +203,8 @@ The command reference model independently tracks position, velocity and pause.
 CLI fixtures exercise output creation, replay and cleanup. All run without SDL or
 Vulkan initialization. See [measured performance](input-performance.md).
 
-Warehouse snapshot/command integration, domain RNG state, scenario migrations,
-large event streams and asynchronous input processing remain future work.
+Warehouse snapshots and capacity-command recordings use the same canonical identity,
+ordered logical input and embedded-snapshot conventions through a domain-specific
+envelope. See [warehouse checkpoint/replay contracts](warehouse-snapshots.md), including
+the explicit `--warehouse-replay` CLI. Movement formats remain unchanged. Domain RNG
+state, scenario migrations and asynchronous input processing remain future work.

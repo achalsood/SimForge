@@ -68,7 +68,9 @@ advances to the popped event tick, or the requested limit when nothing is due.
 The domain executes through `advance_to(tick)` only for `current <= tick <= H`.
 The initial zero-time arrival is processed on the first advance (including
 `advance_to(0)`), not during construction. `run()` advances to H and is idempotent
-after completion. Reconstruct a runtime for a clean new run.
+after completion. `advance_by(count)` checks the remaining horizon before addition.
+Use a new runtime for a clean run, or restore a [warehouse checkpoint](warehouse-snapshots.md)
+to continue the full operational state from a reached boundary.
 
 The clock fast-forwards to event ticks using explicit integer `advance_ticks`.
 Between events, busy time is integrated as `active_reservations * delta_ticks`.
@@ -125,7 +127,7 @@ the tick rate. Fractions below are converted to doubles only for presentation.
 | Maximum queue wait | Maximum `start - arrival` among started shipments, divided by R |
 | Total completed processing | `sum(completion - start)` for completed shipments only, divided by R |
 | Mean completed processing | Total completed processing seconds / completed count |
-| Pool utilization | `occupied_resource_ticks / (pool_capacity * T)`; a fraction, CLI displays percent |
+| Pool utilization | `occupied_resource_ticks / integral(pool_capacity dt)`; equals `busy/(capacity*T)` for fixed capacity; a fraction, CLI displays percent |
 
 Waiting mean/maximum are unavailable when no shipment started, and exclude still
 waiting shipments (their waits are censored). Completed-processing mean is unavailable
@@ -196,9 +198,10 @@ build/windows-release/benchmarks/simforge_warehouse_benchmark.exe
 CLI prints actual counts, measured waits/processing/utilization, and separate
 initialization/execution/metric wall durations. Those durations do not drive
 simulation. Movement, recording/replay and argument-free SDL mode remain available.
-Warehouse snapshots, warehouse input recordings/resource-changing commands and
-continuation beyond the configured horizon are not implemented; the existing
-recording workflow explicitly supports movement only.
+Warehouse snapshots, incremental continuation, resource-capacity commands and
+ordered command recordings are described in [warehouse snapshots and branching](warehouse-snapshots.md).
+The existing movement recording workflow remains unchanged. Continuation beyond
+the configured horizon is not supported.
 
 Integer scheduling/state/aggregates have stable ordering for identical validated
 configuration and clean initialization. Tests verify repeated logical records and

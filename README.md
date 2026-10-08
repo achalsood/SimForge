@@ -45,8 +45,10 @@ See [warehouse model and numerical example](docs/warehouse-simulation.md) and
 [warehouse benchmark results](docs/warehouse-benchmarks.md). Schema v1 accepts
 optional `processing_duration_seconds` (legacy default 600 seconds); warehouse
 arrival workloads are bounded to 100K. Shipments/events are domain state rather
-than forced ECS entities. Warehouse snapshots/command recordings are future work;
-existing movement snapshots and recordings remain supported.
+than forced ECS entities. Complete warehouse checkpoints support transactional
+restoration, portable persistence, ordered capacity-command replay and independent
+branches. See [warehouse snapshots and measured branch outcomes](docs/warehouse-snapshots.md).
+Existing movement snapshots and recordings remain supported.
 
 See [World architecture and usage](docs/world-ecs.md),
 [simulation timing](docs/simulation-clock.md), and
@@ -66,6 +68,7 @@ build/windows-release/benchmarks/simforge_world_benchmark.exe
 build/windows-release/benchmarks/simforge_snapshot_benchmark.exe
 build/windows-release/benchmarks/simforge_input_benchmark.exe
 build/windows-release/benchmarks/simforge_warehouse_benchmark.exe
+build/windows-release/benchmarks/simforge_warehouse_snapshot_benchmark.exe
 ```
 
 Run the sandbox without arguments for the SDL window mode. Headless mode reports
@@ -79,6 +82,8 @@ build/windows-debug/apps/sandbox/simforge_sandbox.exe --headless --scenario exam
 build/windows-debug/apps/sandbox/simforge_sandbox.exe --headless --scenario examples/warehouse-constrained.json
 build/windows-debug/apps/sandbox/simforge_sandbox.exe --headless --scenario examples/warehouse-higher-capacity.json
 build/windows-debug/apps/sandbox/simforge_sandbox.exe --headless --scenario examples/warehouse-analytical.json
+build/windows-debug/apps/sandbox/simforge_sandbox.exe --headless --scenario examples/warehouse-baseline.json --compare-forklifts 2,3 --checkpoint-seconds 7200 --record build/my-warehouse-inputs.json
+build/windows-debug/apps/sandbox/simforge_sandbox.exe --headless --warehouse-replay build/my-warehouse-inputs.json
 build/windows-debug/apps/sandbox/simforge_sandbox.exe --headless --scenario examples/movement-baseline.json --record build/my-movement-inputs.json
 build/windows-debug/apps/sandbox/simforge_sandbox.exe --headless --replay build/my-movement-inputs.json
 build/windows-debug/apps/sandbox/simforge_sandbox.exe --headless --replay examples/movement-inputs.json
@@ -90,6 +95,12 @@ unknown fields, duplicate keys, invalid numeric types, oversized input and
 incompatible recordings fail before execution. Random seeds are retained but the
 current movement and warehouse models have no random behavior. Warehouse metrics
 describe the implemented fixed-duration model, not calibrated real-world predictions.
+
+The warehouse comparison shares two hours of operational history, then retains two
+forklifts in branch A and adds a third in branch B. The actual eight-hour results are
+63 versus 87 completions and 32 versus 8 waiting shipments. Active jobs keep their
+original completion times; the capacity increase occurs at the checkpoint. The CLI
+verifies serialized continuation and command replay against full logical state.
 
 Capture, run, restore, and replay the same movement workload:
 

@@ -48,3 +48,71 @@ the live heap at five events; other concurrency/queue settings can have differen
 costs. Tests also exercise resource shortages and accumulating queues. The prior
 ECS destruction regression is unchanged and remains documented separately; no ECS
 rewrite or optimization is part of this milestone.
+
+## Commit 9: controlled comparison and checkpoint costs
+
+Measured October 8, 2026, with the same machine/compiler/Release flags and CPU 0
+affinity. Before editing, the commit-8 benchmark executable was preserved in the
+ignored build directory and measured again. Five subsequent alternating old/new
+launch pairs each performed the original one warmup plus seven trials per size.
+The following table is the median of those five within-launch medians. Thermal,
+frequency and OS noise remain uncontrolled; this is a local comparison, not a
+precise throughput guarantee. There is no serialization or snapshot validation
+inside the timed event workload.
+
+| Arrivals | Before events (ms) | After events (ms) | Change | Before total (ms) | After total (ms) |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1,000 | 0.043900 | 0.044600 | +1.6% | 0.044800 | 0.049000 |
+| 10,000 | 0.442300 | 0.451100 | +2.0% | 0.443000 | 0.455500 |
+| 100,000 | 5.027300 | 5.016600 | -0.2% | 5.078900 | 5.070600 |
+
+Initial standalone before-edit medians were 0.043300 / 0.442600 / 4.930600 ms for
+events and 0.043900 / 0.443400 / 4.978800 ms for totals. The first new 10K launch
+showed 0.496200 ms, prompting the alternating comparison above; later pairs reduced
+that difference to approximately 2%. No material event-processing regression was
+observed. The three extra capacity-integral accumulators add bounded arithmetic at
+clock jumps. Checksums and executed-event counts match the original benchmark exactly.
+
+Constructor initialization now includes canonical scenario identity creation for
+snapshot compatibility. Paired medians increased from 0.000600 to 0.004300 ms at
+1K, 0.000700 to 0.004800 ms at 10K and 0.052100 to 0.057300 ms at 100K. That few-microsecond
+cost raises the small 1K total by about 9.4%, while event time increases only 1.6%.
+Identity storage adds 316 payload bytes for this benchmark's scenario. Reported
+owned payload totals are 53604 / 531728 / 5312976 bytes; capacity history adds storage
+only when commands are accepted. Allocation/page commitment varies between launches.
+
+The new `simforge_warehouse_snapshot_benchmark` uses one warmup and seven measured
+trials per size, also in Release on CPU 0. Continuous and 100-chunk runs use the
+original 4/8/4, one-second arrival/four-second processing workload. Source checkpoint
+preparation is outside measured snapshot phases; capture is at H/2, **after** its
+due arrival, so it contains N/2+1 shipment records. Restoration is into an advanced
+runtime. Capacity-command timing uses a separately prepared 4/8/2 checkpoint and
+increases forklifts to 4, actually starting two waiting jobs. It includes history/
+heap allocation; setup and snapshot comparison are outside the command timer.
+
+| Scenario arrivals | Checkpoint records | Continuous (ms) | 100 chunks (ms) | Capture (ms) | Restore (ms) | Serialize (ms) | Deserialize (ms) | Branch (ms) | Capacity change (ms) | Binary bytes |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1,000 | 501 | 0.045500 | 0.054600 | 0.008600 | 0.058400 | 0.060300 | 0.052500 | 0.053000 | 0.000200 | 16,087 |
+| 10,000 | 5,001 | 0.499600 | 0.525200 | 0.080900 | 0.330400 | 0.489600 | 0.387700 | 0.272300 | 0.000300 | 155,588 |
+| 100,000 | 50,001 | 4.895600 | 5.116200 | 0.623000 | 2.800900 | 5.432100 | 3.774500 | 2.523600 | 0.000500 | 1,550,589 |
+
+Each phase reports an independently computed median. The new benchmark's timing
+order/allocation context differs from the original executable, so compare continuous
+and chunked columns within this table and old/new original workloads in the preceding
+table. The 1K chunk result is timer/cache sensitive. At 100K, this final launch's
+chunked median was 4.5% slower; the preceding launch measured 4.982600 ms continuous
+and 4.945900 ms chunked (0.7% faster). That variation prevents a precise incremental
+overhead estimate. Both execute identical events and states; the added work consists
+of 100 stop-boundary checks/integrations, without a per-tick loop. Capture copies full historical records,
+including optional timestamps. Restore/branch include bounded allocation, scenario
+parsing and historical interval validation. Serialization includes validation and
+checksum generation; deserialization includes checksum, bounded decoding and
+validation. These costs belong to explicit checkpoints, not normal event execution.
+
+Every trial independently checks the original closed-form totals, exact continuous/
+chunked/continued snapshots, byte round-trip state and capacity-change reservations.
+Results and bytes are consumed in checksums outside timing; seven-run totals were
+109532549 / 10550210958 / 1050559636133. Measurements do not include process startup,
+console output, source preparation, external verification or final object teardown,
+except replacement-state cleanup within restore. Snapshots can allocate O(history)
+temporary storage; the binary quota is 32 MiB. No ECS destruction change was made.

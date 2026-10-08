@@ -46,6 +46,6 @@ void validate(const ScenarioDefinition& definition);
 [[nodiscard]] ScenarioDefinition load_scenario(const std::filesystem::path& path);
 void save_scenario(const std::filesystem::path& path, const ScenarioDefinition& definition);
 [[nodiscard]] std::uint64_t total_ticks(const ScenarioDefinition& definition);
-// Only the explicit movement adapter is executable. Warehouse throws.
+// Constructs movement ECS/clock state only. WarehouseSimulation owns warehouse initialization.
 [[nodiscard]] simulation::SimulationSnapshot initial_state(const ScenarioDefinition& definition);
 } // namespace simforge::scenario

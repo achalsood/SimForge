@@ -8,7 +8,7 @@
 namespace simforge::warehouse
 {
 using ShipmentId = std::uint32_t;
-enum class EventType : std::uint8_t { ShipmentCompletion, ShipmentArrival };
+enum class EventType : std::uint8_t { ShipmentCompletion = 0, ShipmentArrival = 1 };
 struct ShipmentEvent
 {
     std::uint64_t tick;
@@ -33,6 +33,7 @@ public:
     [[nodiscard]] std::size_t approximate_storage_bytes() const noexcept
     { return heap_.capacity() * sizeof(ShipmentEvent) + scheduled_.capacity(); }
 private:
+    friend class WarehouseSimulation;
     struct Later { bool operator()(const ShipmentEvent& a, const ShipmentEvent& b) const noexcept; };
     std::vector<ShipmentEvent> heap_;
     std::vector<std::uint8_t> scheduled_;
