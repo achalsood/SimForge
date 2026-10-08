@@ -4,6 +4,8 @@ add_library(simforge_engine STATIC
     src/core/clock.cpp
     src/core/engine.cpp
     src/simulation/simulation_clock.cpp
+    src/simulation/movement_system.cpp
+    src/world/world.cpp
 )
 
 target_compile_features(simforge_engine PUBLIC cxx_std_23)

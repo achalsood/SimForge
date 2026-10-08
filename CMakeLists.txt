@@ -12,9 +12,14 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(SIMFORGE_BUILD_TESTS "Build SimForge tests" ON)
+option(SIMFORGE_BUILD_BENCHMARKS "Build SimForge benchmarks" ON)
 
 add_subdirectory(engine)
 add_subdirectory(apps/sandbox)
+
+if(SIMFORGE_BUILD_BENCHMARKS)
+    add_subdirectory(benchmarks)
+endif()
 
 if(SIMFORGE_BUILD_TESTS)
     enable_testing()

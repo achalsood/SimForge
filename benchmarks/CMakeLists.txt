@@ -1,0 +1,7 @@
+add_executable(simforge_world_benchmark world_benchmark.cpp)
+target_link_libraries(simforge_world_benchmark PRIVATE simforge_engine)
+if(MSVC)
+    target_compile_options(simforge_world_benchmark PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(simforge_world_benchmark PRIVATE -Wall -Wextra -Wpedantic)
+endif()

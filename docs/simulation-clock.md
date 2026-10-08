@@ -11,8 +11,8 @@ the returned number of simulation updates, each with `fixed_step_seconds()`.
 The scheduler uses integer arithmetic for the fractional tick remainder; one
 second at 60 Hz produces exactly 60 ticks without rounding the step duration.
 It never drops elapsed time or caps catch-up ticks. Callers must consider the
-cost of processing a large returned batch. There are no simulation systems in
-this milestone, so the sandbox demonstrates scheduling only.
+cost of processing a large returned batch. The sandbox calls MovementSystem once
+per tick; see [World and ECS](world-ecs.md) for integration examples.
 
 Pause ignores incoming time and preserves the fractional remainder. Resume
 continues from that remainder without catching up time supplied while paused.
@@ -34,7 +34,9 @@ measures real frame time and does not advance simulation. Engine initialization
 resets both clocks. Core and simulation have no SDL dependency; window code lives
 in `simforge_platform`. The sandbox links that platform library, but its
 `--headless` path creates no window and initializes neither SDL nor Vulkan. It
-executes 600 explicit ticks and reports 10 simulated seconds. The current build
+executes 600 explicit ticks by default, updates a movement world, and reports 10
+simulated seconds. Entity and tick counts can be selected using `--entities` and
+`--ticks`; setup and update timings are reported separately. The current build
 still requires the SDL package to build the windowed sandbox.
 
 ## Determinism guarantee

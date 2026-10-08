@@ -23,26 +23,33 @@ AI will not invent simulation outcomes. It will create structured simulation def
 
 Early development.
 
-The fixed-step simulation clock is implemented. See
-[simulation timing](docs/simulation-clock.md) for its API, headless execution,
-and determinism guarantee. Build with `cmake --preset windows-debug` and
-`cmake --build --preset windows-debug`; run `ctest --preset windows-debug`.
-Run `build/windows-debug/apps/sandbox/simforge_sandbox.exe --headless` for a
-finite 600-tick simulation without window initialization.
+The fixed-step simulation clock and World/ECS foundation are implemented:
+generation-based entity handles, packed sparse-set Transform/Velocity storage,
+and a movement system driven by explicit fixed ticks. Core simulation has no SDL
+or Vulkan dependency. Handles are local to a World; stale handles are rejected,
+and exhausted generations retire rather than wrap.
 
-Current milestone:
+See [World architecture and usage](docs/world-ecs.md),
+[simulation timing](docs/simulation-clock.md), and
+[Release benchmark results](docs/ecs-benchmark-results.md) for ownership,
+reference lifetimes, determinism limits, and initial performance measurements.
 
-**Milestone 0 — Engine Heartbeat**
+```powershell
+cmake --preset windows-debug
+cmake --build --preset windows-debug
+ctest --preset windows-debug --output-on-failure
+build/windows-debug/apps/sandbox/simforge_sandbox.exe --headless --entities 10000 --ticks 600
 
-The initial goal is to establish:
+cmake --preset windows-release
+cmake --build --preset windows-release
+build/windows-release/benchmarks/simforge_world_benchmark.exe
+```
 
-- modern C++ build infrastructure
-- engine library structure
-- sandbox executable
-- automated tests
-- deterministic simulation timing
-- native windowing
-- Vulkan rendering foundation
+Run the sandbox without arguments for the SDL window mode. Headless mode reports
+entity/tick counts, simulated elapsed time, separate setup/update wall durations,
+and a position checksum. Fixed-step scheduling does not guarantee cross-platform
+bitwise simulation determinism. Rendering, physics, AI integration, and snapshots
+are future milestones.
 
 ## Project Structure
 
@@ -54,3 +61,4 @@ benchmarks/   Performance benchmarks
 assets/       Runtime assets and shaders
 docs/         Architecture and design documentation
 cmake/        CMake helper modules
+```
