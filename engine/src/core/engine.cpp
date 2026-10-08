@@ -18,6 +18,7 @@ void Engine::initialize()
     }
 
     clock_.reset();
+    simulation_clock_.reset();
 
     last_frame_delta_ = 0.0;
     frame_count_ = 0;
@@ -74,6 +75,34 @@ void Engine::end_frame() noexcept
 double Engine::uptime_seconds() const
 {
     return clock_.elapsed_seconds();
+}
+
+std::uint64_t Engine::advance_simulation(std::chrono::nanoseconds elapsed)
+{
+    if (!initialized_)
+    {
+        throw std::logic_error("Cannot advance simulation before engine initialization");
+    }
+    return simulation_clock_.advance(elapsed);
+}
+
+void Engine::advance_simulation_ticks(std::uint64_t ticks)
+{
+    if (!initialized_)
+    {
+        throw std::logic_error("Cannot advance simulation before engine initialization");
+    }
+    simulation_clock_.advance_ticks(ticks);
+}
+
+simulation::SimulationClock& Engine::simulation_clock() noexcept
+{
+    return simulation_clock_;
+}
+
+const simulation::SimulationClock& Engine::simulation_clock() const noexcept
+{
+    return simulation_clock_;
 }
 
 double Engine::last_frame_delta() const noexcept

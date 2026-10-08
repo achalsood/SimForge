@@ -23,6 +23,13 @@ AI will not invent simulation outcomes. It will create structured simulation def
 
 Early development.
 
+The fixed-step simulation clock is implemented. See
+[simulation timing](docs/simulation-clock.md) for its API, headless execution,
+and determinism guarantee. Build with `cmake --preset windows-debug` and
+`cmake --build --preset windows-debug`; run `ctest --preset windows-debug`.
+Run `build/windows-debug/apps/sandbox/simforge_sandbox.exe --headless` for a
+finite 600-tick simulation without window initialization.
+
 Current milestone:
 
 **Milestone 0 — Engine Heartbeat**

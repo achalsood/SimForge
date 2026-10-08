@@ -23,7 +23,7 @@ int main()
         return EXIT_FAILURE;
     }
 
-    engine.begin_frame();
+    (void)engine.begin_frame();
     engine.end_frame();
 
     if (engine.frame_count() != 1)
