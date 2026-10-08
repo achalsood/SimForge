@@ -115,8 +115,8 @@ Options parse_options(int argc, char* argv[])
         throw std::invalid_argument("--entities and --ticks require --headless");
     if (options.entities > std::numeric_limits<std::uint32_t>::max())
         throw std::invalid_argument("Entity count exceeds entity index space");
-    if ((options.scenario || options.record || options.replay || options.warehouse_replay) && !options.headless)
-        throw std::invalid_argument("Scenario and recording workflows require --headless");
+    if ((options.record || options.replay || options.warehouse_replay) && !options.headless)
+        throw std::invalid_argument("Recording workflows require --headless");
     if ((options.scenario || options.record || options.replay || options.warehouse_replay) && (entities_seen || ticks_seen))
         throw std::invalid_argument("Scenario/recording tick budgets conflict with --entities/--ticks");
     if (options.record && (options.replay || options.warehouse_replay || !options.scenario))
@@ -132,7 +132,7 @@ Options parse_options(int argc, char* argv[])
     if (options.export_json && options.export_csv && std::filesystem::absolute(*options.export_json).lexically_normal() ==
         std::filesystem::absolute(*options.export_csv).lexically_normal())
         throw std::invalid_argument("JSON and CSV output paths must differ");
-    if (options.graphics_smoke && (options.headless || options.scenario || options.record || options.replay || options.warehouse_replay ||
+    if (options.graphics_smoke && (options.headless || options.record || options.replay || options.warehouse_replay ||
         options.experiment || options.compare_forklifts || options.checkpoint_seconds || options.export_json || options.export_csv || entities_seen || ticks_seen))
         throw std::invalid_argument("--graphics-smoke conflicts with headless/simulation options");
     if (options.graphics_capture && (!options.graphics_smoke || options.graphics_capture->extension() != ".ppm" || std::filesystem::exists(*options.graphics_capture)))
@@ -347,11 +347,11 @@ int run(const Options& options)
 {
     if (options.experiment) return experiment_workflow(options);
     if (options.warehouse_replay) return warehouse_replay_workflow(options);
-    if (options.scenario || options.replay) return scenario_workflow(options);
+    if ((options.headless && options.scenario) || options.replay) return scenario_workflow(options);
     if (!options.headless)
     {
 #if SIMFORGE_HAS_RENDERER
-        return run_graphics(options.graphics_smoke,options.graphics_capture);
+        return run_graphics(options.graphics_smoke,options.graphics_capture,options.scenario);
 #else
         throw std::invalid_argument("This executable has no renderer; use --headless or build with SIMFORGE_BUILD_RENDERER=ON");
 #endif
@@ -399,7 +399,7 @@ int main(int argc, char* argv[])
                   << "  --headless --warehouse-replay FILE [--scenario FILE]\n"
                   << "  --headless --experiment FILE [--export-json NEW_FILE] [--export-csv NEW_FILE]\n"
                   << "  --graphics-smoke FRAMES (120..10000; display/GPU/validation required)\n";
-        std::cerr << "  --graphics-smoke FRAMES --graphics-capture NEW_FILE.ppm\n";
+        std::cerr << "  --scenario WAREHOUSE_FILE [--graphics-smoke FRAMES] [--graphics-capture NEW_FILE.ppm]\n";
         return 1;
     }
 }

@@ -227,8 +227,8 @@ covered through policy/math where possible, not forced live. Capture support is
 narrower than ordinary rendering. Camera controls, HDR, anti-aliasing, staging to
 device-local mesh buffers, batching and large-scene tuning are deferred.
 
-For warehouse geometry, add an application adapter with explicit layout values and
-stable visual identities, producing owned render objects from domain state. Keep
-operational scheduling/metrics unchanged; GPU assets and later instance buffers
-stay renderer-owned. Interpolate with separate render timing without changing
-ticks/snapshots. No warehouse geometry is implemented in this milestone.
+This document records the Commit #12 baseline. Commit #13 adds a CPU-only warehouse
+adapter with stable visual identities, shared industrial meshes and resize-aware
+automatic framing. Its current results are in [warehouse-visualization.md](warehouse-visualization.md).
+The no-argument cube demo remains available. Live operational interpolation and
+instance buffers remain deferred; scheduling, metrics, ticks and snapshots are unchanged.

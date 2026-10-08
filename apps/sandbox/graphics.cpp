@@ -1,6 +1,8 @@
 #include "graphics.hpp"
 #include <simforge/platform/window.hpp>
 #include <simforge/renderer/renderer.hpp>
+#include <simforge/renderer/geometry.hpp>
+#include <simforge/visualization/warehouse_layout.hpp>
 #include <chrono>
 #include <iostream>
 #include <stdexcept>
@@ -22,7 +24,7 @@ void summary(const simforge::renderer::RendererInfo& info)
               << "Validation: " << (info.validation_enabled ? "enabled" : "disabled")
               << " | Synchronization validation: " << (info.synchronization_validation ? "enabled" : "disabled")
               << "\nDepth: " << info.depth_format << " | Static GPU buffers: 2 | Asset init: " << info.asset_initialization_ms
-              << " ms | Pipeline creation: " << info.pipeline_creation_ms << " ms\nRendering floor, metric grid and four colored cubes...\n";
+              << " ms | Pipeline creation: " << info.pipeline_creation_ms << " ms\n";
 }
 void verify_scene(const simforge::renderer::CapturedFrame& frame)
 {
@@ -41,6 +43,27 @@ void verify_scene(const simforge::renderer::CapturedFrame& frame)
         throw std::runtime_error("Scene capture lacks meaningful geometry or one of four distinct cube colors");
     std::cout << "Scene image verified | Non-background pixels: " << changed << " | Orange/teal/yellow/violet: "
         << colors[0] << '/' << colors[1] << '/' << colors[2] << '/' << colors[3] << '\n';
+}
+void verify_warehouse(const simforge::renderer::CapturedFrame& frame)
+{
+    std::array<std::uint64_t,4> regions{};
+    std::array<std::uint64_t,3> palette{};
+    for (std::uint32_t y = 0; y < frame.height; ++y) for (std::uint32_t x = 0; x < frame.width; ++x)
+    {
+        const auto i = (static_cast<std::size_t>(y)*frame.width+x)*4;
+        const int r = frame.rgba[i], g = frame.rgba[i+1], b = frame.rgba[i+2];
+        if (std::abs(r-44)+std::abs(g-60)+std::abs(b-77) > 15)
+            ++regions[(y >= frame.height/2 ? 2 : 0)+(x >= frame.width/2 ? 1 : 0)];
+        if (r > 145 && g > 90 && r > b*1.4) ++palette[0]; // Safety yellow / vehicle amber.
+        if (g > 95 && b > 100 && b > r*1.12 && g > r*1.05) ++palette[1]; // Cargo / structural blue-gray.
+        if (r > 135 && g > 135 && b > 135 && std::abs(r-g) < 25) ++palette[2]; // Shelves / straps.
+    }
+    std::cout << "Warehouse capture | Four regions: " << regions[0] << '/' << regions[1] << '/' << regions[2] << '/' << regions[3]
+              << " | Amber/blue-gray/metal pixels: " << palette[0] << '/' << palette[1] << '/' << palette[2] << '\n';
+    if (std::count_if(regions.begin(),regions.end(),[](auto n) { return n >= 1000; }) < 2 ||
+        std::any_of(palette.begin(),palette.end(),[](auto n) { return n < 100; }))
+        throw std::runtime_error("Warehouse GPU image lacks distinct regions or industrial colors");
+    std::cout << "Warehouse image verified: geometry in multiple regions and three industrial palette groups.\n";
 }
 void save_capture(const simforge::renderer::CapturedFrame& frame, const std::filesystem::path& path)
 {
@@ -86,18 +109,43 @@ void verify_depth(simforge::renderer::Renderer& graphics)
     std::cout << "Depth verified: near cube wins when drawn first; reversed order produces identical pixels; empty scene clears.\n";
 }
 }
-int run_graphics(std::optional<std::uint64_t> smoke_frames, const std::optional<std::filesystem::path>& capture_output)
+int run_graphics(std::optional<std::uint64_t> smoke_frames, const std::optional<std::filesystem::path>& capture_output,
+    const std::optional<std::filesystem::path>& scenario_path)
 {
     using namespace simforge;
     using timer = std::chrono::steady_clock;
+    // Load, validate and build before any SDL or Vulkan initialization.
+    const std::optional<visualization::WarehouseLayout> layout = scenario_path ?
+        std::optional{visualization::build_warehouse_layout(scenario::load_scenario(*scenario_path))} : std::nullopt;
+    const auto frame = layout ? visualization::make_warehouse_frame(*layout) : renderer::make_demo_scene();
+    std::uint32_t expected_vertices = 0, expected_indices = 0;
+    const std::array meshes{renderer::make_builtin_mesh(renderer::MeshId::Cube),renderer::make_builtin_mesh(renderer::MeshId::Floor),
+        renderer::make_builtin_mesh(renderer::MeshId::Grid),renderer::make_builtin_mesh(renderer::MeshId::Dock),
+        renderer::make_builtin_mesh(renderer::MeshId::Rack),renderer::make_builtin_mesh(renderer::MeshId::Pallet),
+        renderer::make_builtin_mesh(renderer::MeshId::Forklift),renderer::make_builtin_mesh(renderer::MeshId::Worker)};
+    for (const auto& object : frame.objects)
+    {
+        const auto& mesh = meshes.at(static_cast<std::size_t>(object.mesh)-1);
+        expected_vertices += static_cast<std::uint32_t>(mesh.vertices.size());
+        expected_indices += static_cast<std::uint32_t>(mesh.indices.size());
+    }
     platform::Window window;
     window.create("SimForge Vulkan Sandbox",1280,720,platform::WindowMode::Vulkan);
     renderer::Renderer graphics;
     renderer::RendererOptions options;
     if (smoke_frames) { options.validation = true; options.require_validation = true; options.capture_frames = true; }
     graphics.initialize(window,options); summary(graphics.info());
-    const auto frame = renderer::make_demo_scene();
+    std::cout << "Scene: " << (scenario_path ? scenario_path->string() : "cube demo") << " | Objects: " << frame.objects.size()
+              << " | Unique GPU meshes: " << renderer::builtin_mesh_count << " | Static scene built once\n";
+    if (layout)
+    {
+        std::array<std::uint32_t,7> counts{};
+        for (const auto& object : layout->objects) ++counts[static_cast<std::size_t>(object.kind)];
+        std::cout << "Capacity representatives | Bays: " << counts[1] << " | Racks: " << counts[2] << " | Pallets: " << counts[3]
+                  << " | Forklifts: " << counts[4] << " | Workers: " << counts[5] << " | Floor markings: " << counts[6] << '\n';
+    }
     double render_wall_ms = 0; std::uint64_t measured_frames = 0;
+    std::vector<double> steady_times;
     auto last_progress = timer::now();
     std::uint64_t last_presented = 0;
     bool resized1 = false, resized2 = false, minimized = false, restored = false, resized3 = false;
@@ -128,7 +176,15 @@ int run_graphics(std::optional<std::uint64_t> smoke_frames, const std::optional<
             if (count >= 80 && !resized3) { window.resize(1280,720); resized3 = true; }
             if (count >= *smoke_frames)
             {
-                const auto image = graphics.capture_frame(); verify_scene(image);
+                const auto image = graphics.capture_frame();
+                if (scenario_path)
+                {
+                    verify_warehouse(image); submit_and_wait(graphics,frame);
+                    if (image.rgba != graphics.capture_frame().rgba)
+                        throw std::runtime_error("Static warehouse image changed between identical frames");
+                    std::cout << "Static warehouse repeated capture identical; no observed flicker.\n";
+                }
+                else verify_scene(image);
                 if (capture_output) save_capture(image,*capture_output);
                 verify_depth(graphics); submit_and_wait(graphics,frame);
                 window.request_close(); window.poll_events(); break;
@@ -138,7 +194,11 @@ int run_graphics(std::optional<std::uint64_t> smoke_frames, const std::optional<
         const auto render_started = timer::now();
         const bool presented = graphics.render_frame(frame);
         const auto duration = std::chrono::duration<double,std::milli>{timer::now()-render_started}.count();
-        if (presented) { render_wall_ms += duration; ++measured_frames; }
+        if (presented)
+        {
+            render_wall_ms += duration; ++measured_frames;
+            if (graphics.info().presented_frames > 100 && steady_times.size() < 10000) steady_times.push_back(duration);
+        }
         else std::this_thread::sleep_for(std::chrono::milliseconds{10});
     }
     graphics.shutdown();
@@ -150,12 +210,23 @@ int run_graphics(std::optional<std::uint64_t> smoke_frames, const std::optional<
               << " | Buffer allocations: " << info.buffer_allocations << " | Depth images: " << info.depth_images_created
               << " | Mean CPU render/present wall time: " << (measured_frames ? render_wall_ms/static_cast<double>(measured_frames) : 0)
               << " ms (includes FIFO waits; not GPU throughput)\n";
+    if (!steady_times.empty())
+    {
+        double mean = 0; for (auto value : steady_times) mean += value;
+        mean /= static_cast<double>(steady_times.size());
+        double variance = 0; for (auto value : steady_times) variance += (value-mean)*(value-mean);
+        std::sort(steady_times.begin(),steady_times.end());
+        std::cout << "Steady CPU render/present (after 100 frames) | Samples: " << steady_times.size()
+                  << " | Mean: " << mean << " ms | Stddev: " << std::sqrt(variance/static_cast<double>(steady_times.size()))
+                  << " | p50: " << steady_times[steady_times.size()/2] << " | p95: " << steady_times[(steady_times.size()-1)*95/100]
+                  << " | Min/max: " << steady_times.front() << '/' << steady_times.back() << " ms; FIFO waits included, no GPU timestamps\n";
+    }
     if (smoke_frames)
     {
         if (!restored || !resized3 || info.presented_frames < *smoke_frames || info.swapchain_generations < 4 || !info.validation_enabled || !info.synchronization_validation)
             throw std::runtime_error("Graphics smoke did not exercise all required phases");
-        if (info.validation_errors != 0) throw std::runtime_error("Vulkan validation errors were reported");
-        if (info.pipeline_generations != 1 || info.draw_calls != 6 || info.submitted_vertices != 236 || info.submitted_indices != 354 ||
+        if (info.validation_errors != 0 || info.validation_warnings != 0) throw std::runtime_error("Vulkan validation messages were reported");
+        if (info.pipeline_generations != 1 || info.draw_calls != frame.objects.size() || info.submitted_vertices != expected_vertices || info.submitted_indices != expected_indices ||
             info.depth_images_created != info.swapchain_generations || info.buffer_allocations != 2+info.swapchain_generations ||
             std::abs(info.aspect_ratio-static_cast<float>(info.width)/static_cast<float>(info.height)) > 1e-6f)
             throw std::runtime_error("Smoke resource reuse, geometry counts or camera aspect mismatch");
@@ -168,7 +239,7 @@ int run_graphics(std::optional<std::uint64_t> smoke_frames, const std::optional<
         window.destroy();
         if (graphics.render_frame(frame)) throw std::runtime_error("Renderer presented after window close");
         graphics.shutdown(); info = graphics.info();
-        if (info.validation_errors != 0) throw std::runtime_error("Validation errors during lifecycle smoke");
+        if (info.validation_errors != 0 || info.validation_warnings != 0) throw std::runtime_error("Validation messages during lifecycle smoke");
         std::cout << "Graphics smoke passed: 3D geometry, image/color checks, depth occlusion, repeated resize, minimize/restore, close, reinitialize and native-window lease; validation errors: 0\n";
     }
     return 0;

@@ -99,7 +99,7 @@ void scene_validation()
 {
     const auto invalid = [](auto change) { auto frame = make_demo_scene(); change(frame); rejects([&] { validate_frame(frame); }); };
     invalid([](auto& f) { f.objects[0].mesh = static_cast<MeshId>(0); });
-    invalid([](auto& f) { f.objects[0].mesh = static_cast<MeshId>(4); });
+    invalid([](auto& f) { f.objects[0].mesh = static_cast<MeshId>(9); });
     invalid([](auto& f) { f.objects[1].color.r = -0.1f; }); invalid([](auto& f) { f.objects[1].color.b = 1.1f; });
     invalid([](auto& f) { f.objects[1].color.g = std::numeric_limits<float>::quiet_NaN(); });
     invalid([](auto& f) { f.objects[1].transform.scale.y = 0; });

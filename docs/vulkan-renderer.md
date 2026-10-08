@@ -275,8 +275,9 @@ CPU frame times do not measure raw GPU throughput. The scene is static and does
 not run a simulation; fixed-step scheduling does not guarantee bitwise simulation
 determinism across hardware.
 
-For warehouse geometry, retain the value boundary: an application adapter should
-map explicit warehouse layout/domain values into owned render objects. Asset buffers,
-pipeline resources and later instance batching stay renderer-owned. Visual interpolation
-uses separate render timing without changing simulation ticks or snapshots. Warehouse
-geometry, batching and selection are not implemented in this milestone.
+Commit #13 implements the static warehouse adapter and reusable industrial geometry.
+See [warehouse visualization](warehouse-visualization.md) for current validation,
+the desktop screenshot and measured drawing costs. The adapter depends on scenario
+definitions and CPU scene values; the Vulkan renderer has no warehouse-domain
+dependency. Asset buffers and pipelines remain renderer-owned. Batching, selection
+and live interpolation are deferred; simulation ticks and snapshots are unchanged.

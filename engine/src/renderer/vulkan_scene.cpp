@@ -26,10 +26,9 @@ VulkanScene::VulkanScene(const VulkanDevice& device) : device_{device}
     try
     {
         std::vector<Vertex> vertices; std::vector<std::uint32_t> indices;
-        const std::array meshes{make_cube(),make_floor(),make_grid()};
-        for (std::size_t i = 0; i < meshes.size(); ++i)
+        for (std::size_t i = 0; i < builtin_mesh_count; ++i)
         {
-            const auto& mesh = meshes[i];
+            const auto mesh = make_builtin_mesh(static_cast<MeshId>(i+1));
             ranges_[i] = {static_cast<std::uint32_t>(mesh.indices.size()),static_cast<std::uint32_t>(indices.size()),
                 static_cast<std::int32_t>(vertices.size()),static_cast<std::uint32_t>(mesh.vertices.size())};
             vertices.insert(vertices.end(),mesh.vertices.begin(),mesh.vertices.end());
@@ -100,7 +99,7 @@ void VulkanScene::ensure_pipeline(VkRenderPass pass, PipelineSignature signature
 DrawCounts VulkanScene::record(VkCommandBuffer command, VkExtent2D extent, const RenderFrameData& frame) const
 {
     if (!pipeline_) throw std::logic_error("Scene pipeline has not been created");
-    auto camera = frame.camera; camera.aspect_ratio = static_cast<float>(extent.width)/static_cast<float>(extent.height);
+    const auto camera = frame_camera(frame,static_cast<float>(extent.width)/static_cast<float>(extent.height));
     const auto view_projection = camera.view_projection();
     const VkViewport viewport{0,0,static_cast<float>(extent.width),static_cast<float>(extent.height),0,1};
     const VkRect2D scissor{{0,0},extent};

@@ -5,6 +5,7 @@
 #include <limits>
 #include <type_traits>
 #include <vector>
+#include <simforge/renderer/render_frame_data.hpp>
 
 namespace simforge::renderer
 {
@@ -18,4 +19,5 @@ struct MeshGeometry { std::vector<Vertex> vertices; std::vector<std::uint32_t> i
 [[nodiscard]] MeshGeometry make_cube(); // Unit cube centered at origin, outward CCW faces.
 [[nodiscard]] MeshGeometry make_floor(); // Unit XZ plane, normal +Y.
 [[nodiscard]] MeshGeometry make_grid(std::uint32_t half_cells = 8, float spacing = 1.0f, float width = 0.014f);
+[[nodiscard]] MeshGeometry make_builtin_mesh(MeshId id);
 }

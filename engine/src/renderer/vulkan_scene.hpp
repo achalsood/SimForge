@@ -23,7 +23,7 @@ private:
     struct Range { std::uint32_t count, first_index; std::int32_t vertex_offset; std::uint32_t vertices; };
     const VulkanDevice& device_;
     std::unique_ptr<VulkanBuffer> vertices_, indices_;
-    std::array<Range,3> ranges_{};
+    std::array<Range,builtin_mesh_count> ranges_{};
     VkShaderModule vertex_shader_{VK_NULL_HANDLE}, fragment_shader_{VK_NULL_HANDLE};
     VkPipelineLayout layout_{VK_NULL_HANDLE};
     VkPipeline pipeline_{VK_NULL_HANDLE};

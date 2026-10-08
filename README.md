@@ -56,15 +56,18 @@ interventions for bottleneck evidence. Results export to reproducible JSON and C
 See [scenario comparison contracts and actual results](docs/scenario-comparison.md)
 and [comparison performance measurements](docs/comparison-benchmarks.md).
 
-The custom Vulkan renderer draws a perspective viewport with a ground plane,
-metric grid and four colored cubes, with depth testing and resize/minimize/restore.
+The custom Vulkan renderer draws scenario-driven static warehouse scenes with
+loading docks, storage racks, cargo pallets, forklifts, workers and floor markings.
+A CPU-only visualization adapter maps validated resource capacities into stable
+visual identities and deterministic placements, with automatic camera framing.
+The original floor/grid/cube scene remains the no-argument demo.
 GPU resources remain separate from simulation. See [renderer architecture and setup](docs/vulkan-renderer.md)
-and [3D pipeline, camera and verified screenshot](docs/first-3d-scene.md).
+and [warehouse visualization, verified screenshot and measurements](docs/warehouse-visualization.md).
 Graphics builds require the official Vulkan SDK (headers 1.4.335 or newer), a Vulkan
 1.1 runtime, and a driver supporting swapchain-maintenance1 presentation fences.
 The SDK's `glslc` compiles and embeds GLSL shaders during the build; no runtime
 shader paths or manual compilation are needed. The manifest enables SDL3's `vulkan`
-feature and provides GLM for renderer-only math. Use an x64 Visual Studio developer
+feature and provides GLM for CPU scene/visualization math. Use an x64 Visual Studio developer
 terminal with `VCPKG_ROOT` and `VULKAN_SDK` set; reopen the terminal after installing
 the SDK. Configure with `-DSIMFORGE_BUILD_RENDERER=OFF` to build without the SDK.
 
@@ -88,14 +91,19 @@ build/windows-release/benchmarks/simforge_input_benchmark.exe
 build/windows-release/benchmarks/simforge_warehouse_benchmark.exe
 build/windows-release/benchmarks/simforge_warehouse_snapshot_benchmark.exe
 build/windows-release/benchmarks/simforge_comparison_benchmark.exe
+build/windows-release/benchmarks/simforge_warehouse_layout_benchmark.exe
 ```
 
 Run the sandbox without arguments for the static 3D viewport:
 
 ```powershell
 build/windows-debug/apps/sandbox/simforge_sandbox.exe
+build/windows-debug/apps/sandbox/simforge_sandbox.exe --scenario examples/warehouse-baseline.json
+build/windows-debug/apps/sandbox/simforge_sandbox.exe --scenario examples/warehouse-constrained.json
+build/windows-debug/apps/sandbox/simforge_sandbox.exe --scenario examples/warehouse-higher-capacity.json
 # Opt-in visible-window test: requires GPU, display, and Khronos validation layers.
 build/windows-debug/apps/sandbox/simforge_sandbox.exe --graphics-smoke 180
+build/windows-debug/apps/sandbox/simforge_sandbox.exe --scenario examples/warehouse-baseline.json --graphics-smoke 180
 # Optional GPU capture: parent directory must exist; output must be new.
 build/windows-debug/apps/sandbox/simforge_sandbox.exe --graphics-smoke 180 --graphics-capture build/first-3d-scene.ppm
 # Stronger headless isolation: this target links neither SDL nor Vulkan.
@@ -106,8 +114,9 @@ The existing `simforge_sandbox --headless` commands also work without graphics
 initialization. Headless mode reports
 entity/tick counts, simulated elapsed time, separate setup/update wall durations,
 and a position checksum. Fixed-step scheduling does not guarantee cross-platform
-bitwise simulation determinism. Warehouse visualization, camera controls, physics,
-and AI integration remain future milestones.
+bitwise simulation determinism. Warehouse scenes represent capacities and are static;
+they do not display live shipment activity. Live visualization, camera controls,
+physics and AI integration remain future milestones.
 
 ```powershell
 build/windows-debug/apps/sandbox/simforge_sandbox.exe --headless --scenario examples/warehouse-baseline.json
