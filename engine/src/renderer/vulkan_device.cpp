@@ -18,6 +18,8 @@ VulkanDevice::VulkanDevice(const VulkanContext& context)
         const auto extensions = enumerate<VkExtensionProperties>([&](auto count, auto values) { return vkEnumerateDeviceExtensionProperties(physical,nullptr,count,values); },"Enumerate GPU extensions");
         const auto has = [&](const char* name) { return std::any_of(extensions.begin(),extensions.end(),[&](const auto& e) { return std::strcmp(e.extensionName,name) == 0; }); };
         support.swapchain_extension = has(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+        const bool device_khr = has(VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME);
+        const bool device_ext = has(VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME);
         const bool khr = context.khr_maintenance() && has(VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME);
         const bool ext = context.ext_maintenance() && has(VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME);
         khr_maintenance.push_back(khr);
@@ -26,6 +28,11 @@ VulkanDevice::VulkanDevice(const VulkanContext& context)
             VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR maintenance{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_KHR};
             VkPhysicalDeviceFeatures2 features{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2}; features.pNext = &maintenance;
             vkGetPhysicalDeviceFeatures2(physical,&features); support.present_fences = maintenance.swapchainMaintenance1 == VK_TRUE;
+        }
+        for (auto format : {VK_FORMAT_D32_SFLOAT,VK_FORMAT_D32_SFLOAT_S8_UINT,VK_FORMAT_D24_UNORM_S8_UINT})
+        {
+            VkFormatProperties depth{}; vkGetPhysicalDeviceFormatProperties(physical,format,&depth);
+            support.depth_formats.push_back({format,depth.optimalTilingFeatures});
         }
         std::uint32_t count = 0; vkGetPhysicalDeviceQueueFamilyProperties(physical,&count,nullptr);
         std::vector<VkQueueFamilyProperties> queues(count); vkGetPhysicalDeviceQueueFamilyProperties(physical,&count,queues.data());
@@ -46,12 +53,19 @@ VulkanDevice::VulkanDevice(const VulkanContext& context)
             support.color_attachment_usage = (capabilities.supportedUsageFlags & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) != 0;
         }
         const auto rejection = device_rejection(support);
+        if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU)
+            std::cout << "Vulkan integrated GPU visible: " << properties.deviceName
+                << " | Graphics/present queues: " << (choose_queues(support.queues) ? "available" : "unavailable")
+                << " | Swapchain: " << (support.swapchain_extension ? "yes" : "no")
+                << " | Maintenance1 KHR/EXT: " << device_khr << '/' << device_ext
+                << " | Present-fence feature: " << support.present_fences << '\n';
         if (!rejection.empty()) std::cout << "Vulkan GPU rejected: " << properties.deviceName << ": " << rejection << '\n';
         supports.push_back(std::move(support));
     }
     const auto selected = choose_device(supports);
     if (!selected) throw std::runtime_error("No suitable Vulkan GPU: require Vulkan 1.1, graphics/present queues, swapchain color support and maintenance1 present fences");
     physical_ = devices[*selected]; families_ = *choose_queues(supports[*selected].queues); vkGetPhysicalDeviceProperties(physical_,&properties_);
+    depth_format_ = *choose_depth_format(supports[*selected].depth_formats);
     const float priority = 1;
     std::vector<VkDeviceQueueCreateInfo> queue_infos;
     for (auto family : {families_.graphics,families_.present})

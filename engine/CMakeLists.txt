@@ -48,7 +48,25 @@ target_compile_features(simforge_platform PUBLIC cxx_std_23)
 target_link_libraries(simforge_platform PRIVATE SDL3::SDL3)
 
 if(SIMFORGE_BUILD_RENDERER)
-    find_package(Vulkan 1.4.335 REQUIRED)
+    find_package(Vulkan 1.4.335 REQUIRED COMPONENTS glslc)
+    find_package(glm CONFIG REQUIRED)
+    add_library(simforge_render_scene STATIC src/renderer/camera.cpp src/renderer/geometry.cpp src/renderer/render_frame_data.cpp)
+    target_include_directories(simforge_render_scene PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(simforge_render_scene PUBLIC glm::glm-header-only)
+    target_compile_features(simforge_render_scene PUBLIC cxx_std_23)
+    set(shader_headers)
+    foreach(stage vert frag)
+        set(source "${CMAKE_CURRENT_SOURCE_DIR}/shaders/scene.${stage}")
+        set(binary "${CMAKE_CURRENT_BINARY_DIR}/generated/scene.${stage}.spv")
+        set(header "${CMAKE_CURRENT_BINARY_DIR}/generated/scene_${stage}.hpp")
+        add_custom_command(OUTPUT "${header}" "${binary}"
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
+            COMMAND Vulkan::glslc --target-env=vulkan1.1 -O "${source}" -o "${binary}"
+            COMMAND ${CMAKE_COMMAND} "-DINPUT=${binary}" "-DOUTPUT=${header}" "-DSYMBOL=scene_${stage}"
+                -P "${PROJECT_SOURCE_DIR}/cmake/EmbedSpirv.cmake"
+            DEPENDS "${source}" "${PROJECT_SOURCE_DIR}/cmake/EmbedSpirv.cmake" VERBATIM)
+        list(APPEND shader_headers "${header}")
+    endforeach()
     target_sources(simforge_platform PRIVATE src/platform/vulkan_window.cpp)
     # The opt-in Vulkan platform header exposes Vulkan types, but no loader link.
     target_link_libraries(simforge_platform PUBLIC Vulkan::Headers)
@@ -57,16 +75,20 @@ if(SIMFORGE_BUILD_RENDERER)
     target_link_libraries(simforge_render_policy PUBLIC Vulkan::Headers)
     target_compile_features(simforge_render_policy PUBLIC cxx_std_23)
     add_library(simforge_renderer STATIC src/renderer/renderer.cpp src/renderer/vulkan_context.cpp
-        src/renderer/vulkan_device.cpp src/renderer/vulkan_swapchain.cpp)
+        src/renderer/vulkan_device.cpp src/renderer/vulkan_swapchain.cpp src/renderer/vulkan_buffer.cpp
+        src/renderer/vulkan_scene.cpp ${shader_headers})
+    target_include_directories(simforge_renderer PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
     target_include_directories(simforge_renderer PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_compile_features(simforge_renderer PUBLIC cxx_std_23)
-    target_link_libraries(simforge_renderer PRIVATE simforge_platform simforge_render_policy Vulkan::Vulkan)
+    target_link_libraries(simforge_renderer PUBLIC simforge_render_scene PRIVATE simforge_platform simforge_render_policy Vulkan::Vulkan)
     if(MSVC)
         target_compile_options(simforge_renderer PRIVATE /W4 /permissive-)
         target_compile_options(simforge_render_policy PRIVATE /W4 /permissive-)
+        target_compile_options(simforge_render_scene PRIVATE /W4 /permissive-)
     else()
         target_compile_options(simforge_renderer PRIVATE -Wall -Wextra -Wpedantic)
         target_compile_options(simforge_render_policy PRIVATE -Wall -Wextra -Wpedantic)
+        target_compile_options(simforge_render_scene PRIVATE -Wall -Wextra -Wpedantic)
     endif()
 endif()
 

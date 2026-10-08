@@ -1,9 +1,11 @@
 # Vulkan renderer foundation
 
-This milestone renders only a dark blue-gray background. There are no shaders,
-graphics pipelines, meshes, cameras, lights, scene graph, or warehouse visuals.
-The clear color is linear RGBA `(0.025, 0.045, 0.075, 1)`; an sRGB swapchain
-encodes it for display (approximately RGB `44, 60, 77`).
+The renderer now draws the first static 3D scene: a perspective camera, floor,
+grid and four colored cubes with depth testing. See [3D pipeline and camera details](first-3d-scene.md)
+for shader compilation, geometry/buffer ownership, math conventions, image checks,
+Intel compatibility findings and a verified screenshot. There are no warehouse
+visuals, camera controls, lighting, transparency, shadows, scene graph or asset database.
+The background remains linear RGBA `(0.025, 0.045, 0.075, 1)` (display RGB approximately `44,60,77`).
 
 ## Module boundaries
 
@@ -16,6 +18,8 @@ dimensions, actual pixel dimensions, and the SDL Vulkan surface adapter.
 `simforge_renderer` depends on platform and Vulkan, with no engine, ECS, analysis,
 or warehouse dependency. `simforge_render_policy` contains pure selection logic;
 its only Vulkan dependency is headers, not the loader or a live GPU.
+`simforge_render_scene` owns camera math, frame validation and built-in CPU geometry;
+it links header-only GLM, with no SDL, Vulkan loader or simulation dependency.
 
 ```text
 engine / warehouse --> future application adapter --> const RenderFrameData
@@ -24,9 +28,10 @@ engine / warehouse --> future application adapter --> const RenderFrameData
 platform (SDL window/surface adapter) <-------------- renderer --> Vulkan
 ```
 
-`Renderer::render_frame(const RenderFrameData&)` consumes an empty value contract.
-Future application adapters will extract renderable values from simulation and
-provide immutable frame data, without exposing mutable World pointers, scheduler
+`Renderer::render_frame(const RenderFrameData&)` consumes owned camera/object values.
+Each object supplies a stable built-in mesh ID, transform and linear RGB tint.
+The renderer retains no caller references after recording. Future application
+adapters can extract renderable values from simulation, without exposing mutable World pointers, scheduler
 queues, resource managers, or GPU handles. Render assets/caches belong to the
 renderer and never enter simulation snapshots. The graphics sandbox polls events
 and presents independently of simulation ticks; it does not run a warehouse or
@@ -69,7 +74,8 @@ No shader, compute, ray-tracing, or discrete-GPU capability is required.
 
 The vcpkg manifest explicitly requests SDL3's optional `vulkan` feature; its core
 package alone does not enable Vulkan window creation at the pinned baseline.
-SDK shader tools may be discovered, but this clear-only renderer does not use them.
+The renderer requires the discovered `Vulkan::glslc` compiler. CMake builds GLSL
+into SPIR-V and embeds typed words, so executables need no shader-file lookup.
 
 ```powershell
 cmake --preset windows-debug
@@ -117,7 +123,7 @@ and errors, with separate counters; its callback cannot throw across the C ABI.
 
 Each physical device is checked against the actual SDL surface: nonempty graphics
 and presentation queues, API/extensions/features, formats with color-attachment
-support, surface image usage, and presentation modes. Rejected devices print their
+support, surface image usage, presentation modes and depth attachment formats. Rejected devices print their
 name and reason. Suitable discrete devices are preferred over integrated devices;
 first enumeration order breaks ties. A combined queue family is preferred, but
 separate families create two queues and use concurrent swapchain sharing.
@@ -139,18 +145,27 @@ and zero pixel extents skip work before recreation or acquisition.
 One frame is in flight. The renderer owns one resettable command pool, one primary
 command buffer, one acquire semaphore, one acquisition fence, and one submission
 fence. Each swapchain image owns a view, framebuffer, render-finished semaphore,
-and maintenance1 presentation fence.
+and maintenance1 presentation fence. A swapchain generation also owns one shared
+depth image/view/memory allocation, safe because submissions are serialized by the
+single frame fence. The scene owns two static mesh buffers, two shader modules, a
+push-constant layout and one compatible graphics pipeline.
 
 1. Poll events; skip a closed, minimized or zero-size drawable.
 2. Recreate if pixel size changed or acquisition/presentation marked it dirty.
 3. Wait for the previous submission before reusing commands/acquire semaphore.
 4. Acquire an image with a bounded one-second timeout; wait its acquisition fence.
-5. Record a single clear-only render pass. Its color attachment discards previous
+5. Record a color/depth render pass and indexed object draws. The camera derives
+   aspect from actual swapchain extent; viewport and scissor are dynamic.
+   The color attachment discards previous
    content from `UNDEFINED`, transitions to `COLOR_ATTACHMENT_OPTIMAL`, clears and
    stores, then transitions to `PRESENT_SRC_KHR`. An external color-output dependency
    and color-output acquisition wait synchronize the attachment transition/write.
+   Depth clears to 1 and uses depth-stencil attachment layout. Early/late fragment
+   dependencies include previous depth writes and new depth reads/writes.
 6. Reset the submission fence **after** successful acquisition/recording; submit,
    waiting for acquisition and signaling this image's render-finished semaphore.
+   Diagnostic capture optionally copies color into a mapped buffer before present;
+   transfer/host barriers, completion fences and noncoherent invalidation protect reads.
 7. Present through the presentation queue, waiting that semaphore and attaching
    this image's present fence. Wait before reusing a pending present fence.
 
@@ -167,7 +182,10 @@ waits device work and all pending presentation fences, creates a replacement usi
 `oldSwapchain`, and retires the old generation. If creation returns out-of-date,
 the old swapchain is discarded because passing it may retire it even on failure;
 the next active frame retries from no swapchain. Minimized windows do not recreate
-every frame. Acquisition timeout/not-ready skips without resetting the submission
+every frame. Depth attachments/framebuffers are replaced at the new extent;
+shaders, mesh buffers and pipeline layout stay alive. The pipeline is reused for
+compatible color/depth formats and rebuilt only when those formats change.
+Acquisition timeout/not-ready skips without resetting the submission
 fence, preventing a subsequent wait on an unsubmitted frame.
 
 Other Vulkan errors throw with operation/result and useful device-loss, surface-loss,
@@ -187,7 +205,9 @@ shutdown, including destruction messages.
 Destruction drains device work/acquisition and presentation, frees the command
 pool/buffers, framebuffers/render pass, views, presentation semaphores/fences and
 swapchain, then renderer fences/semaphore and device, then surface/debug messenger/
-instance, and finally the native-window lease. The debug callback's diagnostic
+instance, and finally the native-window lease. Depth resources and optional readback
+are freed with framebuffers; scene pipelines/layout/shaders and mapped mesh buffers
+are freed before the logical device. The debug callback's diagnostic
 storage outlives the entire context. There are no simulation-state ownership changes.
 
 ## Tests and observed validation
@@ -200,7 +220,9 @@ video initialization. They never create a Vulkan instance or query a GPU; policy
 tests link headers only, lifecycle tests link the loader but perform no live calls.
 Three additional CLI cases reject invalid graphics requests. Three separately linked
 headless cases cover movement, warehouse, and batch analysis. All 84 prior tests
-remain registered unchanged, giving 96 ordinary tests.
+remain registered unchanged. Commit #12 adds camera, transform, scene ownership,
+geometry, depth/memory/pipeline policy, shader workflow and capture CLI coverage,
+giving 112 ordinary tests. No ordinary test creates a window or Vulkan instance.
 
 The graphics integration test is opt-in, never a default CI/display requirement:
 
@@ -215,10 +237,14 @@ Smoke mode requires validation and synchronization validation, presents the requ
 frames, resizes three times, minimizes for 250 ms, checks that skipped frames increase
 without recreation, restores, sends a close event, shuts down, reinitializes, and
 tests releasing the Window wrapper before renderer cleanup. Validation errors fail
-the smoke. Its watchdog fails after 30 seconds without presentation progress.
+the smoke. It also verifies four cube colors and meaningful geometry in GPU readback,
+a near-first depth probe, identical pixels with reversed draw order, an empty scene,
+pipeline reuse and expected geometry/allocation counts. Capture requires RGBA/BGRA8
+nonlinear sRGB and surface transfer-source support; normal rendering does not require
+capture support. Its watchdog fails after 30 seconds without presentation progress.
 The opt-in CTest has a 40-second timeout for its 180-frame run.
 
-Observed on this development machine on 2026-10-08: SDK 1.4.363.0 and queried
+Commit #11 historical baseline, observed on 2026-10-08: SDK 1.4.363.0 and queried
 runtime loader 1.4.363; NVIDIA GeForce
 RTX 5080 Laptop GPU, device API 1.4.351; graphics/present family 0; 1280x720,
 three images, B8G8R8A8_SRGB, FIFO. The Intel Graphics driver was rejected because it
@@ -237,18 +263,20 @@ not fault-injected; other hardware, split queues, and OSes were not live-tested.
 
 ## Limits and next scene design
 
+Current 3D results, screenshot and baseline are recorded in [first-3d-scene.md](first-3d-scene.md).
+Debug/Release pass 112/112 tests; the renderer-disabled build passes 93/93.
+Both 3D smoke paths run with validation enabled.
+
 Drivers without maintenance1 fences are unsupported, including the tested Intel
 driver. This is not an integrated-GPU exclusion. Runtime installation and a real
 display are necessary for graphical tests. Resize waits idle deliberately; there
-is one frame in flight, no GPU readback, profiler, or performance claim. FIFO/vsync
-frame rates do not measure raw rendering throughput. No scene or simulation appears
-in the window yet, and fixed-step scheduling does not guarantee bitwise simulation
+is one frame in flight, optional diagnostic readback and no GPU profiler. FIFO/vsync
+CPU frame times do not measure raw GPU throughput. The scene is static and does
+not run a simulation; fixed-step scheduling does not guarantee bitwise simulation
 determinism across hardware.
 
-For the first 3D scene, retain the value boundary: an application adapter can emit
-transforms and stable asset/instance identifiers into immutable RenderFrameData;
-the renderer can own mesh buffers, pipeline/material resources, and camera state.
-Interpolate visualization using separate render timing without changing simulation
-ticks or snapshots. Begin with one static mesh and an explicitly owned pipeline
-before batching or selection. These are design recommendations, not implemented
-features of this milestone.
+For warehouse geometry, retain the value boundary: an application adapter should
+map explicit warehouse layout/domain values into owned render objects. Asset buffers,
+pipeline resources and later instance batching stay renderer-owned. Visual interpolation
+uses separate render timing without changing simulation ticks or snapshots. Warehouse
+geometry, batching and selection are not implemented in this milestone.

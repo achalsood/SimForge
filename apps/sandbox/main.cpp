@@ -35,6 +35,7 @@ struct Options
     std::optional<std::uint64_t> checkpoint_seconds;
     std::optional<std::filesystem::path> experiment, export_json, export_csv;
     std::optional<std::uint64_t> graphics_smoke;
+    std::optional<std::filesystem::path> graphics_capture;
 };
 
 std::uint64_t parse_count(std::string_view value)
@@ -60,6 +61,11 @@ Options parse_options(int argc, char* argv[])
             options.graphics_smoke = parse_count(argv[i]);
             if (*options.graphics_smoke < 120 || *options.graphics_smoke > 10000)
                 throw std::invalid_argument("Graphics smoke requires 120..10000 frames");
+        }
+        else if (argument == "--graphics-capture" && !options.graphics_capture)
+        {
+            if (++i == argc) throw std::invalid_argument("Missing graphics capture output path");
+            options.graphics_capture = argv[i];
         }
         else if (argument == "--experiment" || argument == "--export-json" || argument == "--export-csv")
         {
@@ -129,6 +135,8 @@ Options parse_options(int argc, char* argv[])
     if (options.graphics_smoke && (options.headless || options.scenario || options.record || options.replay || options.warehouse_replay ||
         options.experiment || options.compare_forklifts || options.checkpoint_seconds || options.export_json || options.export_csv || entities_seen || ticks_seen))
         throw std::invalid_argument("--graphics-smoke conflicts with headless/simulation options");
+    if (options.graphics_capture && (!options.graphics_smoke || options.graphics_capture->extension() != ".ppm" || std::filesystem::exists(*options.graphics_capture)))
+        throw std::invalid_argument("--graphics-capture requires --graphics-smoke and a new .ppm output file");
     return options;
 }
 
@@ -343,7 +351,7 @@ int run(const Options& options)
     if (!options.headless)
     {
 #if SIMFORGE_HAS_RENDERER
-        return run_graphics(options.graphics_smoke);
+        return run_graphics(options.graphics_smoke,options.graphics_capture);
 #else
         throw std::invalid_argument("This executable has no renderer; use --headless or build with SIMFORGE_BUILD_RENDERER=ON");
 #endif
@@ -391,6 +399,7 @@ int main(int argc, char* argv[])
                   << "  --headless --warehouse-replay FILE [--scenario FILE]\n"
                   << "  --headless --experiment FILE [--export-json NEW_FILE] [--export-csv NEW_FILE]\n"
                   << "  --graphics-smoke FRAMES (120..10000; display/GPU/validation required)\n";
+        std::cerr << "  --graphics-smoke FRAMES --graphics-capture NEW_FILE.ppm\n";
         return 1;
     }
 }

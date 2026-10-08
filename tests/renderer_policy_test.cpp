@@ -4,6 +4,7 @@
 #include <source_location>
 #include <stdexcept>
 #include <string_view>
+#include <cmath>
 
 using namespace simforge::renderer;
 namespace
@@ -26,6 +27,7 @@ DeviceSupport suitable(VkPhysicalDeviceType type = VK_PHYSICAL_DEVICE_TYPE_INTEG
     support.queues = {{1,true,true}};
     support.formats = {{VK_FORMAT_B8G8R8A8_SRGB,VK_COLOR_SPACE_SRGB_NONLINEAR_KHR}};
     support.present_modes = {VK_PRESENT_MODE_FIFO_KHR};
+    support.depth_formats = {{VK_FORMAT_D32_SFLOAT,VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT}};
     return support;
 }
 void images()
@@ -46,6 +48,12 @@ void images()
 }
 void formats()
 {
+    const auto linear = scene_clear_color(VK_FORMAT_B8G8R8A8_SRGB);
+    check(linear == std::array{0.025f,0.045f,0.075f,1.0f});
+    const auto encoded = scene_clear_color(VK_FORMAT_B8G8R8A8_UNORM);
+    check(std::lround(encoded[0]*255) == 44 && std::lround(encoded[1]*255) == 60 && std::lround(encoded[2]*255) == 77);
+    check(encoded == scene_clear_color(VK_FORMAT_R8G8B8A8_UNORM) && encoded[3] == 1);
+    check(!requires_srgb_encoding(VK_FORMAT_R8G8B8A8_SRGB));
     const std::array available{
         VkSurfaceFormatKHR{VK_FORMAT_R8G8B8A8_UNORM,VK_COLOR_SPACE_SRGB_NONLINEAR_KHR},
         VkSurfaceFormatKHR{VK_FORMAT_R8G8B8A8_SRGB,VK_COLOR_SPACE_SRGB_NONLINEAR_KHR},
@@ -122,6 +130,7 @@ void devices()
     rejected([](auto& d) { d.formats.clear(); });
     rejected([](auto& d) { d.present_modes.clear(); });
     rejected([](auto& d) { d.color_attachment_usage = false; });
+    rejected([](auto& d) { d.depth_formats.clear(); });
     check(!choose_device({}));
     std::array candidates{suitable(),suitable(VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU),suitable(VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)};
     check(choose_device(candidates) == 1); // Stable first choice on ties.
@@ -129,6 +138,40 @@ void devices()
     candidates[2].swapchain_extension = false; check(choose_device(candidates) == 0);
     candidates[0].queues = {{1,true,false},{1,false,true}};
     check(choose_device(candidates) == 0); // Integrated and split queues are supported.
+}
+void depth()
+{
+    check(!choose_depth_format({}));
+    const std::array formats{
+        DepthFormatSupport{VK_FORMAT_D24_UNORM_S8_UINT,VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT},
+        DepthFormatSupport{VK_FORMAT_D32_SFLOAT,0},
+        DepthFormatSupport{VK_FORMAT_D32_SFLOAT_S8_UINT,VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT}};
+    check(choose_depth_format(formats) == VK_FORMAT_D32_SFLOAT_S8_UINT);
+    check(choose_depth_format(std::span{formats}.first(2)) == VK_FORMAT_D24_UNORM_S8_UINT);
+    check(!choose_depth_format(std::span{formats}.subspan(1,1)));
+    const std::array preferred{DepthFormatSupport{VK_FORMAT_D32_SFLOAT,VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT}};
+    check(choose_depth_format(preferred) == VK_FORMAT_D32_SFLOAT);
+}
+void pipeline()
+{
+    const PipelineSignature initial{VK_FORMAT_B8G8R8A8_SRGB,VK_FORMAT_D32_SFLOAT};
+    check(pipeline_recreation_required({},initial)); check(!pipeline_recreation_required(initial,initial));
+    check(pipeline_recreation_required(initial,{VK_FORMAT_R8G8B8A8_SRGB,VK_FORMAT_D32_SFLOAT}));
+    check(pipeline_recreation_required(initial,{VK_FORMAT_B8G8R8A8_SRGB,VK_FORMAT_D24_UNORM_S8_UINT}));
+}
+void memory()
+{
+    VkPhysicalDeviceMemoryProperties properties{}; properties.memoryTypeCount = 3;
+    properties.memoryTypes[0].propertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    properties.memoryTypes[1].propertyFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+    properties.memoryTypes[2].propertyFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    check(choose_memory_type(properties,7,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 2);
+    check(choose_memory_type(properties,3,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 1);
+    check(choose_memory_type(properties,7,0,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) == 0);
+    check(!choose_memory_type(properties,1,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,0));
+    check(!choose_memory_type(properties,0,0,0));
+    properties.memoryTypeCount = VK_MAX_MEMORY_TYPES+1;
+    rejects([&] { (void)choose_memory_type(properties,1,0,0); });
 }
 }
 int main(int argc, char** argv)
@@ -139,7 +182,9 @@ int main(int argc, char** argv)
         const std::string_view name = argv[1];
         if (name == "images") images(); else if (name == "formats") formats();
         else if (name == "extents") extents(); else if (name == "queues") queues();
-        else if (name == "devices") devices(); else throw std::invalid_argument("Unknown policy case");
+        else if (name == "devices") devices(); else if (name == "depth") depth();
+        else if (name == "pipeline") pipeline(); else if (name == "memory") memory();
+        else throw std::invalid_argument("Unknown policy case");
         return 0;
     }
     catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }

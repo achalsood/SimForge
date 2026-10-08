@@ -1,4 +1,5 @@
 #pragma once
 #include <cstdint>
 #include <optional>
-int run_graphics(std::optional<std::uint64_t> smoke_frames);
+#include <filesystem>
+int run_graphics(std::optional<std::uint64_t> smoke_frames, const std::optional<std::filesystem::path>& capture_output);

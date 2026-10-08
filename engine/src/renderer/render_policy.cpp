@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <limits>
 #include <stdexcept>
+#include <cmath>
 
 namespace simforge::renderer
 {
@@ -27,6 +28,7 @@ std::string device_rejection(const DeviceSupport& support)
     if (support.formats.empty()) return "surface formats are unavailable";
     if (support.present_modes.empty()) return "presentation modes are unavailable";
     if (!support.color_attachment_usage) return "swapchain color attachments are unsupported";
+    if (!choose_depth_format(support.depth_formats)) return "supported depth attachments are unavailable";
     return {};
 }
 std::optional<std::size_t> choose_device(std::span<const DeviceSupport> devices)
@@ -89,5 +91,39 @@ VkCompositeAlphaFlagBitsKHR choose_composite_alpha(VkCompositeAlphaFlagsKHR supp
         VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR,VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR})
         if ((supported & mode) != 0) return mode;
     throw std::invalid_argument("No supported swapchain composite alpha mode");
+}
+std::optional<VkFormat> choose_depth_format(std::span<const DepthFormatSupport> formats)
+{
+    for (auto desired : {VK_FORMAT_D32_SFLOAT,VK_FORMAT_D32_SFLOAT_S8_UINT,VK_FORMAT_D24_UNORM_S8_UINT})
+        for (const auto& support : formats)
+            if (support.format == desired && (support.optimal_features & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0)
+                return desired;
+    return {};
+}
+bool pipeline_recreation_required(std::optional<PipelineSignature> current, PipelineSignature next) noexcept
+{ return !current || *current != next; } // Viewport/scissor are dynamic; extent does not belong in the signature.
+std::optional<std::uint32_t> choose_memory_type(const VkPhysicalDeviceMemoryProperties& memory,
+    std::uint32_t bits, VkMemoryPropertyFlags required, VkMemoryPropertyFlags preferred)
+{
+    if (memory.memoryTypeCount > VK_MAX_MEMORY_TYPES) throw std::invalid_argument("Invalid memory type count");
+    std::optional<std::uint32_t> fallback;
+    for (std::uint32_t index = 0; index < memory.memoryTypeCount; ++index)
+    {
+        const auto flags = memory.memoryTypes[index].propertyFlags;
+        if ((bits & (1u << index)) == 0 || (flags & required) != required) continue;
+        if ((flags & preferred) == preferred) return index;
+        if (!fallback) fallback = index;
+    }
+    return fallback;
+}
+bool requires_srgb_encoding(VkFormat format) noexcept
+{ return format == VK_FORMAT_B8G8R8A8_UNORM || format == VK_FORMAT_R8G8B8A8_UNORM; }
+std::array<float,4> scene_clear_color(VkFormat format)
+{
+    std::array color{0.025f,0.045f,0.075f,1.0f};
+    if (requires_srgb_encoding(format))
+        for (std::size_t i = 0; i < 3; ++i)
+            color[i] = 1.055f*std::pow(color[i],1.0f/2.4f)-0.055f;
+    return color;
 }
 }

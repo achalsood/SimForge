@@ -6,7 +6,8 @@
       "name": "sdl3",
       "features": ["vulkan"]
     },
-    "nlohmann-json"
+    "nlohmann-json",
+    "glm"
   ],
   "builtin-baseline": "2750401336fb7c95f6619657a46a7e798661341c"
 }

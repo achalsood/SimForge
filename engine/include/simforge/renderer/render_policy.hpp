@@ -5,6 +5,7 @@
 #include <span>
 #include <string>
 #include <vector>
+#include <array>
 
 namespace simforge::renderer
 {
@@ -15,6 +16,12 @@ struct QueueFamilies
     [[nodiscard]] bool separate() const noexcept { return graphics != present; }
     bool operator==(const QueueFamilies&) const = default;
 };
+struct DepthFormatSupport { VkFormat format; VkFormatFeatureFlags optimal_features; };
+struct PipelineSignature
+{
+    VkFormat color, depth;
+    bool operator==(const PipelineSignature&) const = default;
+};
 struct DeviceSupport
 {
     VkPhysicalDeviceType type{VK_PHYSICAL_DEVICE_TYPE_OTHER};
@@ -23,6 +30,7 @@ struct DeviceSupport
     std::vector<QueueSupport> queues;
     std::vector<VkSurfaceFormatKHR> formats;
     std::vector<VkPresentModeKHR> present_modes;
+    std::vector<DepthFormatSupport> depth_formats;
 };
 [[nodiscard]] std::optional<QueueFamilies> choose_queues(std::span<const QueueSupport> queues);
 [[nodiscard]] std::string device_rejection(const DeviceSupport& support);
@@ -32,4 +40,10 @@ struct DeviceSupport
 [[nodiscard]] VkSurfaceFormatKHR choose_format(std::span<const VkSurfaceFormatKHR> formats);
 [[nodiscard]] VkPresentModeKHR choose_present_mode(std::span<const VkPresentModeKHR> modes);
 [[nodiscard]] VkCompositeAlphaFlagBitsKHR choose_composite_alpha(VkCompositeAlphaFlagsKHR supported);
+[[nodiscard]] std::optional<VkFormat> choose_depth_format(std::span<const DepthFormatSupport> formats);
+[[nodiscard]] bool pipeline_recreation_required(std::optional<PipelineSignature> current, PipelineSignature next) noexcept;
+[[nodiscard]] std::optional<std::uint32_t> choose_memory_type(const VkPhysicalDeviceMemoryProperties& memory,
+    std::uint32_t bits, VkMemoryPropertyFlags required, VkMemoryPropertyFlags preferred);
+[[nodiscard]] bool requires_srgb_encoding(VkFormat format) noexcept;
+[[nodiscard]] std::array<float,4> scene_clear_color(VkFormat format);
 }

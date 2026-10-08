@@ -2,6 +2,7 @@
 #include "vulkan_swapchain.hpp"
 #include "vulkan_support.hpp"
 #include <cstdio>
+#include <chrono>
 
 namespace simforge::renderer
 {
@@ -27,6 +28,9 @@ std::string format_text(VkSurfaceFormatKHR format)
     case VK_FORMAT_B8G8R8A8_SRGB: return "B8G8R8A8_SRGB";
     case VK_FORMAT_R8G8B8A8_SRGB: return "R8G8B8A8_SRGB";
     case VK_FORMAT_B8G8R8A8_UNORM: return "B8G8R8A8_UNORM";
+    case VK_FORMAT_D32_SFLOAT: return "D32_SFLOAT";
+    case VK_FORMAT_D32_SFLOAT_S8_UINT: return "D32_SFLOAT_S8_UINT";
+    case VK_FORMAT_D24_UNORM_S8_UINT: return "D24_UNORM_S8_UINT";
     default: return "VkFormat("+std::to_string(format.format)+")";
     }
 }
@@ -47,6 +51,7 @@ struct Renderer::Impl
     RendererInfo status;
     std::unique_ptr<detail::VulkanContext> context;
     std::unique_ptr<detail::VulkanDevice> device;
+    std::unique_ptr<detail::VulkanScene> scene;
     std::unique_ptr<detail::VulkanSwapchain> swapchain;
     VkCommandPool pool{VK_NULL_HANDLE};
     VkCommandBuffer command{VK_NULL_HANDLE};
@@ -54,13 +59,20 @@ struct Renderer::Impl
     VkFence submitted{VK_NULL_HANDLE}, acquisition{VK_NULL_HANDLE};
     platform::PixelSize last_pixels{};
     bool dirty{true}, failed{false}, acquisition_pending{false};
+    bool capture_enabled{false}, capture_available{false};
 
     Impl(const platform::Window& window, RendererOptions options)
     {
         try
         {
+            capture_enabled = options.capture_frames;
             context = std::make_unique<detail::VulkanContext>(window,options,diagnostics);
             device = std::make_unique<detail::VulkanDevice>(*context);
+            const auto assets_started = std::chrono::steady_clock::now();
+            scene = std::make_unique<detail::VulkanScene>(*device);
+            status.asset_initialization_ms = std::chrono::duration<double,std::milli>{std::chrono::steady_clock::now()-assets_started}.count();
+            status.buffer_allocations = 2;
+            status.depth_format = format_text({device->depth_format(),VK_COLOR_SPACE_SRGB_NONLINEAR_KHR});
             const auto& properties = device->properties(); const auto queues = device->families();
             status.gpu_name = properties.deviceName; status.gpu_type = type_text(properties.deviceType);
             status.api_version = version_text(properties.apiVersion); status.graphics_family = queues.graphics; status.present_family = queues.present;
@@ -98,11 +110,16 @@ struct Renderer::Impl
             detail::check(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device->physical(),context->surface(),&capabilities),"Query resize capabilities");
             const auto extent = choose_extent(capabilities,pixels.width,pixels.height);
             if (!extent) return false;
-            auto replacement = std::make_unique<detail::VulkanSwapchain>(*context,*device,*extent,swapchain ? swapchain->handle() : VK_NULL_HANDLE);
+            auto replacement = std::make_unique<detail::VulkanSwapchain>(*context,*device,*extent,swapchain ? swapchain->handle() : VK_NULL_HANDLE,capture_enabled);
+            scene->ensure_pipeline(replacement->render_pass(),{replacement->format().format,device->depth_format()});
             swapchain.swap(replacement); // oldSwapchain is retired; never render through it again.
             status.width = extent->width; status.height = extent->height; status.image_count = swapchain->image_count();
             status.surface_format = format_text(swapchain->format()); status.present_mode = mode_text(swapchain->mode());
             ++status.swapchain_generations; last_pixels = pixels; dirty = false;
+            ++status.depth_images_created;
+            if (capture_enabled) ++status.buffer_allocations;
+            status.pipeline_generations = scene->pipeline_generations(); status.pipeline_creation_ms = scene->pipeline_creation_ms();
+            capture_available = false;
             return true;
         }
         catch (const detail::VulkanError& error)
@@ -113,7 +130,7 @@ struct Renderer::Impl
             swapchain.reset(); dirty = true; return false;
         }
     }
-    bool draw()
+    bool draw(const RenderFrameData& frame)
     {
         if (failed) throw std::logic_error("Renderer is in a failed state; shut down before reinitialization");
         try
@@ -134,7 +151,7 @@ struct Renderer::Impl
             detail::check(vkResetCommandBuffer(command,0),"Reset clear command buffer");
             VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO}; begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
             detail::check(vkBeginCommandBuffer(command,&begin),"Begin clear command buffer");
-            swapchain->record_clear(command,image);
+            const auto counts = swapchain->record(command,image,*scene,frame);
             detail::check(vkEndCommandBuffer(command),"End clear command buffer");
             // Reset only after a successful acquire/record, so out-of-date paths
             // leave the submission fence signaled and cannot deadlock next frame.
@@ -145,6 +162,9 @@ struct Renderer::Impl
             submit.pWaitDstStageMask = &wait_stage; submit.commandBufferCount = 1; submit.pCommandBuffers = &command;
             submit.signalSemaphoreCount = 1; submit.pSignalSemaphores = &rendered;
             detail::check(vkQueueSubmit(device->graphics(),1,&submit,submitted),"Submit clear frame");
+            capture_available = capture_enabled;
+            status.draw_calls = counts.calls; status.submitted_vertices = counts.vertices; status.submitted_indices = counts.indices;
+            status.aspect_ratio = static_cast<float>(swapchain->extent().width)/static_cast<float>(swapchain->extent().height);
             const auto presented = swapchain->present(image);
             if (presented == VK_ERROR_OUT_OF_DATE_KHR || presented == VK_SUBOPTIMAL_KHR || result == VK_SUBOPTIMAL_KHR) dirty = true;
             if (presented != VK_SUBOPTIMAL_KHR && presented != VK_ERROR_OUT_OF_DATE_KHR) detail::check(presented,"Present clear frame");
@@ -152,6 +172,12 @@ struct Renderer::Impl
             ++status.presented_frames; return true;
         }
         catch (...) { failed = true; throw; }
+    }
+    CapturedFrame capture()
+    {
+        if (failed || !capture_available || !swapchain) throw std::logic_error("No submitted frame available for capture");
+        detail::check(vkWaitForFences(device->handle(),1,&submitted,VK_TRUE,UINT64_MAX),"Wait for diagnostic frame copy");
+        return swapchain->read_pixels();
     }
     void destroy() noexcept
     {
@@ -168,6 +194,7 @@ struct Renderer::Impl
             if (pool) vkDestroyCommandPool(device->handle(),pool,nullptr);
             pool = VK_NULL_HANDLE; command = VK_NULL_HANDLE;
             swapchain.reset();
+            scene.reset();
             if (submitted) vkDestroyFence(device->handle(),submitted,nullptr);
             if (acquisition) vkDestroyFence(device->handle(),acquisition,nullptr);
             if (acquired) vkDestroySemaphore(device->handle(),acquired,nullptr);
@@ -185,7 +212,18 @@ void Renderer::initialize(const platform::Window& window, RendererOptions option
     auto replacement = std::make_unique<Impl>(window,options);
     last_info_ = {}; impl_ = std::move(replacement);
 }
-bool Renderer::render_frame(const RenderFrameData&) { if (!impl_) throw std::logic_error("Cannot render before initialization"); return impl_->draw(); }
+bool Renderer::render_frame(const RenderFrameData& frame)
+{
+    if (!impl_) throw std::logic_error("Cannot render before initialization");
+    validate_frame(frame); // Invalid client data does not poison the GPU lifecycle.
+    return impl_->draw(frame);
+}
+CapturedFrame Renderer::capture_frame()
+{
+    if (!impl_) throw std::logic_error("Cannot capture before initialization");
+    try { return impl_->capture(); }
+    catch (const detail::VulkanError&) { impl_->failed = true; throw; }
+}
 void Renderer::shutdown() noexcept
 {
     if (!impl_) return;
