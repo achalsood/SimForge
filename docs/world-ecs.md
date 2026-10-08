@@ -185,4 +185,5 @@ Do not compare the pre-reserved sandbox setup against benchmark insertion.
 
 See [initial measured results](ecs-benchmark-results.md) and
 [snapshot benchmarks and ownership costs](snapshot-benchmark-results.md).
-Profiling and validated scenario input are reasonable next milestones.
+See [validated scenarios and recorded commands](scenarios-inputs.md) for the
+external configuration boundary. Targeted profiling remains future work.

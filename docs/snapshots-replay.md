@@ -1,5 +1,9 @@
 # World snapshots and movement replay
 
+[Scenario definitions and recorded inputs](scenarios-inputs.md) build on this
+runtime snapshot format. Definitions, snapshots and command recordings remain
+separate concepts; recordings wrap binary snapshots without changing schema v1.
+
 Snapshots are deep copies of logical simulation state. `WorldSnapshot` contains
 every slot (living, free or retired), generations, the generation ceiling, free
 list links/head, living count, and Transform/Velocity records in observable dense

@@ -32,6 +32,13 @@ or Vulkan dependency. Handles are local to a World; stale handles are rejected,
 and exhausted generations retire rather than wrap. Restoring invalidates all old
 handles through a fresh ownership token.
 
+Versioned scenario JSON and typed input recording are implemented. Warehouse
+definitions are validated configuration only; the movement adapter is executable.
+Recordings preserve a known initial snapshot, ordered accepted commands, and an
+expected final snapshot for exact replay verification. See
+[scenario and input contracts](docs/scenarios-inputs.md) and
+[performance investigation/results](docs/input-performance.md).
+
 See [World architecture and usage](docs/world-ecs.md),
 [simulation timing](docs/simulation-clock.md), and
 [snapshot design and schema](docs/snapshots-replay.md), and
@@ -48,6 +55,7 @@ cmake --preset windows-release
 cmake --build --preset windows-release
 build/windows-release/benchmarks/simforge_world_benchmark.exe
 build/windows-release/benchmarks/simforge_snapshot_benchmark.exe
+build/windows-release/benchmarks/simforge_input_benchmark.exe
 ```
 
 Run the sandbox without arguments for the SDL window mode. Headless mode reports
@@ -55,6 +63,19 @@ entity/tick counts, simulated elapsed time, separate setup/update wall durations
 and a position checksum. Fixed-step scheduling does not guarantee cross-platform
 bitwise simulation determinism. Rendering, physics, and AI integration
 are future milestones.
+
+```powershell
+build/windows-debug/apps/sandbox/simforge_sandbox.exe --headless --scenario examples/warehouse-baseline.json
+build/windows-debug/apps/sandbox/simforge_sandbox.exe --headless --scenario examples/movement-baseline.json --record build/my-movement-inputs.json
+build/windows-debug/apps/sandbox/simforge_sandbox.exe --headless --replay build/my-movement-inputs.json
+build/windows-debug/apps/sandbox/simforge_sandbox.exe --headless --replay examples/movement-inputs.json
+```
+
+Recording output must be a new file. Scenario workflows reject conflicting
+`--entities`/`--ticks` overrides. JSON requires explicit simulation configuration;
+unknown fields, duplicate keys, invalid numeric types, oversized input and
+incompatible recordings fail before execution. Random seeds are retained but the
+current movement adapter has no random behavior or warehouse performance metrics.
 
 Capture, run, restore, and replay the same movement workload:
 

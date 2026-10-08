@@ -2,8 +2,12 @@
 #include <simforge/platform/window.hpp>
 #include <simforge/simulation/movement_system.hpp>
 #include <simforge/world/world.hpp>
+#include <simforge/simulation/input_recording.hpp>
 
 #include <charconv>
+#include <algorithm>
+#include <filesystem>
+#include <optional>
 #include <chrono>
 #include <cstdint>
 #include <iostream>
@@ -18,6 +22,7 @@ struct Options
     bool headless{false};
     std::uint64_t entities{10'000};
     std::uint64_t ticks{600};
+    std::optional<std::filesystem::path> scenario, record, replay;
 };
 
 std::uint64_t parse_count(std::string_view value)
@@ -37,7 +42,14 @@ Options parse_options(int argc, char* argv[])
     for (int i = 1; i < argc; ++i)
     {
         const std::string_view argument{argv[i]};
-        if (argument == "--headless" && !options.headless) options.headless = true;
+        if (argument == "--scenario" || argument == "--record" || argument == "--replay")
+        {
+            auto& destination = argument == "--scenario" ? options.scenario : argument == "--record" ? options.record : options.replay;
+            if (destination) throw std::invalid_argument("Duplicate file option");
+            if (++i == argc) throw std::invalid_argument("Missing file option value");
+            destination = argv[i];
+        }
+        else if (argument == "--headless" && !options.headless) options.headless = true;
         else if (argument == "--entities" && !entities_seen)
         {
             if (++i == argc) throw std::invalid_argument("Missing --entities value");
@@ -56,7 +68,63 @@ Options parse_options(int argc, char* argv[])
         throw std::invalid_argument("--entities and --ticks require --headless");
     if (options.entities > std::numeric_limits<std::uint32_t>::max())
         throw std::invalid_argument("Entity count exceeds entity index space");
+    if ((options.scenario || options.record || options.replay) && !options.headless)
+        throw std::invalid_argument("Scenario and recording workflows require --headless");
+    if ((options.scenario || options.record || options.replay) && (entities_seen || ticks_seen))
+        throw std::invalid_argument("Scenario/recording tick budgets conflict with --entities/--ticks");
+    if (options.record && (options.replay || !options.scenario))
+        throw std::invalid_argument("--record requires --scenario and conflicts with --replay");
     return options;
+}
+
+int scenario_workflow(const Options& options)
+{
+    using namespace simforge;
+    std::optional<simulation::InputRecording> recording;
+    if (options.replay) recording = simulation::load_recording(*options.replay);
+    const auto definition = options.scenario ? scenario::load_scenario(*options.scenario)
+        : scenario::parse_scenario(recording->scenario_identity);
+    std::cout << "Validated scenario: " << definition.name << '\n';
+    if (std::holds_alternative<scenario::WarehouseConfig>(definition.domain))
+    {
+        if (options.record || options.replay) throw std::invalid_argument("Warehouse runtime/commands are not implemented");
+        std::cout << "Warehouse configuration retained. Warehouse simulation is not implemented.\n";
+        return 0;
+    }
+    world::World world;
+    simulation::SimulationClock clock;
+    if (recording) simulation::replay_recording(definition, *recording, world, clock);
+    else
+    {
+        simulation::restore_snapshot(world, clock, scenario::initial_state(definition));
+        if (options.record)
+        {
+            const auto initial = world.capture_snapshot();
+            if (initial.velocities.empty()) throw std::invalid_argument("Recording demonstration requires at least one Velocity component");
+            const auto target = initial.velocities.front().entity;
+            simulation::InputRecorder recorder{definition, world, clock};
+            recorder.submit(simulation::SetEntityVelocity{target, {2, 0.5, -0.25}});
+            recorder.submit(simulation::PauseSimulation{});
+            recorder.submit(simulation::StepSimulation{});
+            recorder.submit(simulation::ResumeSimulation{});
+            recorder.advance_to(std::max<std::uint64_t>(1, scenario::total_ticks(definition) / 2));
+            recorder.submit(simulation::SetEntityVelocity{target, {-1, 0, 0}});
+            recorder.advance_to(scenario::total_ticks(definition));
+            recording = recorder.capture_recording();
+            // Verify outcomes before writing the recording.
+            world::World replay_world; simulation::SimulationClock replay_clock;
+            simulation::replay_recording(definition, *recording, replay_world, replay_clock);
+            simulation::save_recording(*options.record, *recording);
+            std::cout << "Recorded " << recording->commands.size() << " accepted commands; replay verified.\n";
+        }
+        else simulation::replay_fixed_ticks(world, clock, scenario::total_ticks(definition));
+    }
+    if (options.replay) std::cout << "Replay verified against recorded final state.\n";
+    double checksum = 0;
+    world.each_components<world::Transform>([&](const auto& transform) { checksum += transform.position.x; });
+    std::cout << "Executable domain: movement\nEntities: " << world.entity_count() << " | Ticks: " << clock.tick_count()
+              << " | simulated seconds: " << clock.elapsed_seconds() << "\nPosition checksum: " << checksum << '\n';
+    return 0;
 }
 
 void populate(simforge::world::World& world, std::uint64_t count)
@@ -72,6 +140,7 @@ void populate(simforge::world::World& world, std::uint64_t count)
 
 int run(const Options& options)
 {
+    if (options.scenario || options.replay) return scenario_workflow(options);
     using timer = std::chrono::steady_clock;
     simforge::Engine engine;
     engine.initialize();
@@ -131,7 +200,9 @@ int main(int argc, char* argv[])
     catch (const std::exception& error)
     {
         std::cerr << "SimForge sandbox: " << error.what()
-                  << "\nUsage: simforge_sandbox [--headless [--entities N] [--ticks N]]\n";
+                  << "\nUsage: simforge_sandbox [--headless [--entities N] [--ticks N]]\n"
+                  << "  --headless --scenario FILE [--record OUTPUT]\n"
+                  << "  --headless --replay FILE [--scenario FILE]\n";
         return 1;
     }
 }

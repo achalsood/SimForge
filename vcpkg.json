@@ -2,7 +2,8 @@
   "name": "simforge",
   "version-string": "0.1.0",
   "dependencies": [
-    "sdl3"
+    "sdl3",
+    "nlohmann-json"
   ],
   "builtin-baseline": "2750401336fb7c95f6619657a46a7e798661341c"
 }

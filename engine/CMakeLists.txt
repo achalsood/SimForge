@@ -1,4 +1,5 @@
 find_package(SDL3 CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
 
 add_library(simforge_engine STATIC
     src/core/clock.cpp
@@ -10,9 +11,14 @@ add_library(simforge_engine STATIC
     src/simulation/simulation_snapshot.cpp
     src/simulation/snapshot_serialization.cpp
     src/simulation/state_comparison.cpp
+    src/scenario/json_io.cpp
+    src/scenario/scenario.cpp
+    src/simulation/input_recording.cpp
+    src/scenario/recording_json.cpp
 )
 
 target_compile_features(simforge_engine PUBLIC cxx_std_23)
+target_link_libraries(simforge_engine PRIVATE nlohmann_json::nlohmann_json)
 
 target_include_directories(simforge_engine
     PUBLIC

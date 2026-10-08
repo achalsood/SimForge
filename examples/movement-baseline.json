@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "name": "Movement Inputs Demo",
+  "domain": "movement",
+  "simulation": {"tick_rate": 60, "duration_seconds": 2, "random_seed": 12345},
+  "initial_world": {"entities": [
+    {"transform": {"position": [0, 0, 0]}, "velocity": {"linear": [1, 0, 0]}}
+  ]}
+}
