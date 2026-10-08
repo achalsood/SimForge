@@ -1,5 +1,6 @@
 add_library(simforge_engine STATIC
-    src/placeholder.cpp
+    src/core/clock.cpp
+    src/core/engine.cpp
 )
 
 target_compile_features(simforge_engine PUBLIC cxx_std_23)
