@@ -21,12 +21,15 @@
 #include <stdexcept>
 #include <string_view>
 #include <utility>
+#include <cmath>
 
 namespace
 {
 struct Options
 {
     bool headless{false};
+    bool live{false};
+    std::optional<double> speed;
     std::uint64_t entities{10'000};
     std::uint64_t ticks{600};
     std::optional<std::filesystem::path> scenario, record, replay;
@@ -55,7 +58,17 @@ Options parse_options(int argc, char* argv[])
     for (int i = 1; i < argc; ++i)
     {
         const std::string_view argument{argv[i]};
-        if (argument == "--graphics-smoke" && !options.graphics_smoke)
+        if (argument == "--live" && !options.live) options.live = true;
+        else if (argument == "--speed" && !options.speed)
+        {
+            if (++i == argc) throw std::invalid_argument("Missing --speed value");
+            const std::string_view value{argv[i]}; double speed{};
+            const auto parsed = std::from_chars(value.data(),value.data()+value.size(),speed);
+            if (parsed.ec != std::errc{} || parsed.ptr != value.data()+value.size() || !std::isfinite(speed) || speed < 0.01 || speed > 3600)
+                throw std::invalid_argument("Playback speed must be finite and between 0.01 and 3600");
+            options.speed = speed;
+        }
+        else if (argument == "--graphics-smoke" && !options.graphics_smoke)
         {
             if (++i == argc) throw std::invalid_argument("Missing --graphics-smoke frame count");
             options.graphics_smoke = parse_count(argv[i]);
@@ -111,6 +124,9 @@ Options parse_options(int argc, char* argv[])
         }
         else throw std::invalid_argument("Unknown or duplicate argument");
     }
+    if ((options.live && (!options.scenario || options.headless || options.record || options.replay || options.warehouse_replay || options.experiment ||
+            options.compare_forklifts || options.checkpoint_seconds || entities_seen || ticks_seen)) || (options.speed && !options.live))
+        throw std::invalid_argument("--live requires a graphical --scenario; --speed requires --live; simulation workflows conflict");
     if ((entities_seen || ticks_seen) && !options.headless)
         throw std::invalid_argument("--entities and --ticks require --headless");
     if (options.entities > std::numeric_limits<std::uint32_t>::max())
@@ -351,7 +367,7 @@ int run(const Options& options)
     if (!options.headless)
     {
 #if SIMFORGE_HAS_RENDERER
-        return run_graphics(options.graphics_smoke,options.graphics_capture,options.scenario);
+        return run_graphics(options.graphics_smoke,options.graphics_capture,options.scenario,options.live,options.speed.value_or(300));
 #else
         throw std::invalid_argument("This executable has no renderer; use --headless or build with SIMFORGE_BUILD_RENDERER=ON");
 #endif
@@ -400,6 +416,7 @@ int main(int argc, char* argv[])
                   << "  --headless --experiment FILE [--export-json NEW_FILE] [--export-csv NEW_FILE]\n"
                   << "  --graphics-smoke FRAMES (120..10000; display/GPU/validation required)\n";
         std::cerr << "  --scenario WAREHOUSE_FILE [--graphics-smoke FRAMES] [--graphics-capture NEW_FILE.ppm]\n";
+        std::cerr << "  --scenario WAREHOUSE_FILE --live [--speed 0.01..3600] (default 300; Space pauses/resumes)\n";
         return 1;
     }
 }

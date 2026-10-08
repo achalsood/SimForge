@@ -18,6 +18,7 @@ add_library(simforge_engine STATIC
     src/warehouse/event_scheduler.cpp
     src/warehouse/resource_manager.cpp
     src/warehouse/warehouse_simulation.cpp
+    src/warehouse/warehouse_observation.cpp
     src/warehouse/warehouse_state.cpp
     src/warehouse/warehouse_snapshot.cpp
     src/warehouse/warehouse_serialization.cpp
@@ -53,7 +54,7 @@ add_library(simforge_render_scene STATIC src/renderer/camera.cpp src/renderer/ge
 target_include_directories(simforge_render_scene PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(simforge_render_scene PUBLIC glm::glm-header-only)
 target_compile_features(simforge_render_scene PUBLIC cxx_std_23)
-add_library(simforge_visualization STATIC src/visualization/warehouse_layout.cpp)
+add_library(simforge_visualization STATIC src/visualization/warehouse_layout.cpp src/visualization/live_warehouse.cpp)
 target_link_libraries(simforge_visualization PUBLIC simforge_engine simforge_render_scene)
 target_compile_features(simforge_visualization PUBLIC cxx_std_23)
 if(MSVC)

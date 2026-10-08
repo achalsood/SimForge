@@ -1,6 +1,7 @@
 #include "window_state.hpp"
 
 #include <climits>
+#include <utility>
 
 namespace simforge::platform
 {
@@ -29,7 +30,7 @@ void Window::create(std::string title, std::uint32_t width, std::uint32_t height
     if (!state->window) throw std::runtime_error(std::string{"SDL window creation failed: "} + SDL_GetError());
     state->open = true; state_ = std::move(state);
 }
-void Window::destroy() noexcept { if (state_) state_->open = false; state_.reset(); }
+void Window::destroy() noexcept { if (state_) state_->open = false; state_.reset(); space_pressed_ = false; }
 bool Window::is_open() const noexcept { return state_ && state_->open; }
 void Window::poll_events()
 {
@@ -37,8 +38,18 @@ void Window::poll_events()
     SDL_Event event{};
     const auto id = SDL_GetWindowID(state_->window);
     while (SDL_PollEvent(&event))
+    {
         if (event.type == SDL_EVENT_QUIT || (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && event.window.windowID == id))
             state_->open = false;
+        if (event.type == SDL_EVENT_KEY_DOWN && event.key.windowID == id && !event.key.repeat && event.key.key == SDLK_SPACE)
+            space_pressed_ = true;
+    }
+}
+bool Window::consume_space_press() noexcept { return std::exchange(space_pressed_,false); }
+void Window::set_title(const std::string& title)
+{
+    if (!state_) throw std::logic_error("Cannot title an uncreated window");
+    sdl_check(SDL_SetWindowTitle(state_->window,title.c_str()),"SDL title update failed");
 }
 std::uint32_t Window::width() const noexcept
 { int width = 0; if (state_) SDL_GetWindowSize(state_->window,&width,nullptr); return static_cast<std::uint32_t>(std::max(0,width)); }
@@ -60,5 +71,12 @@ void Window::request_close()
     if (!state_) throw std::logic_error("Cannot close an uncreated window");
     SDL_Event event{}; event.type = SDL_EVENT_WINDOW_CLOSE_REQUESTED; event.window.windowID = SDL_GetWindowID(state_->window);
     sdl_check(SDL_PushEvent(&event),"SDL close event failed");
+}
+void Window::request_space_press()
+{
+    if (!state_) throw std::logic_error("Cannot send input to an uncreated window");
+    SDL_Event event{}; event.type = SDL_EVENT_KEY_DOWN; event.key.windowID = SDL_GetWindowID(state_->window);
+    event.key.key = SDLK_SPACE; event.key.scancode = SDL_SCANCODE_SPACE; event.key.down = true;
+    sdl_check(SDL_PushEvent(&event),"SDL Space event failed");
 }
 }

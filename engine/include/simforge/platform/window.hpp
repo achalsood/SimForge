@@ -42,6 +42,8 @@ public:
     [[nodiscard]] bool is_open() const noexcept;
 
     void poll_events();
+    [[nodiscard]] bool consume_space_press() noexcept;
+    void set_title(const std::string& title);
 
     [[nodiscard]] std::uint32_t width() const noexcept;
     [[nodiscard]] std::uint32_t height() const noexcept;
@@ -53,11 +55,14 @@ public:
     void minimize();
     void restore();
     void request_close();
+    // Opt-in integration automation: routes a Space event through SDL polling.
+    void request_space_press();
 
 private:
     friend class VulkanWindow;
     // Leases keep the native window/video subsystem alive through Vulkan cleanup.
     std::shared_ptr<WindowState> state_;
+    bool space_pressed_{false};
 };
 
 } // namespace simforge::platform

@@ -27,9 +27,17 @@ not start another day or restart jobs already in progress.
 beyond-horizon and overflow-sized requests fail before changing state. The clock
 is the existing private `SimulationClock`; its integer tick is the sole time
 authority. The scheduler watermark follows that clock after each advance.
-Rendering frame time, pause, scaling and wall time do not drive warehouse execution.
-Only the clock's const interface is exposed; warehouse snapshots reconstruct its
+Explicit tick execution does not use rendering frame time, pause or scaling.
+Only the clock's const interface is exposed for inspection; warehouse snapshots reconstruct its
 fixed rate/tick state with zero remainder, unpaused and scale one.
+
+Commit #14 adds `advance_elapsed`, pause/resume and time-scale control for live
+application pacing. The runtime's same clock schedules a preview target, then
+event-driven `advance_to` visits due events before reaching that target. Explicit
+tick execution and the snapshot schemas retain their existing contracts. Wall-time
+remainder, playback preferences and visual animations are not warehouse persistence
+state; restoration resets pacing controls as described above. See
+[live timing and restoration](live-warehouse-visualization.md).
 
 Time skips directly to due events and then to the target. Continuous and chunked
 execution preserve the existing ordering `(tick, completion-before-arrival,

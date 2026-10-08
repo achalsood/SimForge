@@ -5,9 +5,11 @@
 #include <simforge/warehouse/warehouse_snapshot.hpp>
 
 #include <span>
+#include <chrono>
 
 namespace simforge::warehouse
 {
+struct WarehouseObservation;
 struct WarehouseMetrics
 {
     std::uint64_t elapsed_ticks{0}, arrived{0}, started{0}, completed{0}, waiting{0}, in_progress{0};
@@ -29,6 +31,14 @@ public:
 
     void advance_to(std::uint64_t tick);
     void advance_by(std::uint64_t ticks);
+    // Preview scheduling without moving the logical clock ahead of due events,
+    // then advance to its clamped target. No events are dropped on slow frames.
+    void advance_elapsed(std::chrono::nanoseconds elapsed);
+    void pause() noexcept { clock_.pause(); }
+    void resume() noexcept { clock_.resume(); }
+    void set_time_scale(double scale) { clock_.set_time_scale(scale); }
+    [[nodiscard]] WarehouseObservation capture_observation(std::size_t waiting_limit = 128,
+        std::size_t processing_limit = 256) const;
     [[nodiscard]] WarehouseSnapshot capture_snapshot() const;
     void restore_snapshot(const WarehouseSnapshot& snapshot);
     [[nodiscard]] static WarehouseSimulation create_from(const WarehouseSnapshot& snapshot);

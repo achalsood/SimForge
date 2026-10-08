@@ -5,6 +5,10 @@ existing validated warehouse scenario. It draws the configured number of loading
 bays, forklifts and workers, with procedural storage, cargo staging and travel
 aisles. It does not execute or animate the operational simulation.
 
+This document records Commit #13's static mode, which remains available unchanged.
+Commit #14 adds opt-in [live operational visualization](live-warehouse-visualization.md)
+with actual shipment identities and runtime capacity/usage observations.
+
 ![Verified SimForge warehouse desktop client](artifacts/warehouse-scene.png)
 
 ## Ownership and dependencies

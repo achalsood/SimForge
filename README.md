@@ -61,6 +61,9 @@ loading docks, storage racks, cargo pallets, forklifts, workers and floor markin
 A CPU-only visualization adapter maps validated resource capacities into stable
 visual identities and deterministic placements, with automatic camera framing.
 The original floor/grid/cube scene remains the no-argument demo.
+Live warehouse playback now shows real arrivals, FIFO waiting, processing,
+completions and aggregate resource activity, with independently paced rendering.
+See [live visualization, timing, metrics and verified captures](docs/live-warehouse-visualization.md).
 GPU resources remain separate from simulation. See [renderer architecture and setup](docs/vulkan-renderer.md)
 and [warehouse visualization, verified screenshot and measurements](docs/warehouse-visualization.md).
 Graphics builds require the official Vulkan SDK (headers 1.4.335 or newer), a Vulkan
@@ -92,6 +95,7 @@ build/windows-release/benchmarks/simforge_warehouse_benchmark.exe
 build/windows-release/benchmarks/simforge_warehouse_snapshot_benchmark.exe
 build/windows-release/benchmarks/simforge_comparison_benchmark.exe
 build/windows-release/benchmarks/simforge_warehouse_layout_benchmark.exe
+build/windows-release/benchmarks/simforge_live_warehouse_benchmark.exe
 ```
 
 Run the sandbox without arguments for the static 3D viewport:
@@ -101,6 +105,8 @@ build/windows-debug/apps/sandbox/simforge_sandbox.exe
 build/windows-debug/apps/sandbox/simforge_sandbox.exe --scenario examples/warehouse-baseline.json
 build/windows-debug/apps/sandbox/simforge_sandbox.exe --scenario examples/warehouse-constrained.json
 build/windows-debug/apps/sandbox/simforge_sandbox.exe --scenario examples/warehouse-higher-capacity.json
+# Live playback: 300 simulated seconds per real second; Space pauses/resumes.
+build/windows-release/apps/sandbox/simforge_sandbox.exe --scenario examples/warehouse-baseline.json --live --speed 300
 # Opt-in visible-window test: requires GPU, display, and Khronos validation layers.
 build/windows-debug/apps/sandbox/simforge_sandbox.exe --graphics-smoke 180
 build/windows-debug/apps/sandbox/simforge_sandbox.exe --scenario examples/warehouse-baseline.json --graphics-smoke 180
@@ -114,9 +120,10 @@ The existing `simforge_sandbox --headless` commands also work without graphics
 initialization. Headless mode reports
 entity/tick counts, simulated elapsed time, separate setup/update wall durations,
 and a position checksum. Fixed-step scheduling does not guarantee cross-platform
-bitwise simulation determinism. Warehouse scenes represent capacities and are static;
-they do not display live shipment activity. Live visualization, camera controls,
-physics and AI integration remain future milestones.
+bitwise simulation determinism. Without `--live`, warehouse scenes remain static
+capacity representations. Live mode displays real shipment IDs and aggregate busy
+capacity slots, with truthful visible/hidden queue counts in the title and console.
+Interactive playback controls, camera controls, physics and AI remain future milestones.
 
 ```powershell
 build/windows-debug/apps/sandbox/simforge_sandbox.exe --headless --scenario examples/warehouse-baseline.json

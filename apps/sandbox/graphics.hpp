@@ -3,4 +3,4 @@
 #include <optional>
 #include <filesystem>
 int run_graphics(std::optional<std::uint64_t> smoke_frames, const std::optional<std::filesystem::path>& capture_output,
-    const std::optional<std::filesystem::path>& scenario_path);
+    const std::optional<std::filesystem::path>& scenario_path, bool live = false, double speed = 300);
