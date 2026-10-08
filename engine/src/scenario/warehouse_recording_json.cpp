@@ -42,8 +42,14 @@ std::string serialize_recording(const WarehouseRecording& recording)
         {"end_tick", recording.end_tick}, {"initial_snapshot", encode(recording.initial_snapshot)},
         {"expected_final", encode(recording.expected_final)}, {"commands", Json::array()}};
     for (const auto& command : recording.commands)
-        json["commands"].push_back({{"tick", command.tick}, {"sequence", command.sequence},
-            {"type", "set_forklift_capacity"}, {"forklifts", command.forklifts}});
+    {
+        Json item{{"tick", command.tick}, {"sequence", command.sequence}};
+        if (command.type == WarehouseCommandType::SetForkliftCapacity)
+        { item["type"] = "set_forklift_capacity"; item["forklifts"] = command.capacity; }
+        else
+        { item["type"] = "set_resource_capacity"; item["resource"] = resource_name(command.resource); item["capacity"] = command.capacity; }
+        json["commands"].push_back(std::move(item));
+    }
     auto result = json.dump();
     if (result.size() > warehouse_recording_max_bytes) throw std::length_error("Warehouse recording byte limit");
     return result;
@@ -54,7 +60,8 @@ WarehouseRecording parse_recording(std::string_view text)
     fields(json, {"schema_version", "domain", "scenario_identity", "initial_tick", "end_tick", "initial_snapshot", "expected_final", "commands"}, {}, "recording");
     if (string(json.at("domain"), "domain") != "warehouse") invalid("domain", "warehouse recording required");
     WarehouseRecording result;
-    result.schema_version = static_cast<std::uint32_t>(integer(json.at("schema_version"), 1, "schema_version"));
+    result.schema_version = static_cast<std::uint32_t>(integer(json.at("schema_version"), 2, "schema_version"));
+    if (result.schema_version == 0) invalid("schema_version", "unsupported version");
     result.scenario_identity = string(json.at("scenario_identity"), "scenario_identity");
     result.initial_tick = integer(json.at("initial_tick"), scenario::max_execution_ticks, "initial_tick");
     result.end_tick = integer(json.at("end_tick"), scenario::max_execution_ticks, "end_tick");
@@ -66,11 +73,25 @@ WarehouseRecording parse_recording(std::string_view text)
     for (std::size_t i = 0; i < commands.size(); ++i)
     {
         const auto& command = commands[i]; const auto path = "commands[" + std::to_string(i) + "]";
-        fields(command, {"tick", "sequence", "type", "forklifts"}, {}, path);
-        if (string(command.at("type"), path + ".type") != "set_forklift_capacity") invalid(path + ".type", "unsupported command");
-        result.commands.push_back({integer(command.at("tick"), scenario::max_execution_ticks, path + ".tick"),
-            integer(command.at("sequence"), max_capacity_changes - 1, path + ".sequence"), WarehouseCommandType::SetForkliftCapacity,
-            static_cast<std::uint32_t>(integer(command.at("forklifts"), 100000, path + ".forklifts"))});
+        fields(command, {"tick", "sequence", "type"}, {"forklifts", "resource", "capacity"}, path);
+        WarehouseCommand item;
+        item.tick = integer(command.at("tick"), scenario::max_execution_ticks, path + ".tick");
+        item.sequence = integer(command.at("sequence"), max_capacity_changes - 1, path + ".sequence");
+        const auto type = string(command.at("type"), path + ".type");
+        if (type == "set_forklift_capacity")
+        {
+            fields(command, {"tick", "sequence", "type", "forklifts"}, {}, path);
+            item.capacity = static_cast<std::uint32_t>(integer(command.at("forklifts"), 100000, path + ".forklifts"));
+        }
+        else if (type == "set_resource_capacity" && result.schema_version == 2)
+        {
+            fields(command, {"tick", "sequence", "type", "resource", "capacity"}, {}, path);
+            item.type = WarehouseCommandType::SetResourceCapacity;
+            item.resource = parse_resource_type(string(command.at("resource"), path + ".resource"));
+            item.capacity = static_cast<std::uint32_t>(integer(command.at("capacity"), 100000, path + ".capacity"));
+        }
+        else invalid(path + ".type", "unsupported command for recording version");
+        result.commands.push_back(item);
     }
     validate_recording(result); return result;
 }

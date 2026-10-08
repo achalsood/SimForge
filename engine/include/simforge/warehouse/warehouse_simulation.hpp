@@ -35,6 +35,7 @@ public:
     // Requires a settled boundary. Due events precede this command; newly eligible
     // FIFO work starts immediately, except at the closed horizon.
     void set_forklift_capacity(std::uint32_t forklifts);
+    void set_resource_capacity(ResourceType resource, std::uint32_t capacity);
     [[nodiscard]] ResourceCounts resource_capacity() const noexcept { return resources_.capacity(); }
     void run() { advance_to(horizon_ticks_); }
     [[nodiscard]] WarehouseMetrics metrics() const;
@@ -78,5 +79,6 @@ private:
     std::uint64_t available_bay_ticks_{0}, available_worker_ticks_{0}, available_forklift_ticks_{0};
     std::vector<CapacityChange> capacity_changes_;
     bool settled_{false};
+    std::uint32_t snapshot_version_{1};
 };
 } // namespace simforge::warehouse

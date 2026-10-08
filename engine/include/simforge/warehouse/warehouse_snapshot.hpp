@@ -23,7 +23,8 @@ struct ShipmentRecord
 struct CapacityChange
 {
     std::uint64_t tick, started_before;
-    std::uint32_t forklifts;
+    std::uint32_t capacity;
+    ResourceType resource{ResourceType::Forklift}; // v1's implicit resource; explicit in v2.
     bool operator==(const CapacityChange&) const = default;
 };
 struct WarehouseTotals

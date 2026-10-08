@@ -96,7 +96,11 @@ std::vector<std::byte> serialize_snapshot(const WarehouseSnapshot& snapshot)
     writer.integer(snapshot.next_event_sequence); writer.integer(snapshot.peak_pending_events);
     writer.count(snapshot.capacity_changes.size());
     for (const auto& change : snapshot.capacity_changes)
-    { writer.integer(change.tick); writer.integer(change.started_before); writer.integer(change.forklifts); }
+    {
+        writer.integer(change.tick); writer.integer(change.started_before);
+        if (snapshot.version == 2) writer.integer(static_cast<std::uint8_t>(change.resource));
+        writer.integer(change.capacity);
+    }
     const auto& t = snapshot.totals;
     for (auto value : {t.started, t.completed, t.total_wait_ticks, t.max_wait_ticks, t.completed_processing_ticks,
         t.occupied_resource_ticks, t.processed_events, t.available_bay_ticks, t.available_worker_ticks, t.available_forklift_ticks})
@@ -116,7 +120,7 @@ WarehouseSnapshot deserialize_snapshot(std::span<const std::byte> bytes)
         if (reader.integer<std::uint8_t>() != static_cast<std::uint8_t>(c)) throw std::invalid_argument("Warehouse binary magic mismatch");
     WarehouseSnapshot result;
     result.version = reader.integer<std::uint32_t>();
-    if (result.version != 1) throw std::invalid_argument("Unsupported warehouse binary version");
+    if (result.version != 1 && result.version != 2) throw std::invalid_argument("Unsupported warehouse binary version");
     const auto identity_bytes = reader.count(scenario::max_scenario_bytes, 1);
     result.scenario_identity.reserve(identity_bytes);
     for (std::size_t i = 0; i < identity_bytes; ++i) result.scenario_identity.push_back(static_cast<char>(reader.integer<std::uint8_t>()));
@@ -146,9 +150,13 @@ WarehouseSnapshot deserialize_snapshot(std::span<const std::byte> bytes)
         event.sequence = reader.integer<std::uint64_t>(); event.shipment = reader.integer<std::uint32_t>(); result.events.push_back(event);
     }
     result.next_event_sequence = reader.integer<std::uint64_t>(); result.peak_pending_events = reader.integer<std::uint64_t>();
-    const auto changes = reader.count(max_capacity_changes, 20); result.capacity_changes.reserve(changes);
+    const auto changes = reader.count(max_capacity_changes, result.version == 1 ? 20 : 21); result.capacity_changes.reserve(changes);
     for (std::size_t i = 0; i < changes; ++i)
-        result.capacity_changes.push_back({reader.integer<std::uint64_t>(), reader.integer<std::uint64_t>(), reader.integer<std::uint32_t>()});
+    {
+        CapacityChange change{reader.integer<std::uint64_t>(), reader.integer<std::uint64_t>(), 0};
+        if (result.version == 2) change.resource = static_cast<ResourceType>(reader.integer<std::uint8_t>());
+        change.capacity = reader.integer<std::uint32_t>(); result.capacity_changes.push_back(change);
+    }
     auto& t = result.totals;
     for (auto* value : {&t.started, &t.completed, &t.total_wait_ticks, &t.max_wait_ticks, &t.completed_processing_ticks,
         &t.occupied_resource_ticks, &t.processed_events, &t.available_bay_ticks, &t.available_worker_ticks, &t.available_forklift_ticks})

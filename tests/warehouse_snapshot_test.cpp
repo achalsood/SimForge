@@ -115,7 +115,7 @@ void validation()
         rejects([&] { auto branch = WarehouseSimulation::create_from(invalid); (void)branch; });
         rejects([&] { (void)serialize_snapshot(invalid); });
     };
-    reject_mutation([](auto& s) { ++s.version; });
+    reject_mutation([](auto& s) { s.version = 255; });
     reject_mutation([](auto& s) { s.scenario_identity += " "; });
     // A different valid scenario can form a branch, but must not restore here.
     auto other = definition(); other.name += " other"; WarehouseSimulation unrelated{other};
@@ -157,7 +157,7 @@ void validation()
     source.set_forklift_capacity(3); source.advance_to(8); const auto history = source.capture_snapshot();
     const auto bad_history = [&](auto mutate)
     { auto s = history; mutate(s); rejects([&] { destination.restore_snapshot(s); }); equal(before, destination.capture_snapshot()); };
-    bad_history([](auto& s) { s.capacity_changes[0].forklifts = 0; });
+    bad_history([](auto& s) { s.capacity_changes[0].capacity = 0; });
     bad_history([](auto& s) { s.capacity_changes[0].started_before = 100000; });
     bad_history([](auto& s) { s.capacity_changes[0].tick = s.current_tick + 1; });
     bad_history([](auto& s) { s.capacity_changes[0].tick = 0; });
@@ -193,7 +193,7 @@ void serialization()
     }
     const auto edit = [&](std::size_t offset, std::byte value)
     { auto invalid = bytes; invalid[offset] = value; seal(invalid); rejects([&] { (void)deserialize_snapshot(invalid); }); };
-    edit(0, std::byte{0}); edit(8, std::byte{2}); // Correct-checksum magic/version attacks.
+    edit(0, std::byte{0}); edit(8, std::byte{255}); // Correct-checksum magic/version attacks.
     for (std::size_t i = 12; i < 16; ++i) edit(i, std::byte{255}); // Invalid identity length.
     const auto timing = 16 + snapshot.scenario_identity.size();
     edit(timing + 28, std::byte{2}); // Nonboolean settled.
@@ -268,16 +268,16 @@ void replay()
     dest.restore_snapshot(checkpoint);
     const auto invalid = [&](auto mutate)
     { auto bad = recording; mutate(bad); rejects([&] { replay_recording(bad, dest); }); equal(checkpoint, dest.capture_snapshot()); };
-    invalid([](auto& r) { ++r.schema_version; }); invalid([](auto& r) { r.scenario_identity += " "; });
+    invalid([](auto& r) { r.schema_version = 255; }); invalid([](auto& r) { r.scenario_identity += " "; });
     invalid([](auto& r) { ++r.initial_tick; }); invalid([](auto& r) { --r.end_tick; });
     invalid([](auto& r) { r.commands[0].sequence = 1; }); invalid([](auto& r) { r.commands[1].tick = 2; });
-    invalid([](auto& r) { r.commands[0].forklifts = 0; });
+    invalid([](auto& r) { r.commands[0].capacity = 0; });
     invalid([](auto& r) { r.expected_final.events[0].sequence = r.expected_final.next_event_sequence; });
     // A valid logical state with different accepted input history still fails
     // isolated replay verification after executing the commands.
     WarehouseSimulation alternate{definition()}; alternate.advance_to(3); alternate.set_forklift_capacity(3); alternate.set_forklift_capacity(3); alternate.run();
     auto forged = recording; forged.expected_final = alternate.capture_snapshot();
-    forged.commands[0].forklifts = 3; // Now a valid different recording.
+    forged.commands[0].capacity = 3; // Now a valid different recording.
     replay_recording(forged, dest); equal(alternate.capture_snapshot(), dest.capture_snapshot()); dest.restore_snapshot(checkpoint);
     forged.expected_final.events[0].sequence = forged.expected_final.events[1].sequence - 1; // Different legal, unique sequence if not original.
     if (forged.expected_final.events[0].sequence == alternate.capture_snapshot().events[0].sequence)

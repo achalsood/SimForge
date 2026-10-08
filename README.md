@@ -50,6 +50,12 @@ restoration, portable persistence, ordered capacity-command replay and independe
 branches. See [warehouse snapshots and measured branch outcomes](docs/warehouse-snapshots.md).
 Existing movement snapshots and recordings remain supported.
 
+Structured batch experiments compare complete resource configurations from one
+shared checkpoint, rank actual outcomes, and test add-one bay/worker/forklift
+interventions for bottleneck evidence. Results export to reproducible JSON and CSV.
+See [scenario comparison contracts and actual results](docs/scenario-comparison.md)
+and [comparison performance measurements](docs/comparison-benchmarks.md).
+
 See [World architecture and usage](docs/world-ecs.md),
 [simulation timing](docs/simulation-clock.md), and
 [snapshot design and schema](docs/snapshots-replay.md), and
@@ -69,6 +75,7 @@ build/windows-release/benchmarks/simforge_snapshot_benchmark.exe
 build/windows-release/benchmarks/simforge_input_benchmark.exe
 build/windows-release/benchmarks/simforge_warehouse_benchmark.exe
 build/windows-release/benchmarks/simforge_warehouse_snapshot_benchmark.exe
+build/windows-release/benchmarks/simforge_comparison_benchmark.exe
 ```
 
 Run the sandbox without arguments for the SDL window mode. Headless mode reports
@@ -84,6 +91,7 @@ build/windows-debug/apps/sandbox/simforge_sandbox.exe --headless --scenario exam
 build/windows-debug/apps/sandbox/simforge_sandbox.exe --headless --scenario examples/warehouse-analytical.json
 build/windows-debug/apps/sandbox/simforge_sandbox.exe --headless --scenario examples/warehouse-baseline.json --compare-forklifts 2,3 --checkpoint-seconds 7200 --record build/my-warehouse-inputs.json
 build/windows-debug/apps/sandbox/simforge_sandbox.exe --headless --warehouse-replay build/my-warehouse-inputs.json
+build/windows-debug/apps/sandbox/simforge_sandbox.exe --headless --experiment examples/warehouse-comparison.json --export-json build/my-comparison.json --export-csv build/my-comparison.csv
 build/windows-debug/apps/sandbox/simforge_sandbox.exe --headless --scenario examples/movement-baseline.json --record build/my-movement-inputs.json
 build/windows-debug/apps/sandbox/simforge_sandbox.exe --headless --replay build/my-movement-inputs.json
 build/windows-debug/apps/sandbox/simforge_sandbox.exe --headless --replay examples/movement-inputs.json
@@ -101,6 +109,10 @@ forklifts in branch A and adds a third in branch B. The actual eight-hour result
 63 versus 87 completions and 32 versus 8 waiting shipments. Active jobs keep their
 original completion times; the capacity increase occurs at the checkpoint. The CLI
 verifies serialized continuation and command replay against full logical state.
+The batch example additionally tests one worker and one loading bay: both retain
+63 completions, while the third forklift gives 87. Controlled interventions support
+forklifts as a likely bottleneck for this tested completion objective. Rankings
+compare tested candidates; calibration and financial costs are not modeled.
 
 Capture, run, restore, and replay the same movement workload:
 

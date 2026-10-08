@@ -4,12 +4,13 @@
 
 namespace simforge::warehouse
 {
-enum class WarehouseCommandType : std::uint8_t { SetForkliftCapacity = 0 };
+enum class WarehouseCommandType : std::uint8_t { SetForkliftCapacity = 0, SetResourceCapacity = 1 };
 struct WarehouseCommand
 {
     std::uint64_t tick{0}, sequence{0};
     WarehouseCommandType type{WarehouseCommandType::SetForkliftCapacity};
-    std::uint32_t forklifts{0};
+    std::uint32_t capacity{0};
+    ResourceType resource{ResourceType::Forklift};
     bool operator==(const WarehouseCommand&) const = default;
 };
 struct WarehouseRecording
@@ -30,6 +31,7 @@ public:
     explicit WarehouseInputRecorder(WarehouseSimulation& runtime);
     void submit(const WarehouseCommand& command);
     void set_forklift_capacity(std::uint32_t forklifts);
+    void set_resource_capacity(ResourceType resource, std::uint32_t capacity);
     void advance_to(std::uint64_t tick);
     [[nodiscard]] WarehouseRecording capture_recording() const;
 private:

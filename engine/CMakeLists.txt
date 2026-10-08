@@ -33,6 +33,15 @@ target_include_directories(simforge_engine
         ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
+add_library(simforge_analysis STATIC src/analysis/comparison.cpp src/analysis/experiment_json.cpp src/analysis/report_export.cpp)
+target_link_libraries(simforge_analysis PUBLIC simforge_engine PRIVATE nlohmann_json::nlohmann_json)
+target_compile_features(simforge_analysis PUBLIC cxx_std_23)
+if(MSVC)
+    target_compile_options(simforge_analysis PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(simforge_analysis PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
 add_library(simforge_platform STATIC src/platform/window.cpp)
 target_include_directories(simforge_platform PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_compile_features(simforge_platform PUBLIC cxx_std_23)

@@ -7,15 +7,20 @@ namespace simforge::warehouse
 {
 void validate_command(const WarehouseCommand& command)
 {
-    if (command.type != WarehouseCommandType::SetForkliftCapacity || command.forklifts > 100000 ||
+    if ((command.type != WarehouseCommandType::SetForkliftCapacity && command.type != WarehouseCommandType::SetResourceCapacity) || command.capacity > 100000 ||
         command.tick > scenario::max_execution_ticks || command.sequence >= max_capacity_changes)
         throw std::invalid_argument("Invalid warehouse capacity command");
+    (void)resource_name(command.resource);
+    if (command.type == WarehouseCommandType::SetForkliftCapacity && command.resource != ResourceType::Forklift)
+        throw std::invalid_argument("Legacy forklift command must target forklifts");
 }
 void validate_recording(const WarehouseRecording& recording)
 {
-    if (recording.schema_version != 1 || recording.commands.size() > max_capacity_changes)
+    if ((recording.schema_version != 1 && recording.schema_version != 2) || recording.commands.size() > max_capacity_changes)
         throw std::invalid_argument("Invalid warehouse recording version/command count");
     validate_snapshot(recording.initial_snapshot); validate_snapshot(recording.expected_final);
+    if (recording.schema_version == 1 && (recording.initial_snapshot.version != 1 || recording.expected_final.version != 1))
+        throw std::invalid_argument("v1 recording requires v1 warehouse snapshots");
     if (recording.scenario_identity != recording.initial_snapshot.scenario_identity ||
         recording.scenario_identity != recording.expected_final.scenario_identity ||
         recording.initial_tick != recording.initial_snapshot.current_tick ||
@@ -31,7 +36,9 @@ void validate_recording(const WarehouseRecording& recording)
     {
         const auto& command = recording.commands[i]; validate_command(command);
         if (command.sequence != i || command.tick < previous_tick || command.tick > recording.end_tick ||
-            final[initial.size() + i].tick != command.tick || final[initial.size() + i].forklifts != command.forklifts)
+            final[initial.size() + i].tick != command.tick || final[initial.size() + i].capacity != command.capacity ||
+            final[initial.size() + i].resource != command.resource ||
+            (recording.schema_version == 1 && command.type != WarehouseCommandType::SetForkliftCapacity))
             throw std::invalid_argument("Warehouse recording command ordering/history mismatch");
         previous_tick = command.tick;
     }
@@ -41,6 +48,7 @@ WarehouseInputRecorder::WarehouseInputRecorder(WarehouseSimulation& runtime) : r
     recording_.initial_snapshot = runtime.capture_snapshot(); validate_snapshot(recording_.initial_snapshot);
     recording_.scenario_identity = recording_.initial_snapshot.scenario_identity;
     recording_.initial_tick = runtime.clock().tick_count();
+    recording_.schema_version = recording_.initial_snapshot.version;
 }
 void WarehouseInputRecorder::submit(const WarehouseCommand& command)
 {
@@ -49,8 +57,13 @@ void WarehouseInputRecorder::submit(const WarehouseCommand& command)
         recording_.commands.size() == max_capacity_changes)
         throw std::invalid_argument("Warehouse command must use current tick and next sequence");
     recording_.commands.push_back(command);
-    try { runtime_.set_forklift_capacity(command.forklifts); }
+    try { runtime_.set_resource_capacity(command.resource, command.capacity); }
     catch (...) { recording_.commands.pop_back(); throw; }
+    if (command.type == WarehouseCommandType::SetResourceCapacity) recording_.schema_version = 2;
+}
+void WarehouseInputRecorder::set_resource_capacity(ResourceType resource, std::uint32_t capacity)
+{
+    submit({runtime_.clock().tick_count(), recording_.commands.size(), WarehouseCommandType::SetResourceCapacity, capacity, resource});
 }
 void WarehouseInputRecorder::set_forklift_capacity(std::uint32_t forklifts)
 {
@@ -71,7 +84,7 @@ void replay_recording(const WarehouseRecording& recording, WarehouseSimulation& 
     for (const auto& command : recording.commands)
     {
         replacement.advance_to(command.tick); // Settle all due events before commands, including tick zero.
-        replacement.set_forklift_capacity(command.forklifts);
+        replacement.set_resource_capacity(command.resource, command.capacity);
     }
     // A no-op recording may preserve the untouched constructor boundary.
     if (recording.expected_final.settled) replacement.advance_to(recording.end_tick);

@@ -5,6 +5,7 @@ add_executable(simforge_sandbox
 target_link_libraries(simforge_sandbox
     PRIVATE
         simforge_engine
+        simforge_analysis
         simforge_platform
 )
 

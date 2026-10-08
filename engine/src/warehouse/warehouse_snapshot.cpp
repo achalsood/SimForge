@@ -30,13 +30,14 @@ std::string status_name(ShipmentStatus status)
 struct Transition
 {
     std::uint64_t tick, order;
-    enum class Type { Completion, Change, Start } type;
-    std::uint32_t forklifts{0};
+    enum class Type : std::uint8_t { Completion, Change, Start } type;
+    ResourceType resource{ResourceType::Forklift};
+    std::uint32_t capacity{0};
 };
 }
 void validate_snapshot(const WarehouseSnapshot& state)
 {
-    require(state.version == 1, "version");
+    require(state.version == 1 || state.version == 2, "version");
     // Check externally supplied container bounds before parsing or allocating.
     require(state.scenario_identity.size() <= scenario::max_scenario_bytes, "scenario_identity.size");
     const auto limit = scenario::max_warehouse_shipments;
@@ -111,27 +112,35 @@ void validate_snapshot(const WarehouseSnapshot& state)
     require(state.usage == ResourceCounts{active, active, active}, "resource usage");
 
     std::uint64_t previous_tick = 0, previous_started = 0;
-    auto forklift_capacity = config->forklifts;
+    const ResourceCounts initial_capacity{config->loading_bays, config->workers, config->forklifts};
+    auto capacity = initial_capacity;
+    const auto integrate = [&](std::uint64_t delta)
+    {
+        totals.available_bay_ticks += delta * capacity.loading_bays;
+        totals.available_worker_ticks += delta * capacity.workers;
+        totals.available_forklift_ticks += delta * capacity.forklifts;
+    };
     for (const auto& change : state.capacity_changes)
     {
         require(change.tick >= previous_tick && change.tick <= tick && change.started_before >= previous_started &&
             change.started_before <= totals.started, "capacity_changes ordering");
-        require(static_cast<std::uint64_t>(config->loading_bays) + config->workers + change.forklifts <= 100000,
-            "capacity_changes resource bounds");
+        require(state.version != 1 || change.resource == ResourceType::Forklift, "v1 forklift-only history");
+        (void)capacity_for(capacity, change.resource); // Reject invalid enum values.
         if (change.started_before != 0)
             require(*state.shipments[static_cast<std::size_t>(change.started_before - 1)].start_tick <= change.tick,
                 "capacity_changes started_before");
         if (change.started_before < totals.started)
             require(*state.shipments[static_cast<std::size_t>(change.started_before)].start_tick >= change.tick,
                 "capacity_changes future starts");
-        totals.available_forklift_ticks += (change.tick - previous_tick) * forklift_capacity;
-        forklift_capacity = change.forklifts; previous_tick = change.tick; previous_started = change.started_before;
-        transitions.push_back({change.tick, 2 * change.started_before, Transition::Type::Change, change.forklifts});
+        integrate(change.tick - previous_tick);
+        set_capacity(capacity, change.resource, change.capacity);
+        require(static_cast<std::uint64_t>(capacity.loading_bays) + capacity.workers + capacity.forklifts <= 100000,
+            "capacity_changes resource bounds");
+        previous_tick = change.tick; previous_started = change.started_before;
+        transitions.push_back({change.tick, 2 * change.started_before, Transition::Type::Change, change.resource, change.capacity});
     }
-    totals.available_forklift_ticks += (tick - previous_tick) * forklift_capacity;
-    totals.available_bay_ticks = tick * config->loading_bays;
-    totals.available_worker_ticks = tick * config->workers;
-    require(state.capacity == ResourceCounts{config->loading_bays, config->workers, forklift_capacity}, "current capacity");
+    integrate(tick - previous_tick);
+    require(state.capacity == capacity, "current capacity");
 
     // Validate historical reservation intervals, including capacity cuts and
     // equal-tick commands, without replaying arrivals or completed service work.
@@ -142,7 +151,8 @@ void validate_snapshot(const WarehouseSnapshot& state)
         return std::tie(a.tick, a_phase, a.order) < std::tie(b.tick, b_phase, b.order);
     });
     std::uint32_t historical_active = 0, max_active = 0;
-    forklift_capacity = config->forklifts;
+    capacity = initial_capacity;
+    auto concurrency = std::min({capacity.loading_bays, capacity.workers, capacity.forklifts});
     for (const auto& transition : transitions)
     {
         if (transition.type == Transition::Type::Completion)
@@ -150,8 +160,12 @@ void validate_snapshot(const WarehouseSnapshot& state)
             require(historical_active != 0, "historical release"); --historical_active;
         }
         else if (transition.type == Transition::Type::Start) ++historical_active;
-        else forklift_capacity = transition.forklifts;
-        require(historical_active <= std::min({config->loading_bays, config->workers, forklift_capacity}),
+        else
+        {
+            set_capacity(capacity, transition.resource, transition.capacity);
+            concurrency = std::min({capacity.loading_bays, capacity.workers, capacity.forklifts});
+        }
+        require(historical_active <= concurrency,
             "historical resource over-allocation");
         max_active = std::max(max_active, historical_active);
     }
@@ -247,7 +261,8 @@ std::optional<std::string> first_difference(const WarehouseSnapshot& expected, c
         const auto path = "capacity_changes[" + std::to_string(i) + "].";
         if (a.tick != b.tick) return mismatch(path + "tick");
         if (a.started_before != b.started_before) return mismatch(path + "started_before");
-        return mismatch(path + "forklifts");
+        if (a.resource != b.resource) return mismatch(path + "resource");
+        return mismatch(path + "capacity");
     }
 #undef CHECK
     return std::nullopt;

@@ -7,6 +7,11 @@ duration. Completion releases the reservation and permits the next waiting
 shipment to start. There is no travel, layout, routing, inventory, picking, shift
 schedule, failure, shipment variation, preemption, or resource priority policy.
 
+All three capacities can now change safely at settled boundaries; reservations
+and processing remain intact, and utilization integrates the full capacity history.
+The separate [batch comparison layer](scenario-comparison.md) runs alternatives and
+controlled bottleneck probes from one shared checkpoint. Scenario schema 1 is unchanged.
+
 `simforge::warehouse::WarehouseSimulation` owns the domain state: shipment records,
 queue, EventScheduler, ResourceManager, SimulationClock, and integer metric totals.
 It accepts the validated ScenarioDefinition. It has no Engine, SDL, Vulkan,

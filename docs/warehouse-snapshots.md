@@ -1,5 +1,11 @@
 # Warehouse snapshots, replay and branching
 
+Commit #10 extends capacity changes to bays/workers/forklifts and adds snapshot and
+recording schema 2 while preserving the v1 formats below. See the
+[generalized commands and compatibility contract](scenario-comparison.md) for v2
+history records, command identifiers and batch comparison. Forklift-only v1 data
+remains byte-for-byte readable/writable.
+
 The warehouse can now continue from a complete operational checkpoint. A branch
 inherits shipment history, FIFO wait, active reservations, pending completions,
 future arrivals, insertion sequences, clock time and accumulated metrics. It does
@@ -46,7 +52,7 @@ The public value types are in `warehouse/warehouse_snapshot.hpp`:
   sequence; next sequence and the historical peak pending count.
 - Started/completed counts, wait sum/maximum, completed processing ticks, occupied
   resource ticks, processed events and integrated available ticks for each pool.
-- Ordered forklift capacity history, retaining each command's tick, new count and
+- Ordered capacity history, retaining each command's tick, resource, new count and
   `started_before` count. That small additional value distinguishes reservations
   acquired between commands at the same tick.
 
@@ -118,11 +124,13 @@ expected state additionally verifies its supported continuation inputs.
 
 ## Capacity changes and intermediate metrics
 
-`set_forklift_capacity(count)` requires a settled boundary. Call `advance_to(0)`
+`set_resource_capacity(type, count)` and the retained `set_forklift_capacity(count)`
+require a settled boundary. Call `advance_to(0)`
 before changing an untouched runtime. Due events, including arrivals, settle before
 the command. Existing reservations remain held; reducing below current usage or
-exceeding the 100K combined-resource limit is rejected. Bays/workers, arrival
-schedule, horizon and service duration stay fixed. There is no preemption or cancellation.
+exceeding the 100K combined-resource limit is rejected. Generalized commands change
+one selected pool; the arrival schedule, horizon and service duration stay fixed.
+There is no preemption or cancellation.
 
 The command immediately starts eligible waiting jobs FIFO at its current tick,
 except at H. Their original arrival/wait history is retained. Existing service
@@ -191,7 +199,10 @@ binary-snapshot convention. The warehouse envelope adds `domain: "warehouse"` an
 uses warehouse binary snapshots; existing movement recording types/JSON stay unchanged.
 There is no generalized scripting or domain-conversion framework.
 
-The only command is `set_forklift_capacity`, with `tick`, `sequence` and `forklifts`.
+Recording v1 supports `set_forklift_capacity`, with `tick`, `sequence` and `forklifts`.
+Recording v2 also supports `set_resource_capacity` with `resource` and `capacity`,
+without reinterpreting the legacy command. History parameter values use the C++
+field `capacity` (formerly `forklifts`).
 Commands apply after all due events at their tick, then in sequence order for equal
 ticks. Accepted commands are recorded; rejected commands change neither runtime
 nor log. The recorder's caller must exclusively mutate the runtime through its
@@ -249,8 +260,9 @@ completions; starting the original higher-capacity example with three gives 94.
 
 ## Tests, performance and limits
 
-Debug and Release each run 68 CTest cases: all original 48 plus nine warehouse
+Commit #9 ran 68 CTest cases in both Debug and Release: all original 48 plus nine warehouse
 snapshot cases, branch CLI, six invalid comparison cases and four recording fixtures.
+Commit #10 retains those cases and extends both suites to 84 with batch analysis tests.
 New coverage includes constructor/settled zero/intermediate/horizon capture,
 analytical occupancy/utilization, large pending sets and queues, transactional
 invalid restores, every truncation/one-byte corruption of a representative binary,
@@ -276,7 +288,7 @@ Determinism assumes identical validated logical state, ordered accepted inputs,
 model rules and supported execution environment. Integer warehouse state and
 ordering are exact; displayed floating-point ratios inherit environment assumptions.
 Fixed-step timing alone does not make other simulation systems deterministic across
-hardware. No multithreading, domain RNG, preemption, bay/worker changes, horizon
+hardware. No multithreading, domain RNG, preemption, horizon
 extension, schema migrations, general policy scripts or calibrated real-world
 prediction were introduced. The earlier ECS destruction regression is outside scope.
 An appropriate next milestone is structured batch comparison/export built on these

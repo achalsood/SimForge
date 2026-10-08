@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "scenario": "warehouse-baseline.json",
+  "checkpoint_seconds": 7200,
+  "objective": "maximize_completed",
+  "candidates": [
+    {"name": "Add forklift", "loading_bays": 3, "workers": 10, "forklifts": 3},
+    {"name": "Add worker", "loading_bays": 3, "workers": 11, "forklifts": 2},
+    {"name": "Add loading bay", "loading_bays": 4, "workers": 10, "forklifts": 2}
+  ]
+}

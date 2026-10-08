@@ -1,6 +1,7 @@
 #pragma once
 
 #include <simforge/warehouse/event_scheduler.hpp>
+#include <string_view>
 
 namespace simforge::warehouse
 {
@@ -9,6 +10,11 @@ struct ResourceCounts
     std::uint32_t loading_bays, workers, forklifts;
     bool operator==(const ResourceCounts&) const = default;
 };
+enum class ResourceType : std::uint8_t { LoadingBay = 0, Worker = 1, Forklift = 2 };
+[[nodiscard]] std::uint32_t capacity_for(ResourceCounts counts, ResourceType resource);
+void set_capacity(ResourceCounts& counts, ResourceType resource, std::uint32_t capacity);
+[[nodiscard]] std::string_view resource_name(ResourceType resource);
+[[nodiscard]] ResourceType parse_resource_type(std::string_view name);
 
 // One of each resource is reserved atomically for a shipment, without identities
 // for individual bays/workers/forklifts. A per-shipment ledger prevents double release.

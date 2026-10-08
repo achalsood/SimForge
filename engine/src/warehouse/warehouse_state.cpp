@@ -18,6 +18,7 @@ scenario::ScenarioDefinition validated_definition(const WarehouseSnapshot& snaps
 WarehouseSnapshot WarehouseSimulation::capture_snapshot() const
 {
     WarehouseSnapshot result;
+    result.version = snapshot_version_;
     result.scenario_identity = scenario_identity_;
     result.tick_rate = clock_.ticks_per_second();
     result.horizon_ticks = horizon_ticks_; result.processing_ticks = processing_ticks_;
@@ -64,6 +65,7 @@ WarehouseSimulation::WarehouseSimulation(const WarehouseSnapshot& snapshot)
     shipments_ = snapshot.shipments; waiting_queue_ = snapshot.waiting_queue;
     shipments_.reserve(arrival_limit_); waiting_queue_.reserve(arrival_limit_);
     clock_.advance_ticks(snapshot.current_tick); settled_ = snapshot.settled;
+    snapshot_version_ = snapshot.version;
     capacity_changes_ = snapshot.capacity_changes;
     const auto& totals = snapshot.totals;
     started_ = totals.started; completed_ = totals.completed;
@@ -93,6 +95,7 @@ void WarehouseSimulation::swap_state(WarehouseSimulation& other) noexcept
     swap(available_bay_ticks_, other.available_bay_ticks_); swap(available_worker_ticks_, other.available_worker_ticks_);
     swap(available_forklift_ticks_, other.available_forklift_ticks_); swap(capacity_changes_, other.capacity_changes_);
     swap(settled_, other.settled_);
+    swap(snapshot_version_, other.snapshot_version_);
 }
 void WarehouseSimulation::restore_snapshot(const WarehouseSnapshot& snapshot)
 {
@@ -103,21 +106,27 @@ void WarehouseSimulation::restore_snapshot(const WarehouseSnapshot& snapshot)
 }
 void WarehouseSimulation::set_forklift_capacity(std::uint32_t forklifts)
 {
+    set_resource_capacity(ResourceType::Forklift, forklifts);
+}
+void WarehouseSimulation::set_resource_capacity(ResourceType resource, std::uint32_t count)
+{
     if (!settled_) throw std::invalid_argument("Capacity changes require a settled boundary; advance_to(0) first");
-    const auto capacity = resources_.capacity();
-    if (static_cast<std::uint64_t>(capacity.loading_bays) + capacity.workers + forklifts > 100000 ||
-        forklifts < resources_.active_count())
-        throw std::invalid_argument("Forklift capacity must cover active reservations and respect resource limits");
+    auto capacity = resources_.capacity();
+    set_capacity(capacity, resource, count); // Validates the enum before mutation.
+    if (static_cast<std::uint64_t>(capacity.loading_bays) + capacity.workers + capacity.forklifts > 100000 ||
+        count < resources_.active_count())
+        throw std::invalid_argument("Resource capacity must cover active reservations and respect resource limits");
     if (capacity_changes_.size() == max_capacity_changes)
         throw std::length_error("Warehouse capacity change limit exceeded");
-    const auto concurrency = std::min({capacity.loading_bays, capacity.workers, forklifts});
+    const auto concurrency = std::min({capacity.loading_bays, capacity.workers, capacity.forklifts});
     const auto limit = static_cast<std::size_t>(std::min(concurrency, arrival_limit_)) + 1;
     // All allocations precede logical mutation. Domain limits prove subsequent
     // counters/ticks safe and start_waiting's pre-reserved pushes nonthrowing.
     scheduler_.heap_.reserve(limit);
-    capacity_changes_.push_back({clock_.tick_count(), started_, forklifts});
+    capacity_changes_.push_back({clock_.tick_count(), started_, count, resource});
     scheduler_.pending_limit_ = limit;
-    resources_.capacity_.forklifts = forklifts; resources_.concurrency_ = concurrency;
+    resources_.capacity_ = capacity; resources_.concurrency_ = concurrency;
+    if (resource != ResourceType::Forklift) snapshot_version_ = 2;
     start_waiting();
 }
 } // namespace simforge::warehouse

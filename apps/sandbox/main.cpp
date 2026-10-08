@@ -5,6 +5,7 @@
 #include <simforge/simulation/input_recording.hpp>
 #include <simforge/warehouse/warehouse_simulation.hpp>
 #include <simforge/warehouse/warehouse_input.hpp>
+#include <simforge/analysis/scenario_comparison.hpp>
 
 #include <charconv>
 #include <algorithm>
@@ -30,6 +31,7 @@ struct Options
     std::optional<std::filesystem::path> warehouse_replay;
     std::optional<std::pair<std::uint32_t, std::uint32_t>> compare_forklifts;
     std::optional<std::uint64_t> checkpoint_seconds;
+    std::optional<std::filesystem::path> experiment, export_json, export_csv;
 };
 
 std::uint64_t parse_count(std::string_view value)
@@ -49,7 +51,14 @@ Options parse_options(int argc, char* argv[])
     for (int i = 1; i < argc; ++i)
     {
         const std::string_view argument{argv[i]};
-        if (argument == "--scenario" || argument == "--record" || argument == "--replay" || argument == "--warehouse-replay")
+        if (argument == "--experiment" || argument == "--export-json" || argument == "--export-csv")
+        {
+            auto& destination = argument == "--experiment" ? options.experiment : argument == "--export-json" ? options.export_json : options.export_csv;
+            if (destination) throw std::invalid_argument("Duplicate experiment/export option");
+            if (++i == argc) throw std::invalid_argument("Missing experiment/export path");
+            destination = argv[i];
+        }
+        else if (argument == "--scenario" || argument == "--record" || argument == "--replay" || argument == "--warehouse-replay")
         {
             auto& destination = argument == "--scenario" ? options.scenario : argument == "--record" ? options.record :
                 argument == "--replay" ? options.replay : options.warehouse_replay;
@@ -100,7 +109,50 @@ Options parse_options(int argc, char* argv[])
     if (options.compare_forklifts.has_value() != options.checkpoint_seconds.has_value() ||
         (options.compare_forklifts && (!options.headless || !options.scenario || options.replay || options.warehouse_replay || entities_seen || ticks_seen)))
         throw std::invalid_argument("Checkpoint comparison requires --headless --scenario, both comparison options, and no replay/size overrides");
+    if ((options.experiment && (!options.headless || options.scenario || options.record || options.replay || options.warehouse_replay ||
+        options.compare_forklifts || options.checkpoint_seconds || entities_seen || ticks_seen)) ||
+        ((options.export_json || options.export_csv) && !options.experiment))
+        throw std::invalid_argument("--experiment requires --headless and conflicts with other workflows; exports require --experiment");
+    if (options.export_json && options.export_csv && std::filesystem::absolute(*options.export_json).lexically_normal() ==
+        std::filesystem::absolute(*options.export_csv).lexically_normal())
+        throw std::invalid_argument("JSON and CSV output paths must differ");
     return options;
+}
+
+int experiment_workflow(const Options& options)
+{
+    using namespace simforge::analysis;
+    // Check output conflicts before simulation and write only exclusive new files.
+    for (const auto* output : {&options.export_json, &options.export_csv})
+        if (*output && std::filesystem::exists(**output)) throw std::invalid_argument("Export output already exists: " + (**output).string());
+    const auto report = run_comparison(load_experiment(*options.experiment));
+    std::cout << "SimForge Batch Comparison | Objective: " << objective_name(report.request.objective)
+              << " | Checkpoint tick: " << report.request.checkpoint.current_tick
+              << " | Horizon: " << report.request.checkpoint.horizon_ticks << '\n'
+              << "Candidate | Bays/Workers/Forklifts | Completed | Waiting | Throughput/hour | Mean wait seconds | Bay/Worker/Forklift utilization (%) | Rank\n";
+    const auto number = [](std::optional<double> value, double scale = 1)
+    { if (value) std::cout << std::fixed << std::setprecision(3) << *value * scale; else std::cout << "unavailable"; };
+    const auto print = [&](const CandidateResult& result)
+    {
+        const auto& c = result.candidate.resources; const auto& m = result.metrics;
+        std::cout << std::quoted(result.candidate.name) << " | " << c.loading_bays << '/' << c.workers << '/' << c.forklifts
+                  << " | " << m.completed << " | " << m.waiting << " | ";
+        number(m.throughput_per_hour); std::cout << " | "; number(m.average_wait_seconds); std::cout << " | ";
+        number(m.loading_bay_utilization, 100); std::cout << '/'; number(m.worker_utilization, 100); std::cout << '/'; number(m.forklift_utilization, 100);
+        std::cout << " | "; if (result.rank) std::cout << *result.rank; else std::cout << "reference/unavailable"; std::cout << '\n';
+    };
+    print(report.baseline); for (const auto& result : report.candidates) print(result);
+    for (const auto& evidence : report.bottlenecks)
+    {
+        std::cout << evidence.summary << '\n';
+        if (evidence.conclusion == BottleneckConclusion::LikelyBottleneck)
+            std::cout << simforge::warehouse::resource_name(evidence.resource) << ": likely bottleneck under the tested model and objective.\n";
+    }
+    for (const auto& warning : report.warnings) std::cout << "Analysis: " << warning << '\n';
+    std::cout << "Rankings compare tested candidates; costs and real-world calibration are not modeled.\n";
+    if (options.export_json) { save_report(*options.export_json, report); std::cout << "JSON exported: " << options.export_json->string() << '\n'; }
+    if (options.export_csv) { save_csv(*options.export_csv, report); std::cout << "CSV exported: " << options.export_csv->string() << '\n'; }
+    return 0;
 }
 
 void print_warehouse_outcome(const char* label, const simforge::warehouse::WarehouseSimulation& runtime)
@@ -272,6 +324,7 @@ void populate(simforge::world::World& world, std::uint64_t count)
 
 int run(const Options& options)
 {
+    if (options.experiment) return experiment_workflow(options);
     if (options.warehouse_replay) return warehouse_replay_workflow(options);
     if (options.scenario || options.replay) return scenario_workflow(options);
     using timer = std::chrono::steady_clock;
@@ -337,7 +390,8 @@ int main(int argc, char* argv[])
                   << "  --headless --scenario FILE [--record OUTPUT]\n"
                   << "  --headless --replay FILE [--scenario FILE]\n";
         std::cerr << "  --headless --scenario FILE --compare-forklifts A,B --checkpoint-seconds S [--record OUTPUT]\n"
-                  << "  --headless --warehouse-replay FILE [--scenario FILE]\n";
+                  << "  --headless --warehouse-replay FILE [--scenario FILE]\n"
+                  << "  --headless --experiment FILE [--export-json NEW_FILE] [--export-csv NEW_FILE]\n";
         return 1;
     }
 }
