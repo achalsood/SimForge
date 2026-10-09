@@ -1,6 +1,7 @@
 #include "viewer.hpp"
 #include "dashboard.hpp"
 #include "workspace_panel.hpp"
+#include "capture.hpp"
 #include <simforge/platform/window.hpp>
 #include <simforge/renderer/renderer.hpp>
 #include <SDL3/SDL.h>
@@ -17,16 +18,8 @@ namespace
 using namespace simforge;
 using Clock = std::chrono::steady_clock;
 void require(bool condition, const char* message) { if (!condition) throw std::runtime_error(message); }
-void save(const renderer::CapturedFrame& frame, const std::filesystem::path& path)
-{
-    if (std::filesystem::exists(path)) throw std::runtime_error("Viewer capture output already exists");
-    std::ofstream file{path,std::ios::binary}; if (!file) throw std::runtime_error("Cannot open viewer capture");
-    file << "P6\n" << frame.width << ' ' << frame.height << "\n255\n";
-    for (std::size_t i = 0; i < frame.rgba.size(); i += 4) file.write(reinterpret_cast<const char*>(frame.rgba.data()+i),3);
-    if (!file) throw std::runtime_error("Cannot save viewer capture");
-}
 std::filesystem::path capture_path(const std::filesystem::path& base, const char* suffix)
-{ return base.parent_path()/(base.stem().string()+"-"+suffix+".ppm"); }
+{ return base.parent_path()/(base.stem().string()+"-"+suffix+base.extension().string()); }
 void apply(viewer::ViewerController& controller, const ViewerCommand& command)
 {
     switch(command.action)
@@ -116,7 +109,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
     if (!SDL_SetWindowMinimumSize(window.native_handle(),640,480)) throw std::runtime_error("Set viewer minimum window size");
     renderer::Renderer graphics; renderer::RendererOptions options; options.ui = true;
     options.validation = options.require_validation = smoke_frames.has_value(); options.capture_frames = smoke_frames.has_value();
-    graphics.initialize(window,options); style_dashboard();
+    graphics.initialize(window,options); FailureCapture failure_capture{graphics}; style_dashboard();
     const auto initial_info = graphics.info();
     std::cout << "Interactive warehouse | GPU: " << initial_info.gpu_name << " | API: " << initial_info.api_version << " | Loader: " << initial_info.loader_version
         << " | Format: " << initial_info.surface_format << " | Present: " << initial_info.present_mode << " | ImGui: " << IMGUI_VERSION << '\n';
@@ -237,7 +230,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         const auto image = graphics.capture_frame();
         if(dashboard.layout.workspace_overlay) require(graphics.info().ui_vertices>100,"Compact editor page did not render UI");
         else verify_geometry(image,workspace.view().viewport());
-        if (capture_output) save(image,capture_path(*capture_output,suffix));
+        if (capture_output) write_capture(image,capture_path(*capture_output,suffix));
         return image;
     };
     const auto click = [&](glm::vec2 p)
@@ -256,7 +249,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
     };
     if (smoke_frames)
     {
-        submit(); submit(); const auto overview = capture("overview");
+        submit(); submit(); diagnostic_failure_probe(); const auto overview = capture("overview");
         require(graphics.info().ui_vertices > 1000 && graphics.info().ui_draw_calls >= 3,"Dashboard emitted no meaningful UI draw data");
         // Readback must contain readable light text in the metrics panel, not just its background.
         std::size_t text_pixels = 0;
@@ -478,7 +471,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         if (frame(elapsed)) ++count; else std::this_thread::sleep_for(std::chrono::milliseconds{10});
     }
     if(smoke_frames) require(count==*smoke_frames,"Graphics walkthrough cancelled before all requested frames completed");
-    if (smoke_frames && capture_output) save(graphics.capture_frame(),*capture_output);
+    if (smoke_frames && capture_output) write_capture(graphics.capture_frame(),*capture_output);
     if (smoke_frames) require(graphics.info().ui_texture_creations == warmed_texture_creations,"Steady frames repeatedly recreated the font atlas");
     graphics.shutdown(); const auto info = graphics.info();
     std::cout << "Viewer frames: " << info.presented_frames << " | 3D draws: " << info.draw_calls << " | UI draws: " << info.ui_draw_calls << " | UI vertices: " << info.ui_vertices

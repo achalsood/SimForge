@@ -124,7 +124,7 @@ build/windows-release/apps/sandbox/simforge_sandbox.exe --scenario examples/ware
 build/windows-debug/apps/sandbox/simforge_sandbox.exe --graphics-smoke 180
 build/windows-debug/apps/sandbox/simforge_sandbox.exe --scenario examples/warehouse-baseline.json --graphics-smoke 180
 # Optional GPU capture: parent directory must exist; output must be new.
-build/windows-debug/apps/sandbox/simforge_sandbox.exe --graphics-smoke 180 --graphics-capture build/first-3d-scene.ppm
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-graphics-test.ps1 -Executable build/windows-debug/apps/sandbox/simforge_sandbox.exe -Mode Review -Frames 180
 # Stronger headless isolation: this target links neither SDL nor Vulkan.
 build/windows-release/apps/sandbox/simforge_headless.exe --headless --scenario examples/warehouse-baseline.json
 ```
@@ -262,3 +262,18 @@ assets/       Redistributable viewer font and license
 docs/         Architecture and design documentation
 cmake/        CMake helper modules
 ```
+
+## Build artifacts
+
+Graphics reviews now use unique PNG runs under `build/test-artifacts`; successful
+routine graphics tests reclaim their own diagnostics. Debug/headless presets skip
+benchmarks by default while retaining full debug symbols and all tests. See
+[build footprint, retention and safe cleanup](docs/build-artifact-management.md).
+
+Preview legacy screenshot cleanup without deleting anything:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/clean-artifacts.ps1 -Category LegacyCaptures
+```
+
+Use `-Apply` only after reviewing and explicitly approving the listed paths.

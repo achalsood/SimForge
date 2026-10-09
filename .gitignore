@@ -1,6 +1,12 @@
 # Build output
 build/
 out/
+# Managed diagnostics stay under build/test-artifacts; never ignore curated docs PNGs.
+test-artifacts/
+*.spv
+*.obj
+*.ilk
+*.pdb
 
 # IDEs
 .vscode/

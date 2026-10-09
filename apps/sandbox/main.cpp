@@ -151,8 +151,8 @@ Options parse_options(int argc, char* argv[])
     if (options.graphics_smoke && (options.headless || options.record || options.replay || options.warehouse_replay ||
         options.experiment || options.compare_forklifts || options.checkpoint_seconds || options.export_json || options.export_csv || entities_seen || ticks_seen))
         throw std::invalid_argument("--graphics-smoke conflicts with headless/simulation options");
-    if (options.graphics_capture && (!options.graphics_smoke || options.graphics_capture->extension() != ".ppm" || std::filesystem::exists(*options.graphics_capture)))
-        throw std::invalid_argument("--graphics-capture requires --graphics-smoke and a new .ppm output file");
+    if (options.graphics_capture && (!options.graphics_smoke || (options.graphics_capture->extension() != ".ppm" && options.graphics_capture->extension() != ".png") || std::filesystem::exists(*options.graphics_capture)))
+        throw std::invalid_argument("--graphics-capture requires --graphics-smoke and a new .png or .ppm output file");
     return options;
 }
 
@@ -415,7 +415,7 @@ int main(int argc, char* argv[])
                   << "  --headless --warehouse-replay FILE [--scenario FILE]\n"
                   << "  --headless --experiment FILE [--export-json NEW_FILE] [--export-csv NEW_FILE]\n"
                   << "  --graphics-smoke FRAMES (120..10000; display/GPU/validation required)\n";
-        std::cerr << "  --scenario WAREHOUSE_FILE [--graphics-smoke FRAMES] [--graphics-capture NEW_FILE.ppm]\n";
+        std::cerr << "  --scenario WAREHOUSE_FILE [--graphics-smoke FRAMES] [--graphics-capture NEW_FILE.png]\n";
         std::cerr << "  --scenario WAREHOUSE_FILE --live [--speed 0.01..3600] (default 300; interactive dashboard)\n";
         return 1;
     }

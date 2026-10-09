@@ -162,7 +162,7 @@ build/windows-debug/apps/sandbox/simforge_sandbox.exe --headless --scenario exam
 # Visible GPU verification, with validation and synchronization checks:
 build/windows-debug/apps/sandbox/simforge_sandbox.exe --scenario examples/warehouse-baseline.json --graphics-smoke 180
 # Optional new P6 PPM output, existing parent directory:
-build/windows-debug/apps/sandbox/simforge_sandbox.exe --scenario examples/warehouse-baseline.json --graphics-smoke 180 --graphics-capture build/warehouse.ppm
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-graphics-test.ps1 -Executable build/windows-debug/apps/sandbox/simforge_sandbox.exe -Mode Review -Frames 180 -Scenario examples/warehouse-baseline.json
 cmake --preset windows-debug -DSIMFORGE_GRAPHICS_TESTS=ON
 ctest --preset windows-debug -L graphics --output-on-failure
 cmake --preset windows-debug -DSIMFORGE_GRAPHICS_TESTS=OFF

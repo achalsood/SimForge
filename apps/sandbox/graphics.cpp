@@ -1,6 +1,7 @@
 #include "graphics.hpp"
 #include "viewer.hpp"
 #include "dashboard.hpp"
+#include "capture.hpp"
 #include <imgui.h>
 #include <SDL3/SDL.h>
 #include <simforge/platform/window.hpp>
@@ -69,15 +70,6 @@ void verify_warehouse(const simforge::renderer::CapturedFrame& frame)
         throw std::runtime_error("Warehouse GPU image lacks distinct regions or industrial colors");
     std::cout << "Warehouse image verified: geometry in multiple regions and three industrial palette groups.\n";
 }
-void save_capture(const simforge::renderer::CapturedFrame& frame, const std::filesystem::path& path)
-{
-    std::ofstream file{path,std::ios::binary};
-    if (!file) throw std::runtime_error("Cannot open diagnostic capture output");
-    file << "P6\n" << frame.width << ' ' << frame.height << "\n255\n";
-    for (std::size_t i = 0; i < frame.rgba.size(); i += 4)
-        file.write(reinterpret_cast<const char*>(frame.rgba.data()+i),3);
-    if (!file) throw std::runtime_error("Cannot write diagnostic capture output");
-}
 void submit_and_wait(simforge::renderer::Renderer& graphics, const simforge::renderer::RenderFrameData& frame)
 {
     for (int attempt = 0; attempt < 100; ++attempt)
@@ -144,7 +136,7 @@ int run_graphics(std::optional<std::uint64_t> smoke_frames, const std::optional<
     renderer::RendererOptions options;
     options.ui = !smoke_frames || !scenario_path;
     if (smoke_frames) { options.validation = true; options.require_validation = true; options.capture_frames = true; }
-    graphics.initialize(window,options); summary(graphics.info());
+    graphics.initialize(window,options); FailureCapture failure_capture{graphics}; summary(graphics.info());
     std::optional<std::filesystem::path> open_workspace;
     std::optional<scenario::ScenarioDefinition> loaded_workspace;
     std::array<char,1025> scenario_input{};
@@ -242,7 +234,7 @@ int run_graphics(std::optional<std::uint64_t> smoke_frames, const std::optional<
             if (count >= 80 && !resized3) { window.resize(1280,720); resized3 = true; }
             if (count >= *smoke_frames)
             {
-                const auto image = graphics.capture_frame();
+                diagnostic_failure_probe(); const auto image = graphics.capture_frame();
                 if (scenario_path)
                 {
                     verify_warehouse(image); submit_and_wait(graphics,frame);
@@ -251,7 +243,7 @@ int run_graphics(std::optional<std::uint64_t> smoke_frames, const std::optional<
                     std::cout << "Static warehouse repeated capture identical; no observed flicker.\n";
                 }
                 else verify_scene(image);
-                if (capture_output) save_capture(image,*capture_output);
+                if (capture_output) write_capture(image,*capture_output);
                 verify_depth(graphics); submit_and_wait(graphics,frame);
                 window.request_close(); window.poll_events(); break;
             }
@@ -271,7 +263,7 @@ int run_graphics(std::optional<std::uint64_t> smoke_frames, const std::optional<
                 {
                     const auto image=graphics.capture_frame();
                     if(graphics.info().ui_vertices<100 || graphics.info().ui_draw_calls==0) throw std::runtime_error("Launcher UI absent in Vulkan output");
-                    if(capture_output) save_capture(image,capture_output->parent_path()/(capture_output->stem().string()+"-launcher.ppm"));
+                    if(capture_output) write_capture(image,capture_output->parent_path()/(capture_output->stem().string()+"-launcher"+capture_output->extension().string()));
                     SDL_Event motion{}; motion.type=SDL_EVENT_MOUSE_MOTION; motion.motion.windowID=window_id; motion.motion.x=launcher_button.x; motion.motion.y=launcher_button.y; SDL_PushEvent(&motion);
                     SDL_Event press{}; press.type=SDL_EVENT_MOUSE_BUTTON_DOWN; press.button.windowID=window_id; press.button.button=SDL_BUTTON_LEFT; press.button.down=true; press.button.x=launcher_button.x; press.button.y=launcher_button.y; SDL_PushEvent(&press);
                 }

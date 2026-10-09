@@ -246,7 +246,7 @@ build/windows-debug/apps/sandbox/simforge_sandbox.exe --scenario examples/wareho
 # Bounded smoke uses documented synthetic elapsed inputs to reach the horizon:
 build/windows-debug/apps/sandbox/simforge_sandbox.exe --scenario examples/warehouse-baseline.json --live --speed 300 --graphics-smoke 180
 # New PPM output also saves sibling -initial/-processing/-queue/-completion files:
-build/windows-debug/apps/sandbox/simforge_sandbox.exe --scenario examples/warehouse-baseline.json --live --graphics-smoke 180 --graphics-capture build/live.ppm
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-graphics-test.ps1 -Executable build/windows-debug/apps/sandbox/simforge_sandbox.exe -Mode Review -Frames 180 -Scenario examples/warehouse-baseline.json -Live
 cmake --preset windows-debug -DSIMFORGE_GRAPHICS_TESTS=ON
 ctest --preset windows-debug -L graphics --output-on-failure
 cmake --preset windows-debug -DSIMFORGE_GRAPHICS_TESTS=OFF

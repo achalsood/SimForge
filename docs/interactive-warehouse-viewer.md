@@ -304,7 +304,7 @@ build/windows-release/benchmarks/simforge_live_warehouse_benchmark.exe
 # Fixture and capture outputs must be new; parent directories must exist.
 build/windows-release/benchmarks/simforge_viewer_benchmark.exe . --write-large-scenario build/viewer-large-new.json
 build/windows-release/apps/sandbox/simforge_sandbox.exe --scenario build/viewer-large-new.json --live --graphics-smoke 600
-build/windows-release/apps/sandbox/simforge_sandbox.exe --scenario examples/warehouse-baseline.json --live --graphics-smoke 600 --graphics-capture build/viewer-new.ppm
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-graphics-test.ps1 -Executable build/windows-release/apps/sandbox/simforge_sandbox.exe -Mode Review -Frames 600 -Scenario examples/warehouse-baseline.json -Live
 ```
 
 Graphics tests require a display, supported GPU/runtime and validation layers;

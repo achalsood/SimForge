@@ -10,7 +10,9 @@
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
-        "SIMFORGE_BUILD_TESTS": "ON"
+        "SIMFORGE_BUILD_TESTS": "ON",
+        "SIMFORGE_BUILD_BENCHMARKS": "OFF",
+        "VCPKG_INSTALL_OPTIONS": "--clean-buildtrees-after-build;--clean-packages-after-build"
       }
     },
     {
@@ -22,7 +24,9 @@
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
-        "SIMFORGE_BUILD_TESTS": "ON"
+        "SIMFORGE_BUILD_TESTS": "ON",
+        "SIMFORGE_BUILD_BENCHMARKS": "ON",
+        "VCPKG_INSTALL_OPTIONS": "--clean-buildtrees-after-build;--clean-packages-after-build"
       }
     },
     {

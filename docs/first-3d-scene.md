@@ -139,7 +139,7 @@ cmake --build --preset windows-debug
 ctest --preset windows-debug --output-on-failure
 build/windows-debug/apps/sandbox/simforge_sandbox.exe
 build/windows-debug/apps/sandbox/simforge_sandbox.exe --graphics-smoke 180
-build/windows-debug/apps/sandbox/simforge_sandbox.exe --graphics-smoke 180 --graphics-capture build/scene.ppm
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-graphics-test.ps1 -Executable build/windows-debug/apps/sandbox/simforge_sandbox.exe -Mode Review -Frames 180
 
 cmake --preset windows-release
 cmake --build --preset windows-release
