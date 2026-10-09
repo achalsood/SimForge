@@ -51,8 +51,13 @@ void section(const char* name)
 }
 void kpi(const char* name, std::uint64_t value, glm::vec3 accent)
 {
+    const float s=ImGui::GetStyle().FontScaleDpi; const auto p=ImGui::GetCursorScreenPos(); const auto width=ImGui::GetContentRegionAvail().x;
+    ImGui::GetWindowDrawList()->AddRectFilled(p,{p.x+width,p.y+52*s},packed(design::navy),6*s);
+    ImGui::GetWindowDrawList()->AddRectFilled(p,{p.x+3*s,p.y+52*s},packed(accent),2*s);
+    ImGui::BeginGroup(); ImGui::Indent(10*s);
     { Font font{design::label}; ImGui::TextColored(color(design::secondary),"%s",name); }
     { Font font{design::metric}; ImGui::TextColored(color(accent),"%llu",static_cast<unsigned long long>(value)); }
+    ImGui::Unindent(10*s); ImGui::EndGroup(); ImGui::Dummy({0,8*s});
 }
 void utilization(const char* label, std::optional<double> value, std::uint32_t usage, std::uint32_t capacity)
 {
@@ -120,18 +125,18 @@ void style_dashboard(float scale)
     using namespace simforge::viewer;
     ImGuiStyle style; ImGui::StyleColorsDark(&style);
     style.FontSizeBase = design::body; style.FontScaleDpi = scale;
-    style.WindowPadding = {design::padding,design::padding}; style.FramePadding = {12,10}; style.ItemSpacing = {design::gap,8};
-    style.WindowRounding = 0; style.FrameRounding = design::corner; style.GrabRounding = design::corner; style.WindowBorderSize = 1;
+    style.WindowPadding = {design::padding,design::padding}; style.FramePadding = {12,7}; style.ItemSpacing = {design::gap,8};
+    style.WindowRounding = 8; style.FrameRounding = design::corner; style.GrabRounding = design::corner; style.WindowBorderSize = 1;
     style.Colors[ImGuiCol_Text] = color(design::text); style.Colors[ImGuiCol_TextDisabled] = color(design::secondary);
     style.Colors[ImGuiCol_WindowBg] = color(design::navy); style.Colors[ImGuiCol_Border] = color(design::border);
     style.Colors[ImGuiCol_PopupBg] = color(design::panel);
-    style.Colors[ImGuiCol_FrameBg] = {0.038f,0.065f,0.092f,1};
-    style.Colors[ImGuiCol_Button] = {0.040f,0.080f,0.12f,1}; style.Colors[ImGuiCol_ButtonHovered] = {0.07f,0.17f,0.24f,1};
-    style.Colors[ImGuiCol_ButtonActive] = {0.08f,0.23f,0.35f,1}; style.Colors[ImGuiCol_Header] = {0.035f,0.065f,0.095f,1};
-    style.Colors[ImGuiCol_HeaderHovered] = {0.06f,0.14f,0.21f,1}; style.Colors[ImGuiCol_HeaderActive] = {0.08f,0.20f,0.30f,1};
-    style.Colors[ImGuiCol_Tab] = style.Colors[ImGuiCol_Button]; style.Colors[ImGuiCol_TabSelected] = style.Colors[ImGuiCol_HeaderActive];
-    style.Colors[ImGuiCol_SliderGrab] = color(design::processing); style.Colors[ImGuiCol_SliderGrabActive] = color(design::text);
-    style.Colors[ImGuiCol_CheckMark] = color(design::completed);
+    for(auto id : {ImGuiCol_FrameBg,ImGuiCol_Button,ImGuiCol_Header,ImGuiCol_Tab,ImGuiCol_TableHeaderBg}) style.Colors[id]=color(design::elevated);
+    for(auto id : {ImGuiCol_ButtonHovered,ImGuiCol_HeaderHovered,ImGuiCol_TabHovered,ImGuiCol_FrameBgHovered}) style.Colors[id]=color(design::border);
+    for(auto id : {ImGuiCol_ButtonActive,ImGuiCol_HeaderActive,ImGuiCol_TabSelected,ImGuiCol_FrameBgActive}) style.Colors[id]=color(design::border);
+    style.Colors[ImGuiCol_TableRowBg]={0,0,0,0}; style.Colors[ImGuiCol_TableRowBgAlt]=color(design::panel);
+    style.Colors[ImGuiCol_TableBorderStrong]=color(design::border); style.Colors[ImGuiCol_TableBorderLight]=color(design::border);
+    style.Colors[ImGuiCol_SliderGrab]=color(design::processing); style.Colors[ImGuiCol_SliderGrabActive]=color(design::text);
+    style.Colors[ImGuiCol_CheckMark]=color(design::processing);
     style.ScaleAllSizes(scale); ImGui::GetStyle() = style;
 }
 simforge::viewer::Viewport dashboard_viewport(const simforge::viewer::ViewerController& v, const DashboardState& state)
@@ -145,45 +150,60 @@ DashboardFrame draw_dashboard(const simforge::viewer::ViewerController& v, Dashb
     const float s = draft.scale, width = ImGui::GetIO().DisplaySize.x;
     DashboardFrame result; result.layout = layout; result.viewport = layout.viewport;
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,{12*s,8*s});
-    panel("Header",layout.header,(layout.header.size.y-layout.control_height)*0.5f);
+    panel("Header",layout.header,6*s);
     const bool tiny = width/s < 500;
-    const float toolbar_width = (tiny ? 36 : 40)*s;
-    { Font font{20}; ImGui::AlignTextToFramePadding(); ImGui::TextColored(color(design::text),"%s",tiny ? "SF" : "SIMFORGE"); }
+    { Font font{20}; ImGui::TextColored(color(design::processing),"%s",tiny ? "SF" : "SIMFORGE"); }
     ImGui::SameLine();
-    if (icon_button("Metrics","",Icon::Sidebar,{toolbar_width,layout.control_height},"Show or hide operational metrics"))
-    { draft.panels.metrics = !layout.metrics_visible; draft.panels.metrics_explicit = true; draft.panel_changed = true; }
-    result.metrics_toggle = center(); ImGui::SameLine();
-    if (icon_button("Focus","",Icon::Focus,{toolbar_width,layout.control_height},"Warehouse focus: hide or restore side panels"))
-    { draft.panels.focus = !draft.panels.focus; draft.panel_changed = true; }
-    result.focus_toggle = center(); ImGui::SameLine(); ImGui::BeginDisabled(!inspection);
-    if (icon_button("Inspector","",Icon::Inspect,{toolbar_width,layout.control_height},"Show or hide selected-object details (selection is retained)"))
-    { draft.panels.inspector = !draft.panels.inspector; draft.panel_changed = true; }
-    result.inspector_toggle = center(); ImGui::EndDisabled();
-    ImGui::SameLine();
-    if (icon_button("Workspace","",Icon::Sidebar,{toolbar_width,layout.control_height},"Scenario workspace: edit, compare and export"))
-    { draft.panels.workspace = !draft.panels.workspace; draft.panel_changed = true; draft.workspace_changed = true; }
-    result.workspace_toggle = center();
     const auto status = playback_status(state.at_horizon,v.runtime().clock().paused(),draft.seeking);
     const auto accent = status == PresentationStatus::Completed ? design::completed : status == PresentationStatus::Paused ? design::waiting : design::processing;
-    if (!tiny)
+    const float status_width = (tiny ? 85 : 195)*s;
+    auto name = v.name();
+    const float available = std::max(20.0f,width-status_width-ImGui::GetCursorPosX()-36*s);
+    { Font font{design::label};
+      while (!name.empty() && ImGui::CalcTextSize((name+"...").c_str()).x > available)
+      { auto end = name.size()-1; while (end && (static_cast<unsigned char>(name[end])&0xC0) == 0x80) --end; name.resize(end); }
+      ImGui::TextUnformatted(name == v.name() ? name.c_str() : (name+"...").c_str()); tooltip(v.name().c_str()); }
+    ImGui::SameLine(width-status_width-18*s);
+    { Font font{design::label}; ImGui::TextColored(color(accent),"%s",v.result_preview() ? "FINAL PREVIEW" : status_label(status).data());
+      if (!tiny) { ImGui::SameLine(); ImGui::TextUnformatted(format_time(state.tick,state.tick_rate).c_str()); } }
+    const auto mode_button = [&](const char* label, ApplicationMode mode, float button_width)
     {
-        const float status_width = layout.compact ? 110*s : 240*s;
-        ImGui::SameLine(); ImGui::BeginGroup();
-        const float available = width-status_width-ImGui::GetCursorPosX()-32*s;
-        auto name = v.name();
-        { Font font{design::body};
-          while (!name.empty() && ImGui::CalcTextSize((name+"...").c_str()).x > available)
-          { auto end = name.size()-1; while (end && (static_cast<unsigned char>(name[end])&0xC0) == 0x80) --end; name.resize(end); }
-          ImGui::TextUnformatted(name == v.name() ? name.c_str() : (name+"...").c_str()); tooltip(v.name().c_str()); }
-        ImGui::EndGroup();
-        ImGui::SameLine(width-status_width-16*s);
-        ImGui::BeginGroup();
-        { Font font{design::label}; ImGui::TextColored(color(accent),"%s",status_label(status).data()); }
-        if (!layout.compact) { ImGui::SameLine(); Font font{20}; ImGui::TextUnformatted(format_time(state.tick,state.tick_rate).c_str()); }
-        ImGui::EndGroup();
+        const bool active = draft.panels.mode == mode;
+        ImGui::PushStyleColor(ImGuiCol_Button,color(active ? design::elevated : design::navy));
+        ImGui::PushStyleColor(ImGuiCol_Text,color(active ? design::processing : design::secondary));
+        if(ImGui::Button(label,{button_width*s,layout.control_height}))
+        { draft.panels.mode=mode; draft.panels.workspace=mode!=ApplicationMode::Simulation; draft.panel_changed=true; draft.workspace_changed=true; }
+        ImGui::PopStyleColor(2);
+        if(active) { const auto a=ImGui::GetItemRectMin(),b=ImGui::GetItemRectMax(); ImGui::GetWindowDrawList()->AddLine({a.x+8*s,b.y-1*s},{b.x-8*s,b.y-1*s},packed(design::processing),2*s); }
+    };
+    mode_button(tiny ? "Sim" : "Simulation",ApplicationMode::Simulation,tiny?64:116); result.simulation_mode=center(); ImGui::SameLine();
+    mode_button(tiny ? "Editor" : "Scenario Editor",ApplicationMode::Editor,tiny?76:154); result.workspace_toggle=center(); ImGui::SameLine();
+    mode_button("Analysis",ApplicationMode::Analysis,tiny?88:110); result.analysis_mode=center();
+    if(!tiny)
+    {
+        ImGui::SameLine();
+        if(icon_button("Metrics","",Icon::Sidebar,{36*s,layout.control_height},"Show or hide operational metrics"))
+        { draft.panels.metrics=!layout.metrics_visible; draft.panels.metrics_explicit=true; draft.panel_changed=true; }
+        result.metrics_toggle=center(); ImGui::SameLine();
+        if(icon_button("Focus","",Icon::Focus,{36*s,layout.control_height},"Warehouse focus: hide or restore side panels"))
+        { draft.panels.focus=!draft.panels.focus; draft.panel_changed=true; }
+        result.focus_toggle=center(); ImGui::SameLine(); ImGui::BeginDisabled(!inspection);
+        if(icon_button("Inspector","",Icon::Inspect,{36*s,layout.control_height},"Show selected-object details"))
+        { draft.panels.inspector=!draft.panels.inspector; draft.panel_changed=true; }
+        result.inspector_toggle=center(); ImGui::EndDisabled();
+        if(width/s>850)
+        {
+            ImGui::SameLine(width-168*s);
+            const auto* action=draft.panels.mode==ApplicationMode::Editor?"Add candidate":draft.panels.mode==ApplicationMode::Analysis?"Preview result":draft.viewing_baseline?"Frame warehouse":"Return baseline";
+            ImGui::BeginDisabled(draft.panels.mode==ApplicationMode::Analysis && !draft.results_available);
+            if(ImGui::Button(action,{150*s,layout.control_height})) draft.context_action=true;
+            result.context_action=center();
+            tooltip(draft.panels.mode==ApplicationMode::Editor?"Validate and add the draft as a named alternative":draft.panels.mode==ApplicationMode::Analysis?draft.results_available?"Open the selected result as a read-only warehouse":"Add a candidate in Scenario Editor and run a comparison first":draft.viewing_baseline?"Fit the current warehouse to the viewport (F)":"Return to the preserved baseline, including its time and camera");
+            ImGui::EndDisabled();
+        }
     }
-    else { ImGui::SameLine(); Font font{design::label}; ImGui::TextColored(color(accent),"%s",status_label(status).data()); tooltip(v.name().c_str()); }
     ImGui::End(); ImGui::PopStyleVar();
+    if(layout.workspace_overlay) return result;
     const auto inspect = [&]
     {
         if (!inspection) return;
@@ -336,12 +356,35 @@ DashboardFrame draw_dashboard(const simforge::viewer::ViewerController& v, Dashb
     ImGui::End();
     auto* draw = ImGui::GetForegroundDrawList(); const auto p = layout.viewport.origin, end = p+layout.viewport.size;
     draw->PushClipRect({p.x,p.y},{end.x,end.y});
-    if (v.result_preview())
-    { Font font{design::heading}; draw->AddText(ImGui::GetFont(),ImGui::GetFontSize(),{p.x+16*s,p.y+40*s},packed(design::completed),"Final result preview - return to baseline for playback"); }
+    { Font font{design::label}; draw->AddText(ImGui::GetFont(),ImGui::GetFontSize(),{p.x+16*s,p.y+12*s},packed(design::secondary),
+        v.result_preview()?"FINAL RESULT / READ ONLY":draft.viewing_baseline?"BASELINE / LIVE SIMULATION":"DRAFT / INDEPENDENT RUN"); }
+    const auto label_at=[&](glm::vec3 position,const std::string& caption)
+    {
+        auto point=v.orbit_camera().camera().view_projection()*glm::vec4{position,1};
+        if(point.w<=0) return; point/=point.w;
+        if(point.z<=0 || point.z>=1) return;
+        const ImVec2 at{p.x+(point.x+1)*layout.viewport.size.x*0.5f,p.y+(point.y+1)*layout.viewport.size.y*0.5f};
+        Font font{design::label}; const auto size=ImGui::CalcTextSize(caption.c_str());
+        draw->AddRectFilled({at.x-7*s,at.y-4*s},{at.x+size.x+7*s,at.y+size.y+4*s},packed(design::navy),5*s);
+        draw->AddText(ImGui::GetFont(),ImGui::GetFontSize(),at,packed(design::secondary),caption.c_str());
+    };
+    if(layout.viewport.size.x/s>=500)
+    {
+        using Zone=visualization::WarehouseZoneKind;
+        for(const auto& zone:v.scene().layout().zones)
+        {
+            std::string caption;
+            if(zone.kind==Zone::Docks) caption="LOADING  "+std::to_string(state.usage.loading_bays)+" / "+std::to_string(state.capacity.loading_bays);
+            else if(zone.kind==Zone::Storage) caption="STORAGE";
+            else if(zone.kind==Zone::Cargo) caption="FIFO QUEUE  "+std::to_string(m.waiting);
+            else continue;
+            label_at({zone.bounds.minimum.x+0.4f,0.06f,zone.bounds.maximum.z-0.2f},caption);
+        }
+    }
     if (layout.viewport.size.x/s >= 600)
     {
         Font font{design::label};
-        draw->AddText(ImGui::GetFont(),ImGui::GetFontSize(),{p.x+16*s,p.y+12*s},packed(design::secondary),"Orbit: drag   Inspect: click   Pan: middle drag   Zoom: wheel");
+        draw->AddText(ImGui::GetFont(),ImGui::GetFontSize(),{p.x+16*s,end.y-24*s},packed(design::secondary),"Drag to orbit  /  Click to inspect  /  Wheel to zoom  /  F to frame");
     }
     if (!draft.feedback.empty() && !draft.feedback_error)
     {

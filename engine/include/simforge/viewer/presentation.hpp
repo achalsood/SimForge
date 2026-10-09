@@ -1,18 +1,17 @@
 #pragma once
 #include <simforge/viewer/viewer.hpp>
 #include <string_view>
+#include <simforge/visualization/design_palette.hpp>
 
 namespace simforge::viewer
 {
 namespace design
 {
-inline constexpr float body = 16, label = 14, heading = 18, metric = 24;
-inline constexpr float gap = 10, padding = 16, control_height = 36, corner = 5;
-inline constexpr glm::vec3 text{0.90f,0.94f,0.98f}, secondary{0.56f,0.65f,0.73f};
-inline constexpr glm::vec3 navy{0.008f,0.014f,0.025f}, panel{0.014f,0.023f,0.036f}, border{0.055f,0.085f,0.12f};
-inline constexpr glm::vec3 waiting{1.0f,0.57f,0.075f}, processing{0.07f,0.58f,1.0f}, completed{0.10f,0.72f,0.46f};
-inline constexpr glm::vec3 idle{0.34f,0.40f,0.47f}, selected{1.0f,0.76f,0.28f}, error{1.0f,0.20f,0.16f};
+using namespace simforge::visualization::design;
+inline constexpr float body = 14, label = 12, heading = 18, metric = 28;
+inline constexpr float gap = 10, padding = 18, control_height = 36, corner = 7;
 }
+enum class ApplicationMode { Simulation, Editor, Analysis };
 struct Rect
 {
     glm::vec2 origin{0}, size{0};
@@ -22,6 +21,7 @@ struct PanelPreferences
 {
     bool metrics{true}, inspector{true}, metrics_explicit{false}, focus{false};
     bool workspace{false};
+    ApplicationMode mode{ApplicationMode::Simulation};
 };
 struct DashboardLayout
 {

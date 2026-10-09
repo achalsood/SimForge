@@ -10,10 +10,10 @@
 namespace simforge::renderer
 {
 // Defined GPU vertex ABI, not a persistent/raw simulation serialization format.
-struct Vertex { std::array<float,3> position, color; };
+struct Vertex { std::array<float,3> position, color, normal; float state_weight{1}; };
 static_assert(std::is_standard_layout_v<Vertex> && std::is_trivially_copyable_v<Vertex>);
 static_assert(sizeof(float) == 4 && std::numeric_limits<float>::is_iec559);
-static_assert(sizeof(Vertex) == 24 && offsetof(Vertex,position) == 0 && offsetof(Vertex,color) == 12);
+static_assert(sizeof(Vertex) == 40 && offsetof(Vertex,position) == 0 && offsetof(Vertex,color) == 12 && offsetof(Vertex,normal) == 24 && offsetof(Vertex,state_weight) == 36);
 static_assert(sizeof(std::uint32_t) == 4);
 struct MeshGeometry { std::vector<Vertex> vertices; std::vector<std::uint32_t> indices; };
 [[nodiscard]] MeshGeometry make_cube(); // Unit cube centered at origin, outward CCW faces.

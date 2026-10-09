@@ -112,25 +112,22 @@ void geometry()
     {
         const auto id = static_cast<renderer::MeshId>(value);
         const auto mesh = renderer::make_builtin_mesh(id), repeat = renderer::make_builtin_mesh(id);
-        check(!mesh.vertices.empty() && mesh.vertices.size()%24 == 0 && mesh.indices.size() == mesh.vertices.size()/24*36);
+        check(!mesh.vertices.empty() && mesh.indices.size()%3 == 0);
         check(mesh.indices == repeat.indices && mesh.vertices.size() == repeat.vertices.size());
         for (std::size_t i = 0; i < mesh.vertices.size(); ++i)
         {
-            const auto& vertex = mesh.vertices[i]; check(vertex.position == repeat.vertices[i].position && vertex.color == repeat.vertices[i].color);
+            const auto& vertex = mesh.vertices[i]; check(vertex.position == repeat.vertices[i].position && vertex.color == repeat.vertices[i].color && vertex.normal == repeat.vertices[i].normal);
             for (auto p : vertex.position) check(std::isfinite(p));
             for (auto c : vertex.color) check(std::isfinite(c) && c >= 0 && c <= 1);
         }
-        for (std::size_t part = 0; part < mesh.vertices.size()/24; ++part)
+        for (std::size_t t=0;t<mesh.indices.size();t+=3)
         {
-            glm::vec3 center{0};
-            for (std::size_t v = 0; v < 24; ++v) { const auto& p = mesh.vertices[part*24+v].position; center += glm::vec3{p[0],p[1],p[2]}/24.0f; }
-            for (std::size_t t = 0; t < 36; t += 3)
-            {
-                std::array<glm::vec3,3> points;
-                for (std::size_t k = 0; k < 3; ++k)
-                { const auto index = mesh.indices[part*36+t+k]; check(index < mesh.vertices.size()); const auto& p = mesh.vertices[index].position; points[k] = {p[0],p[1],p[2]}; }
-                check(glm::dot(glm::cross(points[1]-points[0],points[2]-points[0]),(points[0]+points[1]+points[2])/3.0f-center) > 0);
-            }
+            std::array<glm::vec3,3> points;
+            for(std::size_t k=0;k<3;++k)
+            { const auto index=mesh.indices[t+k]; check(index<mesh.vertices.size()); const auto& v=mesh.vertices[index]; points[k]={v.position[0],v.position[1],v.position[2]};
+              const glm::vec3 n{v.normal[0],v.normal[1],v.normal[2]}; check(std::abs(glm::length(n)-1)<1e-5f); }
+            const auto& v=mesh.vertices[mesh.indices[t]]; const glm::vec3 n{v.normal[0],v.normal[1],v.normal[2]};
+            check(glm::dot(glm::cross(points[1]-points[0],points[2]-points[0]),n)>0);
         }
     }
     const auto layout = build_warehouse_layout(definition(3,10,2));

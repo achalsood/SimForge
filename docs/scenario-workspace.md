@@ -1,5 +1,7 @@
 # Scenario editing and comparison workspace
 
+**Current presentation:** Commit #18 adds Simulation, Scenario Editor and Analysis modes, full-width workspace pages, directional lighting and Windows report Save As. See [visual design](visual-design.md) for current controls, screenshots and validation. Historical measurements below describe the milestone that introduced each feature.
+
 Commit #17 adds a graphical experiment workflow over the existing scenario,
 warehouse, snapshot and analysis APIs. It introduces no new simulation rules,
 renderer, domain, AI, physics or transport model.
@@ -13,8 +15,8 @@ so this also works when launched outside the repository directory. A different
 warehouse can be opened by entering its full path. Invalid files leave the demo
 running and show the error. No native file-picker dependency was added.
 
-The existing `--scenario FILE --live` route remains supported. Click the fourth
-header icon to open the workspace. The earlier metrics/focus/inspector controls,
+The existing `--scenario FILE --live` route remains supported. Click **Scenario Editor** in the
+header to open the workspace. The earlier metrics/focus/inspector controls,
 keyboard shortcuts, timeline, static warehouse and cube graphics smoke remain.
 
 1. Open `warehouse-baseline.json`. Pause if you want to choose an exact checkpoint.
@@ -25,7 +27,7 @@ keyboard shortcuts, timeline, static warehouse and cube graphics smoke remain.
    also **Save as new scenario** to an explicit new filename.
 4. In **Candidates**, choose **Run independent scenarios from start** and
    **Maximize completed shipments**, then **Run comparison**.
-5. **Results** shows baseline 63 completed/32 waiting and this initial candidate
+5. **Analysis** shows baseline 63 completed/32 waiting and this initial candidate
    94 completed/0 waiting over eight simulated hours. Throughput changes from
    7.875 to 11.75 shipments/hour; completion change is +31 (+49.2%). The UI rounds
    derived values to one decimal; exports retain full precision.

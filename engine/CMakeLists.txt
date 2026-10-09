@@ -58,7 +58,7 @@ add_library(simforge_visualization STATIC src/visualization/warehouse_layout.cpp
 add_library(simforge_viewer STATIC src/viewer/viewer.cpp src/viewer/presentation.cpp)
 target_link_libraries(simforge_viewer PUBLIC simforge_visualization)
 target_compile_features(simforge_viewer PUBLIC cxx_std_23)
-add_library(simforge_workspace STATIC src/workspace/scenario_workspace.cpp)
+add_library(simforge_workspace STATIC src/workspace/scenario_workspace.cpp src/workspace/presentation.cpp)
 target_link_libraries(simforge_workspace PUBLIC simforge_viewer simforge_analysis PRIVATE nlohmann_json::nlohmann_json)
 target_compile_features(simforge_workspace PUBLIC cxx_std_23)
 if(MSVC)

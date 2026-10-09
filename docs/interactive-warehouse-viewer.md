@@ -1,5 +1,7 @@
 # Interactive Warehouse Viewer
 
+**Current presentation:** Commit #18 adds Simulation, Scenario Editor and Analysis modes, full-width workspace pages, directional lighting and Windows report Save As. See [visual design](visual-design.md) for current controls, screenshots and validation. Historical measurements below describe the milestone that introduced each feature.
+
 Commit #17 adds the [scenario editing/comparison workspace](scenario-workspace.md).
 The guidance and performance below record the Commit #16 presentation milestone;
 the workspace guide contains current 219-test results, editing/comparison semantics

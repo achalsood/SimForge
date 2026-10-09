@@ -1,6 +1,7 @@
 #include <simforge/renderer/geometry.hpp>
 #include <cmath>
 #include <stdexcept>
+#include <glm/geometric.hpp>
 
 namespace simforge::renderer
 {
@@ -10,20 +11,21 @@ void quad(MeshGeometry& mesh, std::array<float,3> a, std::array<float,3> b,
     std::array<float,3> c, std::array<float,3> d, std::array<float,3> color)
 {
     const auto start = static_cast<std::uint32_t>(mesh.vertices.size());
-    for (auto position : {a,b,c,d}) mesh.vertices.push_back({position,color});
+    const auto n = glm::normalize(glm::cross(glm::vec3{b[0]-a[0],b[1]-a[1],b[2]-a[2]},glm::vec3{c[0]-a[0],c[1]-a[1],c[2]-a[2]}));
+    for (auto position : {a,b,c,d}) mesh.vertices.push_back({position,color,{n.x,n.y,n.z}});
     for (auto index : {0u,1u,2u,2u,3u,0u}) mesh.indices.push_back(start+index);
 }
 }
 MeshGeometry make_cube()
 {
     MeshGeometry mesh; mesh.vertices.reserve(24); mesh.indices.reserve(36);
-    // Face shades are baked vertex colors, not a lighting system.
-    quad(mesh,{-0.5f,-0.5f,0.5f},{0.5f,-0.5f,0.5f},{0.5f,0.5f,0.5f},{-0.5f,0.5f,0.5f},{0.82f,0.82f,0.82f});
-    quad(mesh,{0.5f,-0.5f,-0.5f},{-0.5f,-0.5f,-0.5f},{-0.5f,0.5f,-0.5f},{0.5f,0.5f,-0.5f},{0.65f,0.65f,0.65f});
-    quad(mesh,{0.5f,-0.5f,0.5f},{0.5f,-0.5f,-0.5f},{0.5f,0.5f,-0.5f},{0.5f,0.5f,0.5f},{0.68f,0.68f,0.68f});
-    quad(mesh,{-0.5f,-0.5f,-0.5f},{-0.5f,-0.5f,0.5f},{-0.5f,0.5f,0.5f},{-0.5f,0.5f,-0.5f},{0.75f,0.75f,0.75f});
+    // Shared neutral material; world-space normals drive directional shading.
+    quad(mesh,{-0.5f,-0.5f,0.5f},{0.5f,-0.5f,0.5f},{0.5f,0.5f,0.5f},{-0.5f,0.5f,0.5f},{1,1,1});
+    quad(mesh,{0.5f,-0.5f,-0.5f},{-0.5f,-0.5f,-0.5f},{-0.5f,0.5f,-0.5f},{0.5f,0.5f,-0.5f},{1,1,1});
+    quad(mesh,{0.5f,-0.5f,0.5f},{0.5f,-0.5f,-0.5f},{0.5f,0.5f,-0.5f},{0.5f,0.5f,0.5f},{1,1,1});
+    quad(mesh,{-0.5f,-0.5f,-0.5f},{-0.5f,-0.5f,0.5f},{-0.5f,0.5f,0.5f},{-0.5f,0.5f,-0.5f},{1,1,1});
     quad(mesh,{-0.5f,0.5f,0.5f},{0.5f,0.5f,0.5f},{0.5f,0.5f,-0.5f},{-0.5f,0.5f,-0.5f},{1,1,1});
-    quad(mesh,{-0.5f,-0.5f,-0.5f},{0.5f,-0.5f,-0.5f},{0.5f,-0.5f,0.5f},{-0.5f,-0.5f,0.5f},{0.55f,0.55f,0.55f});
+    quad(mesh,{-0.5f,-0.5f,-0.5f},{0.5f,-0.5f,-0.5f},{0.5f,-0.5f,0.5f},{-0.5f,-0.5f,0.5f},{1,1,1});
     return mesh;
 }
 MeshGeometry make_floor()

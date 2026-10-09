@@ -37,7 +37,7 @@ WarehouseLayout build_warehouse_layout(const scenario::ScenarioDefinition& defin
     const float middle_back = docks.depth+4, middle_depth = std::max(storage.depth,cargo.depth);
     const float front_back = middle_back+middle_depth+4, front_depth = std::max(forklifts.depth,workers.depth);
     const float depth = front_back+front_depth;
-    WarehouseLayout result; result.bounds = {{-2,-0.1f,-2},{width+2,4.0f,depth+2}};
+    WarehouseLayout result; result.bounds = {{-2,-0.35f,-2},{width+2,4.0f,depth+2}};
     auto zone = [&](WarehouseZoneKind kind, float x, float z, float w, float d)
     { result.zones.push_back({kind,{{x,0,z},{x+w,4,z+d}}}); };
     zone(WarehouseZoneKind::Docks,0,0,width,docks.depth);
@@ -57,10 +57,17 @@ WarehouseLayout build_warehouse_layout(const scenario::ScenarioDefinition& defin
             {p+local_min*s,p+local_max*s}});
     };
     using Kind = WarehouseVisualKind; using Mesh = renderer::MeshId;
-    object(Kind::Floor,Mesh::Floor,{width/2,0,depth/2},{width+4,1,depth+4},{0.10f,0.13f,0.16f},{-0.5f,0,-0.5f},{0.5f,0,0.5f});
+    object(Kind::Floor,Mesh::Cube,{width/2,-0.18f,depth/2},{width+4,0.30f,depth+4},{0.17f,0.22f,0.28f},{-0.5f,-0.5f,-0.5f},{0.5f,0.5f,0.5f});
+    // Open cutaway boundary: no roof, no operational collision or timing model.
+    object(Kind::FloorMarking,Mesh::Cube,{width/2,0.40f,-1.80f},{width+4,0.80f,0.25f},{0.37f,0.44f,0.52f},{-0.5f,-0.5f,-0.5f},{0.5f,0.5f,0.5f});
+    object(Kind::FloorMarking,Mesh::Cube,{-1.80f,0.40f,depth/2},{0.25f,0.80f,depth+3.5f},{0.37f,0.44f,0.52f},{-0.5f,-0.5f,-0.5f},{0.5f,0.5f,0.5f});
+    object(Kind::FloorMarking,Mesh::Cube,{width/2,1.65f,-1.84f},{width+3.5f,3.3f,0.15f},{0.29f,0.36f,0.44f},{-0.5f,-0.5f,-0.5f},{0.5f,0.5f,0.5f});
+    for(float x:{-1.75f,width+1.75f})
+        object(Kind::FloorMarking,Mesh::Cube,{x,1.85f,-1.70f},{0.22f,3.7f,0.22f},{0.52f,0.58f,0.64f},{-0.5f,-0.5f,-0.5f},{0.5f,0.5f,0.5f});
+    object(Kind::FloorMarking,Mesh::Cube,{width/2,3.65f,-1.70f},{width+3.72f,0.15f,0.22f},{0.44f,0.51f,0.60f},{-0.5f,-0.5f,-0.5f},{0.5f,0.5f,0.5f});
     for (float x = 0; x <= width; x += 4)
         object(Kind::FloorMarking,Mesh::Floor,{x,0.002f,depth/2},{0.018f,1,depth+4},
-            {0.14f,0.17f,0.20f},{-0.5f,0,-0.5f},{0.5f,0,0.5f});
+            {0.19f,0.24f,0.30f},{-0.5f,0,-0.5f},{0.5f,0,0.5f});
     for (float z = 0; z <= depth; z += 4)
         object(Kind::FloorMarking,Mesh::Floor,{width/2,0.003f,z},{width+4,1,0.018f},
             {0.14f,0.17f,0.20f},{-0.5f,0,-0.5f},{0.5f,0,0.5f});
@@ -73,7 +80,7 @@ WarehouseLayout build_warehouse_layout(const scenario::ScenarioDefinition& defin
         if (!aisle)
         {
             object(Kind::FloorMarking,Mesh::Floor,{center.x,0.006f,center.z},{size.x-0.16f,1,size.z-0.16f},
-                {0.12f,0.17f,0.20f},{-0.5f,0,-0.5f},{0.5f,0,0.5f});
+                region.kind==WarehouseZoneKind::Cargo?glm::vec3{0.21f,0.23f,0.24f}:glm::vec3{0.18f,0.23f,0.28f},{-0.5f,0,-0.5f},{0.5f,0,0.5f});
             for (float x : {region.bounds.minimum.x+0.05f,region.bounds.maximum.x-0.05f})
                 object(Kind::FloorMarking,Mesh::Floor,{x,0.012f,center.z},{0.07f,1,size.z},
                     {0.66f,0.48f,0.10f},{-0.5f,0,-0.5f},{0.5f,0,0.5f});

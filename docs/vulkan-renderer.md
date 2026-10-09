@@ -1,5 +1,7 @@
 # Vulkan renderer foundation
 
+**Current presentation:** Commit #18 adds Simulation, Scenario Editor and Analysis modes, full-width workspace pages, directional lighting and Windows report Save As. See [visual design](visual-design.md) for current controls, screenshots and validation. Historical measurements below describe the milestone that introduced each feature.
+
 This document records the renderer foundation and its historical validation.
 The current live viewer includes scenario-driven warehouses, camera interaction,
 selection and the refined operational dashboard. See the

@@ -12,7 +12,8 @@ struct DashboardFrame
     glm::vec2 play{}, step{}, reset{}, speed{};
     glm::vec2 timeline_min{}, timeline_max{};
     glm::vec2 metrics_toggle{}, inspector_toggle{}, focus_toggle{};
-    glm::vec2 workspace_toggle{};
+    glm::vec2 workspace_toggle{}, simulation_mode{}, analysis_mode{};
+    glm::vec2 context_action{};
     simforge::viewer::DashboardLayout layout;
 };
 void style_dashboard(float scale = 1);
@@ -23,6 +24,9 @@ struct DashboardState
     float scale{1};
     bool panel_changed{false}, select_inspector_tab{false}, feedback_error{false};
     bool workspace_changed{false};
+    bool context_action{false};
+    bool results_available{false};
+    bool viewing_baseline{true};
     std::optional<simforge::viewer::VisualKey> last_selection;
     std::string feedback;
     bool custom_requested{false};

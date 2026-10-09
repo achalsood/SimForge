@@ -214,3 +214,9 @@ foreach(case empty valid invalid fields revert save file_safety run duplicate re
     checkpoint initial intervals compatibility reductions determinism order ranking bottleneck undefined checkpoint_zero cache visualization export export_failure tamper randomized load layout)
     add_test(NAME simforge_workspace_${case} COMMAND simforge_workspace_test ${case})
 endforeach()
+
+add_executable(simforge_visual_design_test visual_design_test.cpp)
+target_link_libraries(simforge_visual_design_test PRIVATE simforge_workspace)
+foreach(case modes responsive navigation fields bars undefined results evidence normals normal_transform capture)
+    add_test(NAME simforge_design_${case} COMMAND simforge_visual_design_test ${case})
+endforeach()

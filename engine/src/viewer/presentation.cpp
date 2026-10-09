@@ -16,23 +16,24 @@ DashboardLayout dashboard_layout(glm::vec2 surface, glm::vec2 framebuffer_scale,
         throw std::invalid_argument("Dashboard requires 640x480 or larger and UI scale in [1,2]");
     DashboardLayout layout; layout.scale = scale; layout.compact = surface.x/scale < 850 || surface.y < 650;
     layout.gap = design::gap*scale; layout.padding = design::padding*scale; layout.control_height = design::control_height*scale;
-    const float header = (layout.compact ? 48 : 56)*scale;
+    if (panels.mode != ApplicationMode::Simulation && panels.mode != ApplicationMode::Editor && panels.mode != ApplicationMode::Analysis)
+        throw std::invalid_argument("Unknown application mode");
+    const float header = (layout.compact ? 80 : 82)*scale;
     const float footer = ((layout.compact ? 132 : 96)+(feedback_error ? 22 : 0))*scale;
     const float middle = surface.y-header-footer;
     const bool metrics = !panels.focus && panels.metrics && (!layout.compact || panels.metrics_explicit);
     layout.metrics_visible = metrics;
     const bool inspector = !panels.focus && panels.inspector && selected;
     layout.shared_inspector = inspector && (surface.x < 1600 || surface.x/scale < 1200);
-    const float left = panels.workspace && !panels.focus ? std::min(440*scale,surface.x*0.48f) :
-        metrics || layout.shared_inspector ? std::min(276*scale,surface.x*(layout.compact ? 0.40f : 0.25f)) : 0;
+    const float left = metrics || layout.shared_inspector ? std::min(276*scale,surface.x*(layout.compact ? 0.40f : 0.25f)) : 0;
     const float right = inspector && !layout.shared_inspector ? 312*scale : 0;
     layout.header = {{0,0},{surface.x,header}};
     layout.playback = {{0,surface.y-footer},{surface.x,footer}};
     layout.metrics = {{0,header},{left,middle}};
     layout.workspace = layout.metrics;
-    // At the smallest window/highest scale, an editor page needs more height
-    // than the scene sidebar can offer. The header toggle remains accessible.
-    layout.workspace_overlay = panels.workspace && !panels.focus && middle/scale < 100;
+    // Editor and Analysis are full application pages. Keep a valid underlying
+    // scene viewport for camera continuity; UI capture covers the whole page.
+    layout.workspace_overlay = panels.workspace || panels.mode != ApplicationMode::Simulation;
     if(layout.workspace_overlay) layout.workspace = {{0,header},{surface.x,surface.y-header}};
     layout.inspector = {{layout.shared_inspector ? 0 : surface.x-right,header},{layout.shared_inspector ? left : right,middle}};
     layout.viewport = {{left,header},{surface.x-left-right,middle},framebuffer_scale};

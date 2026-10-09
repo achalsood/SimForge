@@ -105,6 +105,7 @@ struct Renderer::Impl
                 IMGUI_CHECKVERSION(); ui_context = ImGui::CreateContext();
                 ImGui::SetCurrentContext(ui_context);
                 ImGui::GetIO().IniFilename = nullptr; ImGui::GetIO().LogFilename = nullptr;
+                ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
                 ImFontConfig font_config; font_config.FontDataOwnedByAtlas = false;
                 auto* atlas = ImGui::GetIO().Fonts; atlas->TexMinWidth = atlas->TexMinHeight = 1024;
                 if (!atlas->AddFontFromMemoryTTF(const_cast<unsigned char*>(detail::viewer_font),sizeof(detail::viewer_font),18,&font_config))

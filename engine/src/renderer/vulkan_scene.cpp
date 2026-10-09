@@ -6,13 +6,15 @@
 #include <array>
 #include <chrono>
 #include <algorithm>
+#include <cmath>
+#include <glm/matrix.hpp>
 
 namespace simforge::renderer::detail
 {
 namespace
 {
-struct alignas(16) DrawConstants { std::array<float,16> mvp; std::array<float,4> tint; };
-static_assert(sizeof(DrawConstants) == 80 && offsetof(DrawConstants,tint) == 64);
+struct alignas(16) DrawConstants { std::array<float,16> mvp; std::array<float,12> normal; std::array<float,4> tint; };
+static_assert(sizeof(DrawConstants) == 128 && offsetof(DrawConstants,normal) == 64 && offsetof(DrawConstants,tint) == 112);
 VkShaderModule shader(VkDevice device, std::span<const std::uint32_t> words)
 {
     VkShaderModuleCreateInfo info{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
@@ -45,7 +47,7 @@ VulkanScene::VulkanScene(const VulkanDevice& device) : device_{device}
         const VkPushConstantRange push{VK_SHADER_STAGE_VERTEX_BIT,0,sizeof(DrawConstants)};
         VkPipelineLayoutCreateInfo layout{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
         layout.pushConstantRangeCount = 1; layout.pPushConstantRanges = &push;
-        check(vkCreatePipelineLayout(device.handle(),&layout,nullptr,&layout_),"Create 80-byte scene push-constant layout");
+        check(vkCreatePipelineLayout(device.handle(),&layout,nullptr,&layout_),"Create 128-byte scene push-constant layout");
     }
     catch (...) { destroy(); throw; }
 }
@@ -63,7 +65,9 @@ void VulkanScene::ensure_pipeline(VkRenderPass pass, PipelineSignature signature
     stages[1].pSpecializationInfo = &specialization;
     const VkVertexInputBindingDescription binding{0,sizeof(Vertex),VK_VERTEX_INPUT_RATE_VERTEX};
     const std::array attributes{VkVertexInputAttributeDescription{0,0,VK_FORMAT_R32G32B32_SFLOAT,offsetof(Vertex,position)},
-        VkVertexInputAttributeDescription{1,0,VK_FORMAT_R32G32B32_SFLOAT,offsetof(Vertex,color)}};
+        VkVertexInputAttributeDescription{1,0,VK_FORMAT_R32G32B32_SFLOAT,offsetof(Vertex,color)},
+        VkVertexInputAttributeDescription{2,0,VK_FORMAT_R32G32B32_SFLOAT,offsetof(Vertex,normal)},
+        VkVertexInputAttributeDescription{3,0,VK_FORMAT_R32_SFLOAT,offsetof(Vertex,state_weight)}};
     VkPipelineVertexInputStateCreateInfo vertex{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
     vertex.vertexBindingDescriptionCount = 1; vertex.pVertexBindingDescriptions = &binding;
     vertex.vertexAttributeDescriptionCount = static_cast<std::uint32_t>(attributes.size()); vertex.pVertexAttributeDescriptions = attributes.data();
@@ -120,6 +124,12 @@ DrawCounts VulkanScene::record(VkCommandBuffer command, VkExtent2D extent, const
         DrawConstants push{};
         for (int col = 0; col < 4; ++col) for (int row = 0; row < 4; ++row) push.mvp[col*4+row] = matrix[col][row];
         push.tint = {object.color.x,object.color.y,object.color.z,object.neutral_material ? 1.0f : 0.0f};
+        const auto normal = glm::transpose(glm::inverse(glm::mat3{object.transform.matrix()}));
+        for(int col=0;col<3;++col) for(int row=0;row<3;++row)
+        {
+            if(!std::isfinite(normal[col][row])) throw std::invalid_argument("Drawable normal matrix overflow");
+            push.normal[col*4+row]=normal[col][row];
+        }
         vkCmdPushConstants(command,layout_,VK_SHADER_STAGE_VERTEX_BIT,0,sizeof(push),&push);
         vkCmdDrawIndexed(command,range.count,1,range.first_index,range.vertex_offset,0);
         ++counts.calls; counts.vertices += range.vertices; counts.indices += range.count;

@@ -18,7 +18,7 @@ struct RenderObject
     MeshId mesh{MeshId::Cube};
     RenderTransform transform;
     glm::vec3 color{1.0f}; // Linear RGB in [0,1]; opaque.
-    bool neutral_material{false}; // Retain baked vertex luminance, replace its hue with color.
+    bool neutral_material{false}; // Replace material hue with state color; tagged safety accents retain their hue.
 };
 struct RenderFrameData
 {
