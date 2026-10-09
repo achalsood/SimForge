@@ -1,7 +1,7 @@
 #pragma once
 #include "dashboard.hpp"
 #include <simforge/workspace/scenario_workspace.hpp>
-enum class WorkspaceAction { Validate, Revert, Open, Save, Run, Add, Edit, Update, Rename, Duplicate, Remove, Restore, Compare, View, Baseline, Json, Csv };
+enum class WorkspaceAction { Validate, Revert, Open, Save, Run, Add, Edit, Update, Rename, Duplicate, Remove, Restore, Compare, Cancel, View, Baseline, Json, Csv };
 struct WorkspaceCommand
 {
     WorkspaceAction action;
@@ -24,6 +24,7 @@ struct WorkspaceUI
     bool current_checkpoint{true}; std::string checkpoint_seconds{"7200"};
     glm::vec2 name_field{}, forklift_field{}, validate{}, add{}, compare{}, candidate_view{}, baseline_view{};
     glm::vec2 probe_toggle{};
+    glm::vec2 cancel_experiment{};
     glm::vec2 editor_compare{};
     glm::vec2 export_field{}, export_json{}, export_csv{};
     double results_ui_us{0}; std::uint64_t results_frames{0};

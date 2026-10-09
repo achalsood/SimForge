@@ -72,6 +72,7 @@ See the [interactive viewer guide, screenshots and validation](docs/interactive-
 The [scenario workspace](docs/scenario-workspace.md) now supports in-window initial
 configuration editing, validated alternatives, independent or shared-checkpoint
 comparisons, controlled bottleneck evidence, result previews and JSON/CSV export.
+Comparisons now run on a bounded background worker with genuine progress, cooperative cancellation and preserved reports. See [asynchronous experiments](docs/async-experiments.md).
 The visual workspace provides persistent **Simulation / Scenario Editor / Analysis** modes, full-width editing and results, measured KPI deltas and comparison bars, Windows report Save As, and normal-based directional lighting on reusable industrial meshes. See the [visual design guide and verified screenshots](docs/visual-design.md).
 See [live visualization, timing, metrics and verified captures](docs/live-warehouse-visualization.md).
 GPU resources remain separate from simulation. See [renderer architecture and setup](docs/vulkan-renderer.md)

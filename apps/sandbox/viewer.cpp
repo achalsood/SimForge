@@ -1,6 +1,7 @@
 #include "viewer.hpp"
 #include "dashboard.hpp"
 #include "workspace_panel.hpp"
+#include <simforge/workspace/experiment_execution.hpp>
 #include "capture.hpp"
 #include <simforge/platform/window.hpp>
 #include <simforge/renderer/renderer.hpp>
@@ -8,6 +9,7 @@
 #include <imgui.h>
 #include <algorithm>
 #include <chrono>
+#include <condition_variable>
 #include <fstream>
 #include <iostream>
 #include <thread>
@@ -17,6 +19,28 @@ namespace
 {
 using namespace simforge;
 using Clock = std::chrono::steady_clock;
+// Opt-in graphics diagnostics hold actual work at a checkpoint, with no production delay.
+struct ExperimentGate
+{
+    std::mutex mutex;
+    std::condition_variable cv;
+    bool reached{false}, released{false};
+    std::string target_phase{"Evaluating candidate"};
+    void checkpoint(std::string_view phase)
+    {
+        if (phase != target_phase) return;
+        std::unique_lock lock{mutex}; if (reached) return;
+        reached = true; cv.notify_all();
+        if (!cv.wait_for(lock,std::chrono::seconds{10},[&]{ return released; })) throw std::runtime_error("Graphics experiment gate timed out");
+    }
+    void wait()
+    {
+        std::unique_lock lock{mutex};
+        if (!cv.wait_for(lock,std::chrono::seconds{10},[&]{return reached;})) throw std::runtime_error("Graphics worker did not reach candidate");
+    }
+    void release() { std::lock_guard lock{mutex}; released=true; cv.notify_all(); }
+    ~ExperimentGate() { release(); }
+};
 void require(bool condition, const char* message) { if (!condition) throw std::runtime_error(message); }
 std::filesystem::path capture_path(const std::filesystem::path& base, const char* suffix)
 { return base.parent_path()/(base.stem().string()+"-"+suffix+base.extension().string()); }
@@ -96,7 +120,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
     {
         if (!smoke_frames) throw std::invalid_argument("Viewer capture requires graphics smoke");
         if (std::filesystem::exists(*capture_output)) throw std::invalid_argument("Viewer capture output already exists");
-        for (const char* suffix : {"overview","queue","selected","paused","queue-buildup","final","collapsed","focus","inspector-collapsed","size-640","size-800","size-1024","size-1280","size-1600","size-1920","dpi-100","dpi-125","dpi-150","dpi-200","workspace-editor","workspace-invalid","workspace-candidates","workspace-results","workspace-candidate","workspace-inspector","workspace-probes","workspace-checkpoint","workspace-compact","workspace-dpi200"})
+        for (const char* suffix : {"overview","queue","selected","paused","queue-buildup","final","collapsed","focus","inspector-collapsed","size-640","size-800","size-1024","size-1280","size-1600","size-1920","dpi-100","dpi-125","dpi-150","dpi-200","workspace-editor","workspace-invalid","workspace-candidates","workspace-results","workspace-running","workspace-cancelled","workspace-candidate","workspace-inspector","workspace-probes","workspace-checkpoint","workspace-compact","workspace-dpi200"})
             if (std::filesystem::exists(capture_path(*capture_output,suffix))) throw std::invalid_argument("Viewer capture output already exists");
         for (const auto* extension : {"-comparison.json","-comparison.csv"})
             if (std::filesystem::exists(capture_output->parent_path()/(capture_output->stem().string()+extension)))
@@ -127,6 +151,13 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         std::vector<viewer::InputEvent> events;
         window.poll_events([&](const SDL_Event& e){ graphics.process_ui_event(e); if (const auto converted = input(e,id)) events.push_back(*converted); });
         if (!window.is_open()) return false;
+        const bool preview_before_publication=workspace.view().result_preview();
+        if (workspace.poll_experiment()) {
+            if (preview_before_publication) pending.clear(); // Prior-preview controls must not cross the scene switch.
+            workspace_ui.result_order=workspace.report()->ranking;
+            for (const auto& r:workspace.report()->candidates) if (!r.rank) workspace_ui.result_order.push_back(r.candidate.name);
+            workspace_ui.result_name=workspace.report()->ranking.empty()?"Baseline":workspace.report()->ranking.front();
+        }
         const bool workspace_commands = !workspace_ui.pending.empty() || workspace_ui.dialog_used;
         workspace_ui.dialog_used=false;
         for (const auto& c : workspace_ui.pending)
@@ -406,9 +437,66 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         workspace_ui.scroll_target = 10; submit(); submit(); click(workspace_ui.add);
         require(workspace.candidates().size() == 1,"Injected candidate creation failed");
         workspace_ui.requested_tab = 1; workspace_ui.scroll_target = 11; submit(); submit(); submit();
-        capture("workspace-candidates"); click(workspace_ui.compare); submit();
+        const auto wait_experiment = [&] {
+            const auto deadline=Clock::now()+std::chrono::seconds{10};
+            while (workspace.execution().progress().active()) { require(Clock::now()<deadline,"Async graphical experiment timed out"); submit(); }
+            submit(); require(workspace.execution().progress().state==workspace::ExecutionState::Completed,"Async graphical experiment failed");
+        };
+        capture("workspace-candidates"); click(workspace_ui.compare); submit(); wait_experiment();
         if (!workspace.report()) throw std::runtime_error("Workspace comparison did not produce a report at "+std::to_string(workspace_ui.compare.x)+","+std::to_string(workspace_ui.compare.y)+": "+workspace_ui.error);
         workspace_ui.requested_tab = 2; workspace_ui.scroll_target = 20; submit(); submit(); capture("workspace-results");
+        {
+            const auto previous_report=workspace.json();
+            ExperimentGate gate;
+            workspace.execution().start(workspace.capture_request(workspace::ComparisonMode::Initial,analysis::Objective::MaximizeCompleted),
+                [&](auto phase,auto,auto,auto){gate.checkpoint(phase);});
+            gate.wait(); submit();
+            require(workspace.execution().progress().active() && workspace.execution().progress().phase=="Evaluating candidate","Active experiment progress missing");
+            capture("workspace-running");
+            click(dashboard.simulation_mode); submit();
+            const auto camera_before=workspace.view().orbit_camera().camera().view_projection();
+            const auto target=workspace.view().viewport().origin+workspace.view().viewport().size*0.5f;
+            button(id,target,true); submit(); motion(id,target+glm::vec2{40,15}); submit(); button(id,target+glm::vec2{40,15},false); submit();
+            require(workspace.view().orbit_camera().camera().view_projection()!=camera_before,"Camera froze during background work");
+            click(dashboard.workspace_toggle); submit(); require(ui_state.panels.mode==viewer::ApplicationMode::Editor,"Editor mode unavailable during work");
+            click(dashboard.analysis_mode); submit(); require(ui_state.panels.mode==viewer::ApplicationMode::Analysis,"Analysis mode unavailable during work");
+            require(workspace.json()==previous_report,"Running experiment replaced previous report");
+            click(workspace_ui.cancel_experiment);
+            require(workspace.execution().progress().cancellation_requested,"Graphical cancel control did not request stop");
+            gate.release();
+            const auto deadline=Clock::now()+std::chrono::seconds{10};
+            while(workspace.execution().progress().active()) {require(Clock::now()<deadline,"Graphical cancellation timed out"); submit();}
+            submit(); require(workspace.execution().progress().state==workspace::ExecutionState::Cancelled && workspace.json()==previous_report,"Cancellation lost the previous report");
+            capture("workspace-cancelled");
+            require(workspace.baseline_viewer().runtime().capture_snapshot()==preserved,"Async experiment mutated viewer state");
+            workspace.start_experiment(workspace::ComparisonMode::Initial,analysis::Objective::MaximizeCompleted); wait_experiment();
+            auto substantial=workspace.capture_request(workspace::ComparisonMode::Initial,analysis::Objective::MaximizeCompleted);
+            substantial.baseline.simulation={60,100000,42}; substantial.baseline.domain=scenario::WarehouseConfig{4,8,2,1,4};
+            const auto prototype=substantial.candidates.front(); substantial.candidates.clear();
+            for (std::uint64_t i=1;i<=50;++i) {
+                auto c=prototype; c.id=i; c.definition=substantial.baseline; c.definition.name="Load candidate "+std::to_string(i);
+                substantial.candidates.push_back(std::move(c));
+            }
+            ExperimentGate publication_gate; publication_gate.target_phase="Publishing";
+            workspace.execution().start(std::move(substantial),[&](auto phase,auto,auto,auto){publication_gate.checkpoint(phase);});
+            click(dashboard.simulation_mode); submit();
+            double active_frame_ms=0,maximum_ms=0; int active_frames=0;
+            for(int i=0;i<8;++i) {
+                require(workspace.execution().progress().active(),"Substantial experiment finished before frame responsiveness checks");
+                const auto start=Clock::now(); submit(); const auto elapsed=std::chrono::duration<double,std::milli>{Clock::now()-start}.count();
+                active_frame_ms+=elapsed; maximum_ms=std::max(maximum_ms,elapsed); ++active_frames;
+            }
+            click(dashboard.analysis_mode); submit(); click(workspace_ui.cancel_experiment);
+            require(workspace.execution().progress().cancellation_requested,"Substantial cancel control did not request stop");
+            publication_gate.release();
+            const auto cancel_started=Clock::now();
+            const auto cancel_deadline=Clock::now()+std::chrono::seconds{10};
+            while(workspace.execution().progress().active()) {require(Clock::now()<cancel_deadline,"Substantial cancellation timed out"); submit();}
+            submit(); require(workspace.execution().progress().state==workspace::ExecutionState::Cancelled,"Substantial run was not cancelled");
+            std::cout<<"Actual 100K-arrival/50-candidate experiment active frames: "<<active_frames<<" | mean/max ms: "<<active_frame_ms/active_frames<<'/'<<maximum_ms
+                <<" | cancel observed ms (includes rendering): "<<std::chrono::duration<double,std::milli>{Clock::now()-cancel_started}.count()<<'\n';
+            std::cout<<"Async graphics: progress, camera, mode switching, cancel/report retention and retry verified.\n";
+        }
         design_captures("analysis");
         workspace_ui.result_name = "Add forklift"; workspace_ui.scroll_target = 12; submit(); submit(); click(workspace_ui.candidate_view); submit();
         require(workspace.view().result_preview() && workspace.view().observation().metrics == workspace.report()->candidates.front().metrics,"Candidate preview did not display its actual report state");
@@ -436,7 +524,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         workspace_ui.mode=1; workspace_ui.current_checkpoint=false;
         workspace_ui.checkpoint_seconds=std::to_string(std::min<std::uint64_t>(definition.simulation.duration_seconds,7200));
         workspace_ui.requested_tab=0; workspace_ui.scroll_target=16; submit(); submit(); submit();
-        click(workspace_ui.editor_compare); submit();
+        click(workspace_ui.editor_compare); submit(); wait_experiment();
         require(ui_state.panels.mode==viewer::ApplicationMode::Analysis && workspace.report()->mode==workspace::ComparisonMode::Checkpoint,"Editor compare action ignored the selected comparison mode");
         workspace_ui.scroll_target = 20; submit(); submit(); capture("workspace-checkpoint");
         workspace_ui.scroll_target = 12; submit(); submit(); click(workspace_ui.probe_toggle);
@@ -454,6 +542,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
             enter_text(workspace_ui.export_field,json.string().c_str()); click(workspace_ui.export_json);
             require(std::filesystem::exists(json) && workspace_ui.error.empty(),"Graphical JSON export failed");
             click(workspace_ui.export_json); require(!workspace_ui.error.empty() && workspace.report().has_value(),"Existing-file export did not preserve the report and show failure");
+            workspace_ui.scroll_target=15; submit(); submit();
             enter_text(workspace_ui.export_field,csv.string().c_str()); click(workspace_ui.export_csv);
             require(std::filesystem::exists(csv) && workspace_ui.error.empty(),"Graphical CSV export failed");
             workspace::ScenarioWorkspace::verify_export(workspace.json());
@@ -473,6 +562,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
     if(smoke_frames) require(count==*smoke_frames,"Graphics walkthrough cancelled before all requested frames completed");
     if (smoke_frames && capture_output) write_capture(graphics.capture_frame(),*capture_output);
     if (smoke_frames) require(graphics.info().ui_texture_creations == warmed_texture_creations,"Steady frames repeatedly recreated the font atlas");
+    workspace.execution().shutdown();
     graphics.shutdown(); const auto info = graphics.info();
     std::cout << "Viewer frames: " << info.presented_frames << " | 3D draws: " << info.draw_calls << " | UI draws: " << info.ui_draw_calls << " | UI vertices: " << info.ui_vertices
               << " | Scene/UI pipeline generations: " << info.pipeline_generations << '/' << info.ui_pipeline_generations
@@ -489,7 +579,15 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
     require(!info.validation_errors && !info.validation_warnings,"Viewer Vulkan validation was not clean");
     if (smoke_frames && window.is_open())
     {
-        controller.reset(); graphics.initialize(window,options); style_dashboard(); submit(); graphics.shutdown();
+        controller.reset(); graphics.initialize(window,options); style_dashboard(); submit();
+        ExperimentGate closing_gate; workspace::ExperimentExecution closing_worker;
+        closing_worker.start(workspace.capture_request(workspace::ComparisonMode::Initial,analysis::Objective::MaximizeCompleted),
+            [&](auto phase,auto,auto,auto){closing_gate.checkpoint(phase);});
+        closing_gate.wait(); require(closing_worker.progress().active(),"Shutdown experiment was not active");
+        window.request_close(); window.poll_events(); require(!window.is_open(),"Viewer close event failed");
+        closing_worker.cancel(); closing_gate.release(); closing_worker.shutdown();
+        require(closing_worker.progress().state==workspace::ExecutionState::Cancelled,"Active worker did not stop on native shutdown");
+        graphics.shutdown();
         require(!graphics.info().validation_errors && !graphics.info().validation_warnings,"UI reinitialization validation failed");
         window.request_close(); window.poll_events(); require(!window.is_open(),"Viewer close event failed");
         std::cout << "Viewer clean UI/GPU shutdown and reinitialization verified.\n";

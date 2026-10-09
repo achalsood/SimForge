@@ -4,6 +4,7 @@
 #include <simforge/warehouse/resource_manager.hpp>
 #include <simforge/warehouse/warehouse_snapshot.hpp>
 
+#include <simforge/simulation/execution_control.hpp>
 #include <span>
 #include <chrono>
 
@@ -29,7 +30,7 @@ public:
     WarehouseSimulation(WarehouseSimulation&&) = delete;
     WarehouseSimulation& operator=(WarehouseSimulation&&) = delete;
 
-    void advance_to(std::uint64_t tick);
+    void advance_to(std::uint64_t tick, const simulation::ExecutionControl* control = nullptr);
     void advance_by(std::uint64_t ticks);
     // Preview scheduling without moving the logical clock ahead of due events,
     // then advance to its clamped target. No events are dropped on slow frames.
@@ -47,7 +48,7 @@ public:
     void set_forklift_capacity(std::uint32_t forklifts);
     void set_resource_capacity(ResourceType resource, std::uint32_t capacity);
     [[nodiscard]] ResourceCounts resource_capacity() const noexcept { return resources_.capacity(); }
-    void run() { advance_to(horizon_ticks_); }
+    void run(const simulation::ExecutionControl* control = nullptr) { advance_to(horizon_ticks_,control); }
     [[nodiscard]] WarehouseMetrics metrics() const;
     [[nodiscard]] std::span<const ShipmentRecord> shipments() const noexcept { return shipments_; }
     [[nodiscard]] const simulation::SimulationClock& clock() const noexcept { return clock_; }

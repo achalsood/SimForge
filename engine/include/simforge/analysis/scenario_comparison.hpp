@@ -82,18 +82,22 @@ struct AnalysisReport
 [[nodiscard]] Objective parse_objective(std::string_view name);
 void validate_experiment(const ExperimentDefinition& experiment);
 void validate_request(const ComparisonRequest& request);
+// Preflight owned checkpoints without copying their shipment/history payloads.
+void validate_checkpoint_candidates(const warehouse::WarehouseSnapshot& checkpoint, std::span<const ScenarioCandidate> candidates);
 [[nodiscard]] ComparisonRequest prepare_request(const scenario::ScenarioDefinition& scenario,
-    std::uint64_t checkpoint_tick, Objective objective, std::vector<ScenarioCandidate> candidates);
+    std::uint64_t checkpoint_tick, Objective objective, std::vector<ScenarioCandidate> candidates, const simulation::ExecutionControl* control = nullptr);
 [[nodiscard]] ComparisonRequest load_experiment(const std::filesystem::path& path);
 [[nodiscard]] ExperimentDefinition parse_experiment(std::string_view json);
 [[nodiscard]] std::string serialize_experiment(const ExperimentDefinition& experiment);
 // Public phases allow benchmarks/tools to separate simulation from derived analysis.
 [[nodiscard]] warehouse::WarehouseMetrics execute_candidate(const warehouse::WarehouseSnapshot& checkpoint,
-    ResourceCounts resources);
+    ResourceCounts resources, const simulation::ExecutionControl* control = nullptr,
+    warehouse::WarehouseSnapshot* final_snapshot = nullptr);
 [[nodiscard]] MetricDelta compare_metrics(const warehouse::WarehouseMetrics& baseline,
     const warehouse::WarehouseMetrics& candidate, ResourceCounts baseline_resources, ResourceCounts candidate_resources);
 void rank_candidates(std::vector<CandidateResult>& candidates, Objective objective);
-[[nodiscard]] AnalysisReport run_comparison(const ComparisonRequest& request);
+[[nodiscard]] AnalysisReport run_comparison(const ComparisonRequest& request, const simulation::ExecutionControl* control = nullptr,
+    std::vector<warehouse::WarehouseSnapshot>* final_snapshots = nullptr);
 [[nodiscard]] std::string serialize_report(const AnalysisReport& report);
 [[nodiscard]] std::string serialize_csv(const AnalysisReport& report);
 // Same CSV columns/escaping for independently executed scenarios with matching intervals.

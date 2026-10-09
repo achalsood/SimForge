@@ -1,5 +1,7 @@
 # Scenario editing and comparison workspace
 
+**Current execution:** Comparisons run asynchronously with progress and cancellation. Configure candidates, start, continue interacting, inspect progress, cancel or wait, review and export. Reports retain submitted inputs after edits, failures and cancellation. See [asynchronous experiments](async-experiments.md).
+
 **Current presentation:** Commit #18 adds Simulation, Scenario Editor and Analysis modes, full-width workspace pages, directional lighting and Windows report Save As. See [visual design](visual-design.md) for current controls, screenshots and validation. Historical measurements below describe the milestone that introduced each feature.
 
 Commit #17 adds a graphical experiment workflow over the existing scenario,
@@ -71,13 +73,12 @@ and baseline/alternative controllers. Warehouse alone owns its rules and clock;
 renderer owns GPU assets. `apps/sandbox/workspace_panel.*` reads this state and
 queues typed actions for application processing before the next frame.
 
-Comparisons operate on owned inputs and leave the live baseline untouched. The
-application discards the synchronous action's old wall duration and the following
-frame's duration, so experiment execution is not counted as baseline playback.
-Only the selected viewer advances; a preserved baseline is frozen while viewing
-an alternative. Returning to it resumes ordinary pacing without catching up time
-spent in another view. No global workspace state or background simulation thread
-exists. Vulkan and ImGui remain on the SDL main thread.
+Comparisons operate on owned submitted inputs and leave the live baseline untouched.
+One CPU worker owns independent runtimes and publishes complete reports for main-thread
+adoption. The selected viewer continues its normal playback; returning from a result
+preview resumes the preserved baseline. SDL, Vulkan and ImGui stay on the main thread.
+Final async result snapshots support previews without rerunning comparisons. Candidate
+edits preserve previous reports, whose labels identify their saved inputs.
 
 ## Drafts and candidates
 
@@ -109,7 +110,7 @@ names, optional notes and cached input differences. Add, rename, duplicate, edit
 update, remove and restore-to-baseline preserve the baseline. Rename retains the ID;
 duplicate receives a new ID. `Baseline` is reserved. Names use the existing 1..256
 UTF-8-byte contract; notes are bounded to 4096 bytes. Candidate count remains 1..50.
-Candidate edits invalidate completed reports; raw unsaved draft typing does not alter
+Candidate edits preserve earlier completed reports; raw unsaved draft typing does not alter
 the sealed report's input definitions. Reports are recomputed only on explicit Run.
 Changing UI objective/mode prepares the next request; a cached report continues to
 show the actual objective/mode/checkpoint used to produce it.
@@ -268,9 +269,9 @@ is only the final ranking phase, not all report work. Checkpoint comparison incl
 snapshot clone, preflight, branches and derived evidence. Exports are measured
 separately. The earlier analysis benchmark measured batches at 4.021/6.855/22.692 ms
 for 3/10/50 candidates before this milestone; these differing orchestrations are not
-a like-for-like speedup comparison. The synchronous approach is retained after these
-measurements. Near-limit workloads can block longer; there is no cancellation or
-pretend asynchronous progress. Cached results are never rerun during UI rendering.
+a like-for-like speedup comparison. These historical measurements used synchronous execution.
+Commit #19 replaces the graphical path with asynchronous execution and cancellation;
+see the current execution guide for measurements. Cached reports are not rerun during rendering.
 
 Baseline Release 600-frame graphics before/after: UI build 44.064/57.473 us,
 dynamic frame update 0.633/0.838 us, record/submit/present 3.486/3.349 ms, total

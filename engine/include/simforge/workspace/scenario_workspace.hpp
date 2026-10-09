@@ -5,6 +5,7 @@
 
 namespace simforge::workspace
 {
+class ExperimentExecution;
 enum class Field : std::size_t { Name, Bays, Workers, Forklifts, Arrival, Processing, Duration, TickRate, Seed, Count };
 inline constexpr std::array<const char*,9> field_names{"Name","Loading bays","Workers","Forklifts","Arrival interval (s)",
     "Processing duration (s)","Simulation duration (s)","Tick rate (Hz)","Random seed"};
@@ -15,6 +16,10 @@ enum class ComparisonMode { Initial, Checkpoint };
 enum class Status { Empty, Ready, Modified, Invalid, ComparisonReady, Results, ExportFailed };
 struct Comparison
 {
+    std::uint64_t request_id{0};
+    std::vector<std::uint64_t> candidate_ids;
+    // Final baseline then canonical candidates; asynchronous previews never rerun a simulation.
+    std::vector<warehouse::WarehouseSnapshot> final_snapshots;
     ComparisonMode mode{ComparisonMode::Initial};
     scenario::ScenarioDefinition baseline_definition;
     analysis::Objective objective{analysis::Objective::MaximizeCompleted};
@@ -28,10 +33,26 @@ struct Comparison
     std::vector<std::string> changed_inputs;
     double execution_ms{0}, report_ms{0};
 };
+struct ExperimentRequest
+{
+    std::uint64_t id{0};
+    scenario::ScenarioDefinition baseline;
+    std::vector<Candidate> candidates;
+    ComparisonMode mode{ComparisonMode::Initial};
+    analysis::Objective objective{analysis::Objective::MaximizeCompleted};
+    std::optional<std::uint64_t> checkpoint_tick;
+    std::optional<warehouse::WarehouseSnapshot> checkpoint;
+};
+void validate_experiment_request(const ExperimentRequest& request);
+[[nodiscard]] Comparison execute_experiment(const ExperimentRequest& request,
+    const simulation::ExecutionControl* control = nullptr);
 class ScenarioWorkspace
 {
 public:
-    ScenarioWorkspace() = default;
+    ScenarioWorkspace();
+    ~ScenarioWorkspace();
+    ScenarioWorkspace(ScenarioWorkspace&&) noexcept;
+    ScenarioWorkspace& operator=(ScenarioWorkspace&&) noexcept;
     explicit ScenarioWorkspace(const scenario::ScenarioDefinition& definition, double speed = 300);
     void open(const std::filesystem::path& path, bool discard_draft = false);
     void load(const scenario::ScenarioDefinition& definition, bool discard_draft = false);
@@ -49,6 +70,11 @@ public:
     void remove_candidate(std::uint64_t id);
     void restore_candidate(std::uint64_t id);
     void compare(ComparisonMode mode, analysis::Objective objective, std::optional<std::uint64_t> checkpoint_tick = {});
+    [[nodiscard]] ExperimentRequest capture_request(ComparisonMode mode, analysis::Objective objective,
+        std::optional<std::uint64_t> tick = {}) const;
+    void start_experiment(ComparisonMode mode, analysis::Objective objective, std::optional<std::uint64_t> tick = {});
+    bool poll_experiment();
+    ExperimentExecution& execution();
     void view_result(std::optional<std::string> candidate); // nullopt previews report baseline.
     void return_to_baseline();
     void export_json(const std::filesystem::path& path);
@@ -83,6 +109,7 @@ private:
     double speed_{300};
     Status status_{Status::Empty};
     std::string message_, viewed_identity_;
+    std::unique_ptr<ExperimentExecution> execution_;
 };
 [[nodiscard]] std::string differences(const scenario::ScenarioDefinition& baseline, const scenario::ScenarioDefinition& candidate);
 [[nodiscard]] const char* objective_label(analysis::Objective objective);

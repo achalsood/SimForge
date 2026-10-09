@@ -260,6 +260,13 @@ foreach(case modes responsive navigation fields bars undefined results evidence 
     add_test(NAME simforge_design_${case} COMMAND simforge_visual_design_test ${case})
 endforeach()
 
+add_executable(simforge_async_experiment_test async_experiment_test.cpp)
+target_link_libraries(simforge_async_experiment_test PRIVATE simforge_workspace)
+foreach(case capture equivalence retention sequential shutdown immediate probes publication failure long_cancel)
+    add_test(NAME simforge_async_${case} COMMAND simforge_async_experiment_test ${case})
+    set_tests_properties(simforge_async_${case} PROPERTIES TIMEOUT 60)
+endforeach()
+
 # Tool executables retain full Debug symbols, but do not need incremental-link databases.
 if(MSVC)
     get_property(tool_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)

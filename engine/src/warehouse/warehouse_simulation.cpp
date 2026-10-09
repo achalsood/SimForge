@@ -105,17 +105,21 @@ void WarehouseSimulation::process(const ShipmentEvent& event)
     }
     ++processed_events_;
 }
-void WarehouseSimulation::advance_to(std::uint64_t tick)
+void WarehouseSimulation::advance_to(std::uint64_t tick, const simulation::ExecutionControl* control)
 {
     if (tick < clock_.tick_count() || tick > horizon_ticks_)
         throw std::invalid_argument("Warehouse target tick must be current..horizon");
+    if (control) control->update("Simulating",{},clock_.tick_count(),tick);
+    std::uint32_t batch = 0;
     while (const auto event = scheduler_.pop_due(tick))
     {
         move_clock_to(event->tick);
         process(*event);
+        if (control && ++batch == 256) { control->update("Simulating",{},clock_.tick_count(),tick); batch = 0; }
     }
     move_clock_to(tick);
     settled_ = true;
+    if (control) control->update("Simulating",{},tick,tick);
 }
 void WarehouseSimulation::advance_by(std::uint64_t ticks)
 {

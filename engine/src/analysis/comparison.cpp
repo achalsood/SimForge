@@ -104,15 +104,20 @@ void validate_request(const ComparisonRequest& request)
         throw std::invalid_argument("Experiment requires a settled, scenario-compatible checkpoint");
     for (const auto& candidate : request.candidates) validate_candidate_at(request.checkpoint, candidate);
 }
+void validate_checkpoint_candidates(const warehouse::WarehouseSnapshot& checkpoint, std::span<const ScenarioCandidate> candidates)
+{
+    for (const auto& candidate : candidates) validate_candidate_at(checkpoint,candidate);
+}
 ComparisonRequest prepare_request(const scenario::ScenarioDefinition& definition, std::uint64_t tick,
-    Objective objective, std::vector<ScenarioCandidate> candidates)
+    Objective objective, std::vector<ScenarioCandidate> candidates, const simulation::ExecutionControl* control)
 {
     (void)objective_name(objective); validate_candidates(candidates);
-    warehouse::WarehouseSimulation runtime{definition}; runtime.advance_to(tick);
+    warehouse::WarehouseSimulation runtime{definition}; runtime.advance_to(tick,control);
     ComparisonRequest request{1, scenario::serialize_scenario(definition), runtime.capture_snapshot(), objective, std::move(candidates)};
     validate_request(request); return request;
 }
-warehouse::WarehouseMetrics execute_candidate(const warehouse::WarehouseSnapshot& checkpoint, ResourceCounts counts)
+warehouse::WarehouseMetrics execute_candidate(const warehouse::WarehouseSnapshot& checkpoint, ResourceCounts counts, const simulation::ExecutionControl* control,
+    warehouse::WarehouseSnapshot* final_snapshot)
 {
     if (total(counts) > 100000) throw std::invalid_argument("Candidate total resources exceeds 100000");
     warehouse::validate_snapshot(checkpoint);
@@ -127,7 +132,10 @@ warehouse::WarehouseMetrics execute_candidate(const warehouse::WarehouseSnapshot
             const auto before = warehouse::capacity_for(checkpoint.capacity, resource), after = warehouse::capacity_for(counts, resource);
             if (after != before && ((after < before) == reductions)) branch.set_resource_capacity(resource, after);
         }
-    branch.run(); return branch.metrics();
+    branch.run(control);
+    if (control) control->check();
+    if (final_snapshot) *final_snapshot = branch.capture_snapshot();
+    return branch.metrics();
 }
 MetricDelta compare_metrics(const warehouse::WarehouseMetrics& baseline, const warehouse::WarehouseMetrics& candidate,
     ResourceCounts baseline_resources, ResourceCounts candidate_resources)
@@ -196,18 +204,28 @@ void rank_candidates(std::vector<CandidateResult>& candidates, Objective objecti
     });
     for (std::size_t i = 0; i < sorted.size(); ++i) sorted[i]->rank = static_cast<std::uint32_t>(i + 1);
 }
-AnalysisReport run_comparison(const ComparisonRequest& request)
+AnalysisReport run_comparison(const ComparisonRequest& request, const simulation::ExecutionControl* control,
+    std::vector<warehouse::WarehouseSnapshot>* final_snapshots)
 {
+    if (control) control->update("Validating");
     validate_request(request); // Preflight every requested candidate before any branch runs.
     AnalysisReport report; report.request = request;
     std::sort(report.request.candidates.begin(), report.request.candidates.end(), [](const auto& a, const auto& b) { return a.name < b.name; });
     const auto baseline_counts = request.checkpoint.capacity;
-    const auto baseline_metrics = execute_candidate(request.checkpoint, baseline_counts);
+    warehouse::WarehouseSnapshot final_snapshot;
+    if (control) control->update("Simulating baseline");
+    const auto baseline_metrics = execute_candidate(request.checkpoint, baseline_counts,control,final_snapshots ? &final_snapshot : nullptr);
+    if (final_snapshots) final_snapshots->push_back(std::move(final_snapshot));
     report.baseline = result_for({"Baseline", baseline_counts}, baseline_metrics, baseline_counts, baseline_metrics);
     report.baseline.eligible = objective_value(baseline_metrics, request.objective).has_value();
     if (!report.baseline.eligible) report.baseline.eligibility_reason = "Average started queue wait is unavailable (no started shipments).";
     for (const auto& candidate : report.request.candidates)
-        report.candidates.push_back(result_for(candidate, baseline_metrics, baseline_counts, execute_candidate(request.checkpoint, candidate.resources)));
+    {
+        if (control) control->update("Evaluating candidate",candidate.name);
+        report.candidates.push_back(result_for(candidate, baseline_metrics, baseline_counts, execute_candidate(request.checkpoint, candidate.resources,control,final_snapshots ? &final_snapshot : nullptr)));
+        if (final_snapshots) final_snapshots->push_back(std::move(final_snapshot));
+        if (control) control->update("Candidate complete",candidate.name);
+    }
     rank_candidates(report.candidates, request.objective);
     auto ranked = report.candidates;
     std::sort(ranked.begin(), ranked.end(), [](const auto& a, const auto& b) { return a.rank.value_or(1000) < b.rank.value_or(1000); });
@@ -218,6 +236,7 @@ AnalysisReport run_comparison(const ComparisonRequest& request)
         report.warnings.push_back("The best-ranked candidate does not improve on baseline for the selected objective.");
     for (auto resource : resources)
     {
+        if (control) control->update("Bottleneck probes",warehouse::resource_name(resource));
         BottleneckEvidence evidence; evidence.resource = resource;
         evidence.baseline_capacity = warehouse::capacity_for(baseline_counts, resource);
         evidence.tested_capacity = evidence.baseline_capacity + 1; // Counts <=100000; uint32 addition is safe.
@@ -232,7 +251,7 @@ AnalysisReport run_comparison(const ComparisonRequest& request)
         {
             // Reuse an already measured identical candidate; inputs and boundary are equal.
             const auto found = std::find_if(report.candidates.begin(), report.candidates.end(), [&](const auto& c) { return c.candidate.resources == counts; });
-            const auto metrics = found == report.candidates.end() ? execute_candidate(request.checkpoint, counts) : found->metrics;
+            const auto metrics = found == report.candidates.end() ? execute_candidate(request.checkpoint, counts,control) : found->metrics;
             evidence.result = result_for({"Add one " + std::string{warehouse::resource_name(resource)}, counts}, baseline_metrics, baseline_counts, metrics);
             const auto before = objective_value(baseline_metrics, request.objective), after = objective_value(metrics, request.objective);
             evidence.conclusion = !before || !after ? BottleneckConclusion::Inconclusive :

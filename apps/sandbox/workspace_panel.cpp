@@ -1,4 +1,5 @@
 #include "workspace_panel.hpp"
+#include <simforge/workspace/experiment_execution.hpp>
 #include <imgui.h>
 #include <algorithm>
 #include <chrono>
@@ -23,7 +24,8 @@ void apply_workspace(workspace::ScenarioWorkspace& w, const WorkspaceCommand& c)
     case WorkspaceAction::Duplicate: w.duplicate_candidate(c.id,c.text); break;
     case WorkspaceAction::Remove: w.remove_candidate(c.id); break;
     case WorkspaceAction::Restore: w.restore_candidate(c.id); break;
-    case WorkspaceAction::Compare: w.compare(c.mode,c.objective,c.tick); break;
+    case WorkspaceAction::Compare: w.start_experiment(c.mode,c.objective,c.tick); break;
+    case WorkspaceAction::Cancel: w.execution().cancel(); break;
     case WorkspaceAction::View: w.view_result(c.text.empty() ? std::nullopt : std::optional{c.text}); break;
     case WorkspaceAction::Baseline: w.return_to_baseline(); break;
     case WorkspaceAction::Json: w.export_json(std::filesystem::u8path(c.text)); break;
@@ -126,6 +128,48 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
         }
         else { queue(std::move(c)); ui.requested_tab=2; }
     };
+    const auto progress = w.execution().progress();
+    if (progress.request_id != 0 && ui.analysis_page)
+    {
+        ImGui::Separator();
+        ImGui::Text("Experiment #%llu: %s",static_cast<unsigned long long>(progress.request_id),workspace::execution_state_name(progress.state));
+        if (progress.active())
+        {
+            // Keep the cancel target fixed while variable phase/tick text changes underneath it.
+            ImGui::BeginDisabled(progress.cancellation_requested);
+            if (ImGui::Button(progress.cancellation_requested ? "Cancellation requested" : "Cancel Experiment")) queue({WorkspaceAction::Cancel});
+            ui.cancel_experiment=center();
+            ImGui::EndDisabled();
+        }
+        ImGui::Text("%s | Candidates %llu / %llu | Elapsed %.1f s",progress.phase.c_str(),
+            static_cast<unsigned long long>(progress.completed_candidates),static_cast<unsigned long long>(progress.total_candidates),progress.elapsed_seconds);
+        if (progress.active() && !progress.candidate.empty()) ImGui::TextWrapped("Submitted configuration: %s",progress.candidate.c_str());
+        if (progress.horizon) ImGui::Text("Run tick %llu / %llu",static_cast<unsigned long long>(progress.tick),static_cast<unsigned long long>(progress.horizon));
+        // Candidate count measures completed evaluations; setup/probes/publication are indeterminate.
+        if (progress.state == workspace::ExecutionState::Completed) ImGui::ProgressBar(1.0f,{-1,18*s},"Report ready");
+        else if (progress.phase == "Evaluating candidate")
+            ImGui::ProgressBar(static_cast<float>(progress.completed_candidates)/static_cast<float>(progress.total_candidates),{-1,0},"Completed candidates");
+        if (progress.active())
+        {
+            ImGui::TextWrapped("Using submitted inputs. Edits apply to future experiments.");
+        }
+        if (!progress.error.empty()) ImGui::TextWrapped("Experiment failed: %s",progress.error.c_str());
+        if (progress.state == workspace::ExecutionState::Completed && w.report() && w.report()->request_id == progress.request_id)
+            ImGui::Text("Baseline completed shipments: %llu",static_cast<unsigned long long>(w.report()->baseline.metrics.completed));
+        if (const auto attempt=w.execution().last_unsuccessful_attempt(); attempt && attempt->request_id != progress.request_id)
+        {
+            ImGui::TextWrapped("Previous unsuccessful attempt #%llu: %s",static_cast<unsigned long long>(attempt->request_id),workspace::execution_state_name(attempt->state));
+            if (!attempt->error.empty()) ImGui::TextWrapped("%s",attempt->error.c_str());
+        }
+        ImGui::Separator();
+    }
+    if (w.report() && ui.analysis_page)
+        ImGui::TextWrapped("Report #%llu uses its saved inputs; current edits and pending attempts are separate.",static_cast<unsigned long long>(w.report()->request_id));
+    if (!ui.error.empty())
+    {
+        ImGui::TextColored({viewer::design::error.x,viewer::design::error.y,viewer::design::error.z,1},"Action failed: %s",ui.error.c_str());
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s",ui.error.c_str());
+    }
     if(ImGui::BeginPopupModal("Discard edits?",nullptr,ImGuiWindowFlags_AlwaysAutoResize))
     {
         ImGui::TextWrapped("This action discards unsaved draft edits. Opening also clears workspace candidates and results.");
@@ -141,7 +185,6 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
             else if(index==2 || !ImGui::BeginTabItem(name,nullptr,requested==index?ImGuiTabItemFlags_SetSelected:ImGuiTabItemFlags_None)) return false;
             ImGui::BeginChild(name,{0,0});
             if(ui.scroll_target==20) { ImGui::SetScrollY(0); ui.scroll_target=-1; }
-            if(!ui.error.empty()) { ImGui::PushStyleColor(ImGuiCol_Text,{viewer::design::error.x,viewer::design::error.y,viewer::design::error.z,1}); ImGui::TextWrapped("%s",ui.error.c_str()); ImGui::PopStyleColor(); }
             return true;
         };
         if(tab("Edit",0))
@@ -189,7 +232,7 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
                 scroll(10);
                 if(ui.editing && ImGui::Button("Update edited candidate",{-1,36*s})) queue({WorkspaceAction::Update,{},ui.notes,*ui.editing});
                 if(ImGui::Button("Run draft from start",{-1,36*s})) queue({WorkspaceAction::Run});
-                ImGui::BeginDisabled(w.candidates().empty());
+                ImGui::BeginDisabled(w.candidates().empty() || w.execution().progress().active());
                 if(ImGui::Button("Compare alternatives",{-1,36*s})) compare(); ui.editor_compare=center(); scroll(16); ImGui::EndDisabled();
                 ImGui::TextWrapped("Choose comparison mode and objective in Candidates. Inputs are exact integers; zero resources block service.");
                 if(ImGui::Button("Revert to loaded baseline",{-1,36*s})) queue({WorkspaceAction::Revert});
@@ -229,7 +272,7 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
                 ImGui::Checkbox("Use preserved baseline's current time",&ui.current_checkpoint);
                 if(!ui.current_checkpoint) text("Checkpoint (integer seconds)",ui.checkpoint_seconds);
             }
-            ImGui::BeginDisabled(w.candidates().empty());
+            ImGui::BeginDisabled(w.candidates().empty() || w.execution().progress().active());
             if(ImGui::Button("Run comparison",{-1,36*s}))
             {
                 compare();
@@ -244,7 +287,7 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
             if(!w.report())
             {
                 ImGui::PushFont(nullptr,28); ImGui::TextUnformatted("No comparison yet"); ImGui::PopFont();
-                ImGui::TextWrapped("Add candidates and run a comparison. Completed reports are cached until candidates change.");
+                ImGui::TextWrapped("Add candidates and run a comparison. Completed reports retain the submitted inputs.");
                 if(ImGui::Button("Configure an experiment",{240*s,36*s})) ui.requested_tab=0;
                 if(!w.viewing_baseline() && ImGui::Button("Return to preserved baseline",{-1,36*s})) queue({WorkspaceAction::Baseline});
             }
@@ -344,11 +387,11 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
                 }
                 if(ImGui::CollapsingHeader("Interpretation and limits")) for(const auto& line:report.limitations) ImGui::TextWrapped("%s",line.c_str());
                 text("Export destination (new file)",ui.export_path);
-                ui.export_field=center(); scroll(15);
+                ui.export_field=center();
                 if(ImGui::Button("Save JSON report...")) { ui.dialog_used=true; const auto path=save_report_dialog(false,ui.export_path,ui.error); if(path) { const auto bytes=path->u8string(); queue({WorkspaceAction::Json,std::string{bytes.begin(),bytes.end()}}); } } ImGui::SameLine();
                 if(ImGui::Button("Save CSV summary...")) { const auto path=save_report_dialog(true,ui.export_path,ui.error); if(path) { const auto bytes=path->u8string(); queue({WorkspaceAction::Csv,std::string{bytes.begin(),bytes.end()}}); } }
                 if(ImGui::Button("Export JSON to path")) queue({WorkspaceAction::Json,ui.export_path}); ui.export_json=center(); ImGui::SameLine();
-                if(ImGui::Button("Export CSV to path")) queue({WorkspaceAction::Csv,ui.export_path}); ui.export_csv=center();
+                if(ImGui::Button("Export CSV to path")) queue({WorkspaceAction::Csv,ui.export_path}); ui.export_csv=center(); scroll(15);
                 ImGui::TextWrapped("Choose a new .json or .csv filename. Existing files are never overwritten. JSON can be replay-verified; CSV is a summary of that report.");
             }
             ui.results_ui_us+=std::chrono::duration<double,std::micro>{std::chrono::steady_clock::now()-start}.count(); ++ui.results_frames;

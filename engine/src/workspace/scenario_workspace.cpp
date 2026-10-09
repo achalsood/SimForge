@@ -1,4 +1,5 @@
 #include <simforge/workspace/scenario_workspace.hpp>
+#include <simforge/workspace/experiment_execution.hpp>
 #include "../analysis/comparison_json.hpp"
 #include <algorithm>
 #include <charconv>
@@ -33,8 +34,22 @@ warehouse::WarehouseSnapshot final_branch(const warehouse::WarehouseSnapshot& ch
     }
     branch.run(); return branch.capture_snapshot();
 }
-analysis::AnalysisReport independent(const ScenarioDefinition& d, analysis::Objective objective)
-{ return analysis::run_comparison(analysis::prepare_request(d,0,objective,{{d.name == "Baseline" ? "Same configuration" : d.name,counts(d)}})); }
+analysis::AnalysisReport independent(const ScenarioDefinition& d, analysis::Objective objective, const simulation::ExecutionControl* control,
+    std::vector<warehouse::WarehouseSnapshot>* snapshots)
+{
+    simulation::ExecutionControl inner;
+    if (control) {
+        inner.stop = control->stop;
+        inner.progress = [control](auto phase, auto name, auto tick, auto horizon) {
+            if (phase != "Candidate complete" && phase != "Evaluating candidate" && phase != "Simulating baseline" && phase != "Validating") control->update(phase,name,tick,horizon);
+        };
+    }
+    std::vector<warehouse::WarehouseSnapshot> finals;
+    auto report = analysis::run_comparison(analysis::prepare_request(d,0,objective,
+        {{d.name == "Baseline" ? "Same configuration" : d.name,counts(d)}},control),control ? &inner : nullptr,snapshots ? &finals : nullptr);
+    if (snapshots) snapshots->push_back(std::move(finals.front()));
+    return report;
+}
 }
 const char* objective_label(analysis::Objective o)
 {
@@ -65,7 +80,11 @@ Draft ScenarioWorkspace::make_draft(const ScenarioDefinition& d)
         std::to_string(c.shipment_interval_seconds),std::to_string(c.processing_duration_seconds),std::to_string(d.simulation.duration_seconds),
         std::to_string(d.simulation.tick_rate),std::to_string(d.simulation.random_seed)}}};
 }
-ScenarioWorkspace::ScenarioWorkspace(const ScenarioDefinition& d, double speed) : speed_{speed} { load(d); }
+ScenarioWorkspace::ScenarioWorkspace() : execution_{std::make_unique<ExperimentExecution>()} {}
+ScenarioWorkspace::~ScenarioWorkspace() = default;
+ScenarioWorkspace::ScenarioWorkspace(ScenarioWorkspace&&) noexcept = default;
+ScenarioWorkspace& ScenarioWorkspace::operator=(ScenarioWorkspace&&) noexcept = default;
+ScenarioWorkspace::ScenarioWorkspace(const ScenarioDefinition& d, double speed) : speed_{speed}, execution_{std::make_unique<ExperimentExecution>()} { load(d); }
 const ScenarioDefinition& ScenarioWorkspace::baseline() const
 { if (!baseline_) throw std::logic_error("No scenario loaded"); return *baseline_; }
 viewer::ViewerController& ScenarioWorkspace::view()
@@ -75,7 +94,10 @@ const viewer::ViewerController& ScenarioWorkspace::baseline_viewer() const
 void ScenarioWorkspace::load(const ScenarioDefinition& d, bool discard)
 {
     if ((dirty() || !candidates_.empty()) && !discard) throw std::logic_error("Confirm discarding draft/candidates/results before opening another scenario");
+    if (execution_->progress().active()) throw std::logic_error("Cancel the active experiment before replacing the baseline");
     warehouse_only(d); auto prepared = std::make_unique<viewer::ViewerController>(d,speed_);
+    // A completion from the prior baseline must not publish after a scenario replacement.
+    (void)execution_->take_result(execution_->progress().request_id);
     auto draft = make_draft(d); baseline_ = d; baseline_view_ = std::move(prepared); alternative_view_.reset();
     draft_ = draft_origin_ = std::move(draft); errors_.clear(); candidates_.clear(); report_.reset();
     // IDs are never reused within the workspace, including after scenario replacement.
@@ -146,7 +168,7 @@ void ScenarioWorkspace::check_name(const std::string& name, std::optional<std::u
         throw std::invalid_argument("Candidate name is duplicate or reserved: "+name);
 }
 void ScenarioWorkspace::invalidate()
-{ report_.reset(); status_ = Status::ComparisonReady; message_ = "Candidates changed. Run comparison to produce current results."; }
+{ status_ = Status::ComparisonReady; message_ = "Candidates changed. Previous report uses earlier submitted inputs."; }
 std::uint64_t ScenarioWorkspace::add_candidate(std::string notes)
 {
     auto d = checked_draft(); check_name(d.name);
@@ -180,18 +202,78 @@ void ScenarioWorkspace::remove_candidate(std::uint64_t id)
 { (void)candidate(id); std::erase_if(candidates_,[&](const auto& c){return c.id == id;}); invalidate(); }
 void ScenarioWorkspace::restore_candidate(std::uint64_t id)
 { auto d = baseline(); auto& c = candidate(id); d.name = c.definition.name; c.definition = std::move(d); c.changed_inputs = "Same operational configuration"; invalidate(); }
+ExperimentRequest ScenarioWorkspace::capture_request(ComparisonMode mode, analysis::Objective objective, std::optional<std::uint64_t> tick) const
+{
+    ExperimentRequest request{0,baseline(),candidates_,mode,objective,tick,{}};
+    validate_experiment_request(request);
+    if (mode == ComparisonMode::Checkpoint && !tick) request.checkpoint = baseline_viewer().runtime().capture_snapshot();
+    validate_experiment_request(request);
+    return request;
+}
+void validate_experiment_request(const ExperimentRequest& request)
+{
+    if (request.mode != ComparisonMode::Initial && request.mode != ComparisonMode::Checkpoint) throw std::invalid_argument("Unsupported comparison mode");
+    warehouse_only(request.baseline); (void)analysis::objective_name(request.objective);
+    if (request.checkpoint_tick && request.checkpoint) throw std::invalid_argument("Choose an explicit checkpoint tick or an owned historical snapshot");
+    if (request.candidates.empty() || request.candidates.size() > analysis::max_candidates) throw std::invalid_argument("Add 1..50 validated candidates");
+    if (request.checkpoint_tick && *request.checkpoint_tick > std::uint64_t{request.baseline.simulation.duration_seconds} * request.baseline.simulation.tick_rate)
+        throw std::invalid_argument("Checkpoint exceeds simulation horizon");
+    std::vector<std::string> names; std::vector<std::uint64_t> ids;
+    for (const auto& c : request.candidates) {
+        warehouse_only(c.definition);
+        if (c.notes.size()>4096 || c.changed_inputs.size()>4096) throw std::length_error("Candidate metadata exceeds byte limit");
+        if (!compatible(request.baseline,c.definition,request.mode == ComparisonMode::Checkpoint)) throw std::invalid_argument(c.definition.name+": incompatible comparison inputs");
+        if (c.id == 0 || c.definition.name == "Baseline" || std::find(names.begin(),names.end(),c.definition.name) != names.end() || std::find(ids.begin(),ids.end(),c.id) != ids.end()) throw std::invalid_argument("Duplicate or invalid candidate identity");
+        names.push_back(c.definition.name); ids.push_back(c.id);
+    }
+    if (request.checkpoint) {
+        warehouse::validate_snapshot(*request.checkpoint);
+        if (request.checkpoint->scenario_identity != scenario::serialize_scenario(request.baseline)) throw std::invalid_argument("Checkpoint baseline mismatch");
+        if (request.checkpoint->settled) {
+            std::vector<analysis::ScenarioCandidate> candidates;
+            for (const auto& c:request.candidates) candidates.push_back({c.definition.name,counts(c.definition)});
+            analysis::validate_checkpoint_candidates(*request.checkpoint,candidates);
+        }
+    }
+}
 void ScenarioWorkspace::compare(ComparisonMode mode, analysis::Objective objective, std::optional<std::uint64_t> tick)
 {
-    if(mode!=ComparisonMode::Initial && mode!=ComparisonMode::Checkpoint) throw std::invalid_argument("Unsupported comparison mode");
-    (void)analysis::objective_name(objective);
-    if (candidates_.empty()) throw std::invalid_argument("Add at least one validated candidate");
-    Comparison prepared; prepared.mode = mode; prepared.objective = objective; prepared.baseline_definition = baseline();
-    auto ordered = candidates_; std::sort(ordered.begin(),ordered.end(),[](const auto& a,const auto& b){return a.definition.name < b.definition.name;});
+    if (execution_->progress().active()) throw std::logic_error("An experiment is already active");
+    auto prepared = execute_experiment(capture_request(mode,objective,tick));
+    (void)execution_->take_result(execution_->progress().request_id);
+    report_ = std::move(prepared); status_ = Status::Results; message_ = "Comparison complete. Best among tested configurations; active baseline preserved.";
+}
+ExperimentExecution& ScenarioWorkspace::execution() { return *execution_; }
+void ScenarioWorkspace::start_experiment(ComparisonMode mode, analysis::Objective objective, std::optional<std::uint64_t> tick)
+{
+    if (execution_->progress().active()) throw std::logic_error("An experiment is already active");
+    execution_->start(capture_request(mode,objective,tick));
+    message_ = "Experiment uses submitted inputs; edits apply to future requests.";
+}
+bool ScenarioWorkspace::poll_experiment()
+{
+    const auto progress = execution_->progress();
+    if (auto completed = execution_->take_result(progress.request_id)) {
+        report_ = std::move(completed); status_ = Status::Results;
+        if (alternative_view_ && alternative_view_->result_preview()) return_to_baseline();
+        message_ = "Experiment complete. Report belongs to submitted inputs."; return true;
+    }
+    return false;
+}
+Comparison execute_experiment(const ExperimentRequest& request, const simulation::ExecutionControl* control)
+{
+    validate_experiment_request(request);
+    if (request.mode == ComparisonMode::Checkpoint && !request.checkpoint_tick && !request.checkpoint) throw std::invalid_argument("Missing owned checkpoint");
+    const auto mode = request.mode; const auto objective = request.objective; const auto tick = request.checkpoint_tick;
+    if (control) control->update("Preparing");
+    Comparison prepared; prepared.request_id = request.id; prepared.mode = mode; prepared.objective = objective; prepared.baseline_definition = request.baseline;
+    auto ordered = request.candidates; std::sort(ordered.begin(),ordered.end(),[](const auto& a,const auto& b){return a.definition.name < b.definition.name;});
     for (const auto& c : ordered)
     {
         warehouse_only(c.definition);
-        if (!compatible(baseline(),c.definition,mode == ComparisonMode::Checkpoint))
+        if (!compatible(request.baseline,c.definition,mode == ComparisonMode::Checkpoint))
             throw std::invalid_argument(c.definition.name+": comparisons require the same duration and tick rate; checkpoint mode also requires unchanged arrival, processing and seed");
+        prepared.candidate_ids.push_back(c.id);
         prepared.definitions.push_back(c.definition);
         prepared.changed_inputs.push_back(c.changed_inputs);
     }
@@ -199,29 +281,33 @@ void ScenarioWorkspace::compare(ComparisonMode mode, analysis::Objective objecti
     if (mode == ComparisonMode::Checkpoint)
     {
         warehouse::WarehouseSnapshot checkpoint;
-        if (tick) checkpoint = analysis::prepare_request(baseline(),*tick,objective,{{"Unchanged",counts(baseline())}}).checkpoint;
+        if (tick) checkpoint = analysis::prepare_request(request.baseline,*tick,objective,{{"Unchanged",counts(request.baseline)}},control).checkpoint;
         else
         {
             // Work on a private copy; settling tick zero must never settle the viewer.
-            auto clone = warehouse::WarehouseSimulation::create_from(baseline_viewer().runtime().capture_snapshot());
-            clone.advance_to(clone.clock().tick_count()); checkpoint = clone.capture_snapshot();
+            auto clone = warehouse::WarehouseSimulation::create_from(*request.checkpoint);
+            clone.advance_to(clone.clock().tick_count(),control); checkpoint = clone.capture_snapshot();
         }
         std::vector<analysis::ScenarioCandidate> inputs; for(const auto& c : ordered) inputs.push_back({c.definition.name,counts(c.definition)});
-        auto report = analysis::run_comparison({1,checkpoint.scenario_identity,checkpoint,objective,std::move(inputs)});
+        auto report = analysis::run_comparison({1,checkpoint.scenario_identity,checkpoint,objective,std::move(inputs)},control,
+            control ? &prepared.final_snapshots : nullptr);
         prepared.baseline = report.baseline; prepared.candidates = report.candidates; prepared.ranking = report.ranking;
         prepared.bottlenecks = report.bottlenecks; prepared.warnings = report.warnings; prepared.limitations = report.limitations;
         prepared.executions.push_back(std::move(report));
     }
     else
     {
-        prepared.executions.push_back(independent(baseline(),objective));
+        if (control) control->update("Evaluating baseline",request.baseline.name);
+        prepared.executions.push_back(independent(request.baseline,objective,control,control ? &prepared.final_snapshots : nullptr));
         prepared.baseline = prepared.executions.front().baseline;
         prepared.bottlenecks = prepared.executions.front().bottlenecks;
         for(const auto& c : ordered)
         {
-            prepared.executions.push_back(independent(c.definition,objective));
+            if (control) control->update("Evaluating candidate",c.definition.name);
+            prepared.executions.push_back(independent(c.definition,objective,control,control ? &prepared.final_snapshots : nullptr));
+            if (control) control->update("Candidate complete",c.definition.name);
             analysis::CandidateResult r; r.candidate = {c.definition.name,counts(c.definition)}; r.metrics = prepared.executions.back().baseline.metrics;
-            r.delta = analysis::compare_metrics(prepared.baseline.metrics,r.metrics,counts(baseline()),counts(c.definition)); prepared.candidates.push_back(std::move(r));
+            r.delta = analysis::compare_metrics(prepared.baseline.metrics,r.metrics,counts(request.baseline),counts(c.definition)); prepared.candidates.push_back(std::move(r));
         }
         prepared.execution_ms = std::chrono::duration<double,std::milli>{Timer::now()-started}.count();
         const auto derived = Timer::now(); analysis::rank_candidates(prepared.candidates,objective);
@@ -243,7 +329,8 @@ void ScenarioWorkspace::compare(ComparisonMode mode, analysis::Objective objecti
         prepared.report_ms = std::chrono::duration<double,std::milli>{Timer::now()-derived}.count();
     }
     if (mode == ComparisonMode::Checkpoint) prepared.execution_ms = std::chrono::duration<double,std::milli>{Timer::now()-started}.count();
-    report_ = std::move(prepared); status_ = Status::Results; message_ = "Comparison complete. Best among tested configurations; active baseline preserved.";
+    if (control) control->update("Constructing report");
+    return prepared;
 }
 void ScenarioWorkspace::view_result(std::optional<std::string> name)
 {
@@ -256,16 +343,20 @@ void ScenarioWorkspace::view_result(std::optional<std::string> name)
         index = static_cast<std::size_t>(found-r.candidates.begin())+1; d = r.definitions.at(index-1); expected = found->metrics; capacity = found->candidate.resources;
     }
     warehouse::WarehouseSnapshot snapshot;
-    if(r.mode == ComparisonMode::Initial) { warehouse::WarehouseSimulation runtime{d}; runtime.run(); snapshot = runtime.capture_snapshot(); }
+    if (!r.final_snapshots.empty()) snapshot = r.final_snapshots.at(index);
+    else if(r.mode == ComparisonMode::Initial) { warehouse::WarehouseSimulation runtime{d}; runtime.run(); snapshot = runtime.capture_snapshot(); }
     else
     {
         snapshot = final_branch(r.executions.front().request.checkpoint,capacity);
+    }
+    if (r.mode == ComparisonMode::Checkpoint)
+    {
         auto& c = std::get<scenario::WarehouseConfig>(d.domain); c.loading_bays = capacity.loading_bays; c.workers = capacity.workers; c.forklifts = capacity.forklifts;
     }
     auto prepared = std::make_unique<viewer::ViewerController>(d,snapshot);
     if(prepared->observation().metrics != expected) throw std::runtime_error("Result preview metrics do not match report");
     prepared->set_viewport(view().viewport()); alternative_view_ = std::move(prepared);
-    viewed_identity_ = "Final result preview: "+(name ? *name : std::string{"Baseline"});
+    viewed_identity_ = "Report #"+std::to_string(r.request_id)+" final result preview: "+(name ? *name : std::string{"Baseline"});
 }
 void ScenarioWorkspace::return_to_baseline()
 { alternative_view_.reset(); if(baseline_) viewed_identity_ = "Baseline: "+baseline_->name; }
