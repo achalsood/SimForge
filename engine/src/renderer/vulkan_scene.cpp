@@ -5,6 +5,7 @@
 #include <simforge/renderer/geometry.hpp>
 #include <array>
 #include <chrono>
+#include <algorithm>
 
 namespace simforge::renderer::detail
 {
@@ -99,10 +100,13 @@ void VulkanScene::ensure_pipeline(VkRenderPass pass, PipelineSignature signature
 DrawCounts VulkanScene::record(VkCommandBuffer command, VkExtent2D extent, const RenderFrameData& frame) const
 {
     if (!pipeline_) throw std::logic_error("Scene pipeline has not been created");
-    const auto camera = frame_camera(frame,static_cast<float>(extent.width)/static_cast<float>(extent.height));
+    auto area = frame.viewport.value_or(RenderViewport{0,0,extent.width,extent.height});
+    area.x = std::min(area.x,extent.width-1); area.y = std::min(area.y,extent.height-1);
+    area.width = std::min(area.width,extent.width-area.x); area.height = std::min(area.height,extent.height-area.y);
+    const auto camera = frame_camera(frame,static_cast<float>(area.width)/static_cast<float>(area.height));
     const auto view_projection = camera.view_projection();
-    const VkViewport viewport{0,0,static_cast<float>(extent.width),static_cast<float>(extent.height),0,1};
-    const VkRect2D scissor{{0,0},extent};
+    const VkViewport viewport{static_cast<float>(area.x),static_cast<float>(area.y),static_cast<float>(area.width),static_cast<float>(area.height),0,1};
+    const VkRect2D scissor{{static_cast<std::int32_t>(area.x),static_cast<std::int32_t>(area.y)},{area.width,area.height}};
     vkCmdSetViewport(command,0,1,&viewport); vkCmdSetScissor(command,0,1,&scissor);
     vkCmdBindPipeline(command,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline_);
     const auto vertex = vertices_->handle(); const VkDeviceSize offset = 0;

@@ -24,6 +24,17 @@
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
         "SIMFORGE_BUILD_TESTS": "ON"
       }
+    },
+    {
+      "name": "windows-headless",
+      "displayName": "Windows Debug without renderer",
+      "inherits": "windows-debug",
+      "binaryDir": "${sourceDir}/build/windows-headless",
+      "cacheVariables": {
+        "SIMFORGE_BUILD_RENDERER": "OFF",
+        "SIMFORGE_GRAPHICS_TESTS": "OFF",
+        "VCPKG_INSTALLED_DIR": "${sourceDir}/build/windows-headless/vcpkg_installed"
+      }
     }
   ],
   "buildPresets": [
@@ -34,6 +45,10 @@
     {
       "name": "windows-release",
       "configurePreset": "windows-release"
+    },
+    {
+      "name": "windows-headless",
+      "configurePreset": "windows-headless"
     }
   ],
   "testPresets": [
@@ -43,6 +58,11 @@
       "output": {
         "outputOnFailure": true
       }
+    },
+    {
+      "name": "windows-headless",
+      "configurePreset": "windows-headless",
+      "output": { "outputOnFailure": true }
     }
   ]
 }

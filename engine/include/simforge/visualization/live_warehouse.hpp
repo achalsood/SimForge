@@ -3,17 +3,27 @@
 #include <simforge/warehouse/warehouse_observation.hpp>
 #include <chrono>
 #include <string>
+#include <compare>
 
 namespace simforge::visualization
 {
 inline constexpr std::size_t max_visible_waiting = 128;
 inline constexpr auto shipment_settle_duration = std::chrono::milliseconds{250};
+enum class VisualCategory { Shipment, LoadingBay, Forklift, Worker, Rack };
+struct VisualKey
+{
+    VisualCategory category;
+    std::uint32_t id;
+    auto operator<=>(const VisualKey&) const = default;
+};
+struct Selectable { VisualKey key; renderer::SceneBounds bounds; std::size_t render_index; };
 struct CapacityVisual
 {
     WarehouseVisualKind kind;
     std::uint32_t id;
     bool busy;
     renderer::RenderObject render;
+    renderer::SceneBounds bounds;
 };
 struct ShipmentVisual
 {
@@ -34,6 +44,8 @@ public:
     explicit LiveWarehouseScene(const scenario::ScenarioDefinition& definition);
     void set_state(const warehouse::WarehouseObservation& state, bool reset = false);
     void animate(std::chrono::nanoseconds elapsed);
+    void present(const renderer::Camera& camera, renderer::RenderViewport viewport, std::optional<VisualKey> selection);
+    [[nodiscard]] std::span<const Selectable> selectables() const noexcept { return selectables_; }
     [[nodiscard]] const renderer::RenderFrameData& frame() const noexcept { return frame_; }
     [[nodiscard]] const WarehouseLayout& layout() const noexcept { return layout_; }
     [[nodiscard]] std::span<const ShipmentVisual> shipments() const noexcept { return shipments_; }
@@ -44,6 +56,8 @@ public:
     [[nodiscard]] std::uint64_t layout_generations() const noexcept { return layout_generations_; }
 private:
     void rebuild(warehouse::ResourceCounts capacity);
+    void clear_highlight();
+    void rebuild_selectables();
     scenario::ScenarioDefinition definition_;
     warehouse::ResourceCounts capacity_{};
     WarehouseLayout layout_;
@@ -55,6 +69,8 @@ private:
     LiveVisibility visibility_;
     std::optional<std::uint64_t> last_tick_;
     std::uint64_t layout_generations_{0};
+    std::vector<Selectable> static_selectables_, selectables_;
+    std::optional<std::pair<std::size_t,glm::vec3>> highlight_;
 };
 [[nodiscard]] std::string format_live_metrics(const warehouse::WarehouseObservation& state, LiveVisibility visibility);
 }

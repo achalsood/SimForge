@@ -1,4 +1,5 @@
 #include "vulkan_swapchain.hpp"
+#include <imgui_impl_vulkan.h>
 #include "vulkan_support.hpp"
 #include <cstdio>
 #include <array>
@@ -113,7 +114,7 @@ void VulkanSwapchain::wait_presentations()
 }
 VkResult VulkanSwapchain::acquire(VkSemaphore acquired, VkFence fence, std::uint32_t& image) const
 { return vkAcquireNextImageKHR(device_.handle(),swapchain_,1'000'000'000ULL,acquired,fence,&image); }
-DrawCounts VulkanSwapchain::record(VkCommandBuffer command, std::uint32_t image, const VulkanScene& scene, const RenderFrameData& frame) const
+DrawCounts VulkanSwapchain::record(VkCommandBuffer command, std::uint32_t image, const VulkanScene& scene, const RenderFrameData& frame, ImDrawData* ui) const
 {
     VkClearValue color{};
     const auto clear = scene_clear_color(format_.format);
@@ -124,6 +125,7 @@ DrawCounts VulkanSwapchain::record(VkCommandBuffer command, std::uint32_t image,
     info.renderArea = {{0,0},extent_}; info.clearValueCount = 2; info.pClearValues = clears.data();
     vkCmdBeginRenderPass(command,&info,VK_SUBPASS_CONTENTS_INLINE);
     const auto counts = scene.record(command,extent_,frame);
+    if (ui) ImGui_ImplVulkan_RenderDrawData(ui,command);
     vkCmdEndRenderPass(command);
     if (readback_)
     {

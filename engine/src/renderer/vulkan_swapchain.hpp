@@ -2,6 +2,7 @@
 #include "vulkan_device.hpp"
 #include "vulkan_buffer.hpp"
 #include "vulkan_scene.hpp"
+struct ImDrawData;
 
 namespace simforge::renderer::detail
 {
@@ -13,7 +14,7 @@ public:
     VulkanSwapchain(const VulkanSwapchain&) = delete;
     VulkanSwapchain& operator=(const VulkanSwapchain&) = delete;
     void wait_presentations();
-    [[nodiscard]] DrawCounts record(VkCommandBuffer command, std::uint32_t image, const VulkanScene& scene, const RenderFrameData& frame) const;
+    [[nodiscard]] DrawCounts record(VkCommandBuffer command, std::uint32_t image, const VulkanScene& scene, const RenderFrameData& frame, ImDrawData* ui = nullptr) const;
     [[nodiscard]] CapturedFrame read_pixels();
     [[nodiscard]] VkResult acquire(VkSemaphore acquired, VkFence fence, std::uint32_t& image) const;
     [[nodiscard]] VkResult present(std::uint32_t image);

@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+union SDL_Event;
 
 namespace simforge::platform { class Window; }
 namespace simforge::renderer
@@ -16,6 +17,7 @@ struct RendererOptions
 #endif
     bool require_validation{false};
     bool capture_frames{false}; // Diagnostic transfer/readback; off in normal rendering.
+    bool ui{false}; // Owns one Dear ImGui context and its SDL3/Vulkan backends.
 };
 struct RendererInfo
 {
@@ -28,6 +30,8 @@ struct RendererInfo
     std::uint64_t pipeline_generations{0}, buffer_allocations{0}, depth_images_created{0};
     double asset_initialization_ms{0}, pipeline_creation_ms{0};
     float aspect_ratio{0};
+    std::uint64_t ui_pipeline_generations{0};
+    std::uint32_t ui_vertices{0}, ui_draw_calls{0};
 };
 struct CapturedFrame
 {
@@ -50,6 +54,9 @@ public:
     [[nodiscard]] bool render_frame(const RenderFrameData& frame);
     // Opt-in diagnostic; waits for the latest submitted frame and owns its pixels.
     [[nodiscard]] CapturedFrame capture_frame();
+    void process_ui_event(const SDL_Event& event);
+    [[nodiscard]] bool begin_ui_frame(); // False for minimized/closed/zero drawable.
+    void end_ui_frame();
     void shutdown() noexcept;
     [[nodiscard]] bool initialized() const noexcept;
     // A diagnostic snapshot; includes destruction messages after shutdown.

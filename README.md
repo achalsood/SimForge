@@ -63,6 +63,9 @@ visual identities and deterministic placements, with automatic camera framing.
 The original floor/grid/cube scene remains the no-argument demo.
 Live warehouse playback now shows real arrivals, FIFO waiting, processing,
 completions and aggregate resource activity, with independently paced rendering.
+The interactive viewer adds an in-window dashboard, orbit/pan/zoom, shipment and
+resource inspection, visible playback controls, and correct plain-scenario seeking.
+See the [interactive viewer guide, screenshots and validation](docs/interactive-warehouse-viewer.md).
 See [live visualization, timing, metrics and verified captures](docs/live-warehouse-visualization.md).
 GPU resources remain separate from simulation. See [renderer architecture and setup](docs/vulkan-renderer.md)
 and [warehouse visualization, verified screenshot and measurements](docs/warehouse-visualization.md).
@@ -96,6 +99,7 @@ build/windows-release/benchmarks/simforge_warehouse_snapshot_benchmark.exe
 build/windows-release/benchmarks/simforge_comparison_benchmark.exe
 build/windows-release/benchmarks/simforge_warehouse_layout_benchmark.exe
 build/windows-release/benchmarks/simforge_live_warehouse_benchmark.exe
+build/windows-release/benchmarks/simforge_viewer_benchmark.exe
 ```
 
 Run the sandbox without arguments for the static 3D viewport:
@@ -122,8 +126,31 @@ entity/tick counts, simulated elapsed time, separate setup/update wall durations
 and a position checksum. Fixed-step scheduling does not guarantee cross-platform
 bitwise simulation determinism. Without `--live`, warehouse scenes remain static
 capacity representations. Live mode displays real shipment IDs and aggregate busy
-capacity slots, with truthful visible/hidden queue counts in the title and console.
-Interactive playback controls, camera controls, physics and AI remain future milestones.
+capacity slots, with truthful visible/hidden queue counts in the dashboard.
+
+In `--live`, drag the left mouse button to orbit, click to inspect, drag the middle
+button to pan, and use the wheel to zoom. **F** frames the warehouse, **R** resets
+the camera, **Space** pauses/resumes, **Right** steps exactly one tick while paused,
+and **Escape** clears selection. UI input fields capture typing and shortcuts.
+The playback bar provides Play/Pause/Resume, Step, speed presets/custom input
+(0.01-3600x; press Enter to apply), Reset and a seek slider (release to apply).
+Reset restores the untouched initial runtime and pauses. Seeking pauses; backward
+seeking restores the initial state and replays events. The viewer accepts plain
+scenarios only; graphical recorded-command playback remains unsupported.
+
+The minimum client size is 640x480. Sidebars scroll; below 1000 pixels, an inspector
+shares the metrics sidebar through tabs. Resource IDs describe visual capacity
+slots, with aggregate usage/utilization, rather than physical shipment assignments.
+Physics, pathfinding, AI and scenario editing remain outside this milestone.
+
+Use the separate renderer-disabled preset for CPU tests and isolated dependency
+installation:
+
+```powershell
+cmake --preset windows-headless
+cmake --build --preset windows-headless
+ctest --preset windows-headless --output-on-failure
+```
 
 ```powershell
 build/windows-debug/apps/sandbox/simforge_sandbox.exe --headless --scenario examples/warehouse-baseline.json
@@ -189,11 +216,10 @@ not authenticate data. No third-party serialization dependency was added.
 ## Project Structure
 
 ```text
-engine/       Core engine and simulation runtime
+engine/       Simulation, visualization, renderer and shaders
 apps/         User-facing executables
 tests/        Automated tests
 benchmarks/   Performance benchmarks
-assets/       Runtime assets and shaders
 docs/         Architecture and design documentation
 cmake/        CMake helper modules
 ```

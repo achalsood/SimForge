@@ -10,9 +10,10 @@ target_link_libraries(simforge_sandbox
 
 target_compile_features(simforge_sandbox PRIVATE cxx_std_23)
 if(SIMFORGE_BUILD_RENDERER)
-    target_sources(simforge_sandbox PRIVATE graphics.cpp)
+    find_package(imgui CONFIG REQUIRED)
+    target_sources(simforge_sandbox PRIVATE graphics.cpp viewer.cpp dashboard.cpp)
     target_compile_definitions(simforge_sandbox PRIVATE SIMFORGE_HAS_RENDERER=1)
-    target_link_libraries(simforge_sandbox PRIVATE simforge_renderer simforge_visualization)
+    target_link_libraries(simforge_sandbox PRIVATE simforge_renderer simforge_viewer imgui::imgui SDL3::SDL3)
 else()
     target_compile_definitions(simforge_sandbox PRIVATE SIMFORGE_HAS_RENDERER=0)
 endif()

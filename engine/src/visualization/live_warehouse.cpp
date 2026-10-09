@@ -57,14 +57,25 @@ void LiveWarehouseScene::rebuild(warehouse::ResourceCounts capacity)
     frame.camera = renderer::frame_bounds(layout.bounds,16.0f/9.0f);
     std::vector<glm::vec3> queue_slots, bay_slots;
     std::vector<CapacityVisual> resources;
+    static_selectables_.clear(); highlight_.reset();
     for (const auto& o : layout.objects)
     {
         if (o.kind == WarehouseVisualKind::Pallet)
         { if (queue_slots.size() < max_visible_waiting) queue_slots.push_back(o.render.transform.position); }
         else if (o.kind == WarehouseVisualKind::LoadingBay) bay_slots.push_back(o.render.transform.position+glm::vec3{0,0.33f,0.3f});
-        else if (o.kind != WarehouseVisualKind::Forklift && o.kind != WarehouseVisualKind::Worker) frame.objects.push_back(o.render);
+        else if (o.kind != WarehouseVisualKind::Forklift && o.kind != WarehouseVisualKind::Worker)
+        {
+            if (o.kind == WarehouseVisualKind::StorageRack)
+                static_selectables_.push_back({{VisualCategory::Rack,o.id},o.bounds,frame.objects.size()});
+            frame.objects.push_back(o.render);
+        }
         if (o.kind == WarehouseVisualKind::LoadingBay || o.kind == WarehouseVisualKind::Forklift || o.kind == WarehouseVisualKind::Worker)
-            resources.push_back({o.kind,o.id,false,o.render});
+        {
+            auto bounds = o.bounds;
+            // Pick the door, rather than the dock's empty loading volume that contains cargo.
+            if (o.kind == WarehouseVisualKind::LoadingBay) bounds.maximum.z = bounds.minimum.z+0.45f;
+            resources.push_back({o.kind,o.id,false,o.render,bounds});
+        }
     }
     layout_ = std::move(layout); frame_ = std::move(frame); queue_slots_ = std::move(queue_slots); bay_slots_ = std::move(bay_slots);
     static_count_ = frame_.objects.size(); capacity_ = capacity; ++layout_generations_;
@@ -72,6 +83,7 @@ void LiveWarehouseScene::rebuild(warehouse::ResourceCounts capacity)
 }
 void LiveWarehouseScene::set_state(const warehouse::WarehouseObservation& state, bool reset)
 {
+    clear_highlight();
     validate(state);
     if (state.tick_rate != definition_.simulation.tick_rate || state.horizon != scenario::total_ticks(definition_))
         throw std::invalid_argument("Observation scenario timing mismatch");
@@ -85,8 +97,8 @@ void LiveWarehouseScene::set_state(const warehouse::WarehouseObservation& state,
         else if (o.kind == WarehouseVisualKind::Worker) usage = state.usage.workers;
         else continue;
         const bool busy = o.id <= usage;
-        if (o.kind == WarehouseVisualKind::LoadingBay) o.render.color = busy ? glm::vec3{0.45f,1.0f,0.60f} : glm::vec3{1};
-        else o.render.color = busy ? glm::vec3{1} : glm::vec3{0.45f};
+        if (o.kind == WarehouseVisualKind::LoadingBay) o.render.color = busy ? glm::vec3{0.22f,1.0f,0.42f} : glm::vec3{0.60f,0.65f,0.72f};
+        else o.render.color = busy ? glm::vec3{1.0f,0.90f,0.50f} : glm::vec3{0.25f,0.32f,0.40f};
         o.busy = busy;
     }
     std::vector<ShipmentVisual> next;
@@ -117,6 +129,7 @@ void LiveWarehouseScene::set_state(const warehouse::WarehouseObservation& state,
 void LiveWarehouseScene::animate(std::chrono::nanoseconds elapsed)
 {
     if (elapsed.count() < 0) throw std::invalid_argument("Animation elapsed time cannot be negative");
+    clear_highlight();
     for (std::size_t i = 0; i < shipments_.size(); ++i)
     {
         auto& visual = shipments_[i];
@@ -124,6 +137,39 @@ void LiveWarehouseScene::animate(std::chrono::nanoseconds elapsed)
         const float fraction = static_cast<float>(visual.age.count())/static_cast<float>(std::chrono::duration_cast<std::chrono::nanoseconds>(shipment_settle_duration).count());
         auto render = visual.target; render.transform.position.y += 0.30f*(1-fraction)*(1-fraction);
         frame_.objects[static_count_+resources_.size()+i] = render;
+    }
+    rebuild_selectables();
+}
+void LiveWarehouseScene::clear_highlight()
+{
+    if (highlight_) frame_.objects.at(highlight_->first).color = highlight_->second;
+    highlight_.reset();
+}
+void LiveWarehouseScene::rebuild_selectables()
+{
+    selectables_ = static_selectables_;
+    for (std::size_t i = 0; i < resources_.size(); ++i)
+    {
+        const auto& o = resources_[i];
+        const auto kind = o.kind == WarehouseVisualKind::LoadingBay ? VisualCategory::LoadingBay :
+            o.kind == WarehouseVisualKind::Worker ? VisualCategory::Worker : VisualCategory::Forklift;
+        selectables_.push_back({{kind,o.id},o.bounds,static_count_+i});
+    }
+    for (std::size_t i = 0; i < shipments_.size(); ++i)
+    {
+        const auto index = static_count_+resources_.size()+i;
+        const auto p = frame_.objects[index].transform.position;
+        selectables_.push_back({{VisualCategory::Shipment,shipments_[i].id},{p+glm::vec3{-0.65f,0,-0.60f},p+glm::vec3{0.65f,1.34f,0.60f}},index});
+    }
+}
+void LiveWarehouseScene::present(const renderer::Camera& camera, renderer::RenderViewport viewport, std::optional<VisualKey> selection)
+{
+    clear_highlight(); frame_.camera = camera; frame_.framing_bounds.reset(); frame_.viewport = viewport;
+    if (!selection) return;
+    for (const auto& o : selectables_) if (o.key == *selection)
+    {
+        highlight_ = std::pair{o.render_index,frame_.objects[o.render_index].color};
+        frame_.objects[o.render_index].color = {1.0f,0.52f,0.12f}; break;
     }
 }
 std::string format_live_metrics(const warehouse::WarehouseObservation& state, LiveVisibility visibility)

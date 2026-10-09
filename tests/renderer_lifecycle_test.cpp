@@ -46,6 +46,9 @@ int main()
         check(graphics.info().presented_frames == 0 && graphics.info().gpu_name.empty());
         rejects<std::logic_error>([&] { (void)graphics.render_frame(frame); });
         rejects<std::logic_error>([&] { (void)graphics.capture_frame(); });
+        rejects<std::logic_error>([&] { (void)graphics.begin_ui_frame(); });
+        rejects<std::logic_error>([&] { graphics.end_ui_frame(); });
+        rejects<std::logic_error>([&] { graphics.process_ui_event(SDL_Event{}); });
         // The native-window precondition fails before any Vulkan instance/GPU call.
         for (int attempt = 0; attempt < 3; ++attempt)
         {

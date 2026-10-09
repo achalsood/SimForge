@@ -11,6 +11,7 @@ namespace simforge::renderer
 enum class MeshId : std::uint32_t { Cube = 1, Floor = 2, Grid = 3, Dock = 4, Rack = 5, Pallet = 6, Forklift = 7, Worker = 8 };
 inline constexpr std::size_t builtin_mesh_count = 8;
 struct SceneBounds { glm::vec3 minimum, maximum; };
+struct RenderViewport { std::uint32_t x, y, width, height; };
 [[nodiscard]] Camera frame_bounds(const SceneBounds& bounds, float aspect_ratio);
 struct RenderObject
 {
@@ -26,6 +27,8 @@ struct RenderFrameData
     std::vector<RenderObject> objects;
     // Optional automatic framing at actual drawable aspect, including resize.
     std::optional<SceneBounds> framing_bounds;
+    // Drawable pixels, relative to the surface; absent means the full surface.
+    std::optional<RenderViewport> viewport;
 };
 [[nodiscard]] Camera frame_camera(const RenderFrameData& frame, float aspect_ratio);
 void validate_frame(const RenderFrameData& frame);

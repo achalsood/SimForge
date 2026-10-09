@@ -55,6 +55,8 @@ Camera frame_camera(const RenderFrameData& frame, float aspect_ratio)
 }
 void validate_frame(const RenderFrameData& frame)
 {
+    if (frame.viewport && (!frame.viewport->width || !frame.viewport->height))
+        throw std::invalid_argument("Render viewport must have positive extent");
     const auto view_projection = frame_camera(frame,frame.camera.aspect_ratio).view_projection();
     for (const auto& object : frame.objects)
     {

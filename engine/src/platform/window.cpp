@@ -32,13 +32,14 @@ void Window::create(std::string title, std::uint32_t width, std::uint32_t height
 }
 void Window::destroy() noexcept { if (state_) state_->open = false; state_.reset(); space_pressed_ = false; }
 bool Window::is_open() const noexcept { return state_ && state_->open; }
-void Window::poll_events()
+void Window::poll_events(const std::function<void(const SDL_Event&)>& sink)
 {
     if (!state_) throw std::logic_error("Cannot poll an uncreated window");
     SDL_Event event{};
     const auto id = SDL_GetWindowID(state_->window);
     while (SDL_PollEvent(&event))
     {
+        if (sink) sink(event);
         if (event.type == SDL_EVENT_QUIT || (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && event.window.windowID == id))
             state_->open = false;
         if (event.type == SDL_EVENT_KEY_DOWN && event.key.windowID == id && !event.key.repeat && event.key.key == SDLK_SPACE)

@@ -3,8 +3,10 @@
 #include <cstdint>
 #include <string>
 #include <memory>
+#include <functional>
 
 struct SDL_Window;
+union SDL_Event;
 
 namespace simforge::platform
 {
@@ -41,7 +43,7 @@ public:
 
     [[nodiscard]] bool is_open() const noexcept;
 
-    void poll_events();
+    void poll_events(const std::function<void(const SDL_Event&)>& sink = {});
     [[nodiscard]] bool consume_space_press() noexcept;
     void set_title(const std::string& title);
 

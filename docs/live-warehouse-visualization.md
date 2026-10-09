@@ -1,5 +1,9 @@
 # Live warehouse simulation visualization
 
+This document records Commit #14. Commit #15 replaces the title-bar metrics and
+Space-only playback with the [interactive dashboard and viewer](interactive-warehouse-viewer.md).
+Its current capture suffixes and input controls are documented there.
+
 `--live` connects the existing warehouse runtime to its procedural 3D scene.
 Every operational cargo object represents a real shipment ID. The renderer does
 not schedule work, invent events, calculate throughput, or change simulation rules.

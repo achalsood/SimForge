@@ -9,5 +9,11 @@
     "nlohmann-json",
     "glm"
   ],
+  "features": {
+    "viewer": {
+      "description": "Interactive graphical viewer",
+      "dependencies": [{"name": "imgui", "features": ["sdl3-binding", "vulkan-binding"]}]
+    }
+  },
   "builtin-baseline": "2750401336fb7c95f6619657a46a7e798661341c"
 }

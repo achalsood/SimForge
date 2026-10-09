@@ -17,3 +17,18 @@ foreach(index RANGE 0 2)
     endif()
 endforeach()
 file(REMOVE "${BINARY_DIR}/warehouse-visual-oversized.json" "${BINARY_DIR}/warehouse-visual-invalid.json")
+
+# A new primary filename must not overwrite an existing diagnostic sibling.
+set(capture "${BINARY_DIR}/viewer-capture-collision.ppm")
+set(sibling "${BINARY_DIR}/viewer-capture-collision-overview.ppm")
+file(REMOVE "${capture}")
+file(WRITE "${sibling}" "preserve existing artifact")
+execute_process(COMMAND "${SANDBOX}" --scenario "${SOURCE_DIR}/examples/warehouse-baseline.json"
+    --live --graphics-smoke 180 --graphics-capture "${capture}"
+    RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE error TIMEOUT 10)
+file(READ "${sibling}" retained)
+file(REMOVE "${sibling}")
+if(NOT result EQUAL 1 OR NOT error MATCHES "capture output already exists" OR NOT output STREQUAL "" OR
+    NOT retained STREQUAL "preserve existing artifact" OR EXISTS "${capture}")
+    message(FATAL_ERROR "Expected capture rejection without graphics/overwriting: ${result}; ${output}; ${error}")
+endif()

@@ -416,7 +416,7 @@ int main(int argc, char* argv[])
                   << "  --headless --experiment FILE [--export-json NEW_FILE] [--export-csv NEW_FILE]\n"
                   << "  --graphics-smoke FRAMES (120..10000; display/GPU/validation required)\n";
         std::cerr << "  --scenario WAREHOUSE_FILE [--graphics-smoke FRAMES] [--graphics-capture NEW_FILE.ppm]\n";
-        std::cerr << "  --scenario WAREHOUSE_FILE --live [--speed 0.01..3600] (default 300; Space pauses/resumes)\n";
+        std::cerr << "  --scenario WAREHOUSE_FILE --live [--speed 0.01..3600] (default 300; interactive dashboard)\n";
         return 1;
     }
 }
