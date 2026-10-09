@@ -4,6 +4,20 @@ SimForge is an AI-native simulation platform powered by a custom high-performanc
 
 The goal is to let users describe systems, simulate them, compare alternatives, and understand why those systems behave the way they do.
 
+## Save and reopen a complete workspace
+
+1. Start SimForge and choose **New Project** in the launcher (or **File ? New Project** in a warehouse workspace).
+2. Open **Scenario Editor**, change the warehouse inputs and validate the draft. Add a named candidate if you want to compare it later.
+3. Click **Run Simulation** to create an independent custom run. The original baseline stays preserved.
+4. Press Play, adjust speed or seek to an intermediate simulated time, then pause. Move the camera as desired.
+5. Run a comparison from Analysis if needed. Use **File ? Save Project**, choose a new `.simforge` file and wait for ?Project saved.? Invalid draft text can also be saved safely.
+6. Close SimForge. Save/Discard/Cancel protects unsaved changes, including simulation progress.
+7. Start SimForge again and choose **Open Project**, or run `simforge_sandbox.exe --project "D:\Studies\warehouse.simforge"`.
+8. Select the restored custom run and press Play. Baseline and other custom runs retain their independent progress, clocks and cameras.
+9. Open **Analysis** to inspect the previous report with its original submitted definitions and candidate IDs. Editing a current candidate does not relabel historical results.
+
+**Save** updates the associated file; **Save As** creates a new file and leaves the earlier one intact. `File *` indicates unsaved work. On launch, explicitly restore or discard any offered local recovery copy. See [project format, failure safety, recovery and measurements](docs/project-persistence.md).
+
 ## Vision
 
 SimForge will combine:

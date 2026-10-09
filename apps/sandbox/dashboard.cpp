@@ -154,6 +154,10 @@ DashboardFrame draw_dashboard(const simforge::viewer::ViewerController& v, Dashb
     const bool tiny = width/s < 500;
     { Font font{20}; ImGui::TextColored(color(design::processing),"%s",tiny ? "SF" : "SIMFORGE"); }
     ImGui::SameLine();
+    if(ImGui::Button(draft.project_dirty?"File *":"File")) draft.show_file_menu=true;
+    result.file_menu=center();
+    if(ImGui::IsItemHovered()) ImGui::SetTooltip("%s%s\n%s",draft.project_name.c_str(),draft.project_dirty?" * Unsaved changes":"",draft.project_location.c_str());
+    ImGui::SameLine();
     const auto status = playback_status(state.at_horizon,v.runtime().clock().paused(),draft.seeking);
     const auto accent = status == PresentationStatus::Completed ? design::completed : status == PresentationStatus::Paused ? design::waiting : design::processing;
     const float status_width = (tiny ? 85 : 195)*s;
@@ -371,6 +375,7 @@ DashboardFrame draw_dashboard(const simforge::viewer::ViewerController& v, Dashb
     ImGui::EndDisabled();
     if (draft.feedback_error) { Font font{design::label}; ImGui::TextColored(color(design::error),"%s",draft.feedback.c_str()); }
     ImGui::End();
+    if(draft.show_file_menu || ImGui::IsPopupOpen("",ImGuiPopupFlags_AnyPopupId|ImGuiPopupFlags_AnyPopupLevel)) return result;
     auto* draw = ImGui::GetForegroundDrawList(); const auto p = layout.viewport.origin, end = p+layout.viewport.size;
     draw->PushClipRect({p.x,p.y},{end.x,end.y});
     { Font font{design::label}; draw->AddText(ImGui::GetFont(),ImGui::GetFontSize(),{p.x+16*s,p.y+12*s},packed(design::secondary),

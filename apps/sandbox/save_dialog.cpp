@@ -6,6 +6,26 @@
 #include <array>
 #include <algorithm>
 #include <SDL3/SDL.h>
+std::optional<std::filesystem::path> project_dialog(bool open,const std::string& suggested,std::string& error)
+{
+    std::array<wchar_t,32768> buffer{};
+    auto filename=std::filesystem::u8path(suggested).filename(); filename.replace_extension(L".simforge");
+    const auto name=filename.wstring(); if(name.size()>=buffer.size()) {error="Project filename too long";return {};}
+    std::copy(name.begin(),name.end(),buffer.begin());
+    OPENFILENAMEW dialog{};dialog.lStructSize=sizeof(dialog);dialog.lpstrFile=buffer.data();dialog.nMaxFile=static_cast<DWORD>(buffer.size());
+    if(auto* window=SDL_GetKeyboardFocus())
+        dialog.hwndOwner=static_cast<HWND>(SDL_GetPointerProperty(SDL_GetWindowProperties(window),SDL_PROP_WINDOW_WIN32_HWND_POINTER,nullptr));
+    dialog.lpstrFilter=L"SimForge projects (*.simforge)\0*.simforge\0\0";dialog.lpstrDefExt=L"simforge";
+    dialog.lpstrTitle=open?L"Open SimForge project":L"Save SimForge project as";
+    dialog.Flags=OFN_EXPLORER|OFN_NOCHANGEDIR|OFN_PATHMUSTEXIST|(open?OFN_FILEMUSTEXIST:OFN_OVERWRITEPROMPT);
+    if(!(open?GetOpenFileNameW(&dialog):GetSaveFileNameW(&dialog))) {
+        if(CommDlgExtendedError()) error="Project file dialog failed"; return {};
+    }
+    std::filesystem::path path(buffer.data());
+    // Save As never silently replaces a file. Ordinary Save updates its associated path.
+    if(!open && std::filesystem::exists(path)) {error="Choose a new project filename. Use Save to update the open project.";return {};}
+    error.clear();return path;
+}
 std::optional<std::filesystem::path> save_report_dialog(bool csv,const std::string& suggested,std::string& error)
 {
     try
@@ -31,6 +51,8 @@ std::optional<std::filesystem::path> save_report_dialog(bool csv,const std::stri
 }
 
 #else
+std::optional<std::filesystem::path> project_dialog(bool,const std::string&,std::string& error)
+{error="Enter a project path; native dialogs are available on Windows.";return {};}
 std::optional<std::filesystem::path> save_report_dialog(bool,const std::string&,std::string& error)
 { error="Native Save As is available on Windows. Enter an explicit new-file path below."; return {}; }
 #endif

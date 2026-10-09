@@ -202,6 +202,12 @@ if(SIMFORGE_BUILD_RENDERER)
             endif()
             set_tests_properties(${name} PROPERTIES LABELS graphics TIMEOUT 40 RUN_SERIAL TRUE)
         endfunction()
+        if(WIN32)
+            add_test(NAME simforge_project_graphics COMMAND ${SIMFORGE_POWERSHELL} -NoProfile -ExecutionPolicy Bypass
+                -File ${PROJECT_SOURCE_DIR}/scripts/run-graphics-test.ps1 -Executable $<TARGET_FILE:simforge_sandbox>
+                -Scenario ${PROJECT_SOURCE_DIR}/examples/warehouse-baseline.json -Live -ProjectRoundTrip -ArtifactRoot ${SIMFORGE_ARTIFACT_ROOT})
+            set_tests_properties(simforge_project_graphics PROPERTIES LABELS graphics TIMEOUT 80 RUN_SERIAL TRUE)
+        endif()
         add_graphics_case(simforge_live_graphics ${PROJECT_SOURCE_DIR}/examples/warehouse-baseline.json live)
         add_graphics_case(simforge_custom_live_graphics ${PROJECT_SOURCE_DIR}/examples/warehouse-higher-capacity.json live)
         add_graphics_case(simforge_vulkan_smoke)
@@ -272,6 +278,12 @@ target_link_libraries(simforge_async_experiment_test PRIVATE simforge_workspace)
 foreach(case capture equivalence retention sequential shutdown immediate probes publication failure long_cancel)
     add_test(NAME simforge_async_${case} COMMAND simforge_async_experiment_test ${case})
     set_tests_properties(simforge_async_${case} PROPERTIES TIMEOUT 60)
+endforeach()
+
+add_executable(simforge_project_test project_test.cpp)
+target_link_libraries(simforge_project_test PRIVATE simforge_workspace nlohmann_json::nlohmann_json)
+foreach(case subtick failure_worker recovery_failure report_values report_definitions future_commands duplicate_runs run_count strings nested camera_invalid roundtrip identity new save_as draft invalid_draft candidates settings dirty runs equivalence clock seek_reset completed commands camera limit report checkpoint historical preview async failure_write recovery paths version truncated corrupt oversized types missing duplicate snapshot inconsistent_clock enum provenance engine isolation)
+    add_test(NAME simforge_project_${case} COMMAND simforge_project_test ${case})
 endforeach()
 
 # Tool executables retain full Debug symbols, but do not need incremental-link databases.

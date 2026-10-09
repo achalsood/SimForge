@@ -42,6 +42,7 @@ public:
         std::size_t processing_limit = 256) const;
     [[nodiscard]] WarehouseSnapshot capture_snapshot() const;
     void restore_snapshot(const WarehouseSnapshot& snapshot);
+    void restore_clock(const simulation::ClockSnapshot& snapshot);
     [[nodiscard]] static WarehouseSimulation create_from(const WarehouseSnapshot& snapshot);
     // Requires a settled boundary. Due events precede this command; newly eligible
     // FIFO work starts immediately, except at the closed horizon.

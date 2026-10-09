@@ -1,6 +1,7 @@
 #include <simforge/core/engine.hpp>
 #if SIMFORGE_HAS_RENDERER
 #include "graphics.hpp"
+#include "viewer.hpp"
 #endif
 #include <simforge/simulation/movement_system.hpp>
 #include <simforge/world/world.hpp>
@@ -32,7 +33,7 @@ struct Options
     std::optional<double> speed;
     std::uint64_t entities{10'000};
     std::uint64_t ticks{600};
-    std::optional<std::filesystem::path> scenario, record, replay;
+    std::optional<std::filesystem::path> scenario, record, replay, project;
     std::optional<std::filesystem::path> warehouse_replay;
     std::optional<std::pair<std::uint32_t, std::uint32_t>> compare_forklifts;
     std::optional<std::uint64_t> checkpoint_seconds;
@@ -58,7 +59,8 @@ Options parse_options(int argc, char* argv[])
     for (int i = 1; i < argc; ++i)
     {
         const std::string_view argument{argv[i]};
-        if (argument == "--live" && !options.live) options.live = true;
+        if(argument=="--project" && !options.project) { if(++i==argc) throw std::invalid_argument("Missing project path"); options.project=argv[i]; }
+        else if (argument == "--live" && !options.live) options.live = true;
         else if (argument == "--speed" && !options.speed)
         {
             if (++i == argc) throw std::invalid_argument("Missing --speed value");
@@ -124,6 +126,8 @@ Options parse_options(int argc, char* argv[])
         }
         else throw std::invalid_argument("Unknown or duplicate argument");
     }
+    if(options.project && (options.headless || options.live || options.scenario || options.speed || options.record || options.replay || options.warehouse_replay || options.experiment || options.compare_forklifts || options.checkpoint_seconds || entities_seen || ticks_seen))
+        throw std::invalid_argument("--project requires graphical project playback and conflicts with scenario workflows");
     if ((options.live && (!options.scenario || options.headless || options.record || options.replay || options.warehouse_replay || options.experiment ||
             options.compare_forklifts || options.checkpoint_seconds || entities_seen || ticks_seen)) || (options.speed && !options.live))
         throw std::invalid_argument("--live requires a graphical --scenario; --speed requires --live; simulation workflows conflict");
@@ -367,6 +371,7 @@ int run(const Options& options)
     if (!options.headless)
     {
 #if SIMFORGE_HAS_RENDERER
+        if(options.project) return run_viewer(options.graphics_smoke,options.graphics_capture,{},300,false,nullptr,options.project);
         return run_graphics(options.graphics_smoke,options.graphics_capture,options.scenario,options.live,options.speed.value_or(300));
 #else
         throw std::invalid_argument("This executable has no renderer; use --headless or build with SIMFORGE_BUILD_RENDERER=ON");
@@ -415,6 +420,7 @@ int main(int argc, char* argv[])
                   << "  --headless --warehouse-replay FILE [--scenario FILE]\n"
                   << "  --headless --experiment FILE [--export-json NEW_FILE] [--export-csv NEW_FILE]\n"
                   << "  --graphics-smoke FRAMES (120..10000; display/GPU/validation required)\n";
+        std::cerr << "  --project PROJECT.simforge (restore saved workspace)\n";
         std::cerr << "  --scenario WAREHOUSE_FILE [--graphics-smoke FRAMES] [--graphics-capture NEW_FILE.png]\n";
         std::cerr << "  --scenario WAREHOUSE_FILE --live [--speed 0.01..3600] (default 300; interactive dashboard)\n";
         return 1;

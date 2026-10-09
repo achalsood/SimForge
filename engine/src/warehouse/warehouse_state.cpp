@@ -7,6 +7,13 @@
 
 namespace simforge::warehouse
 {
+void WarehouseSimulation::restore_clock(const simulation::ClockSnapshot& snapshot)
+{
+    simulation::validate_snapshot(snapshot);
+    if (snapshot.ticks != clock_.tick_count() || snapshot.ticks_per_second != clock_.ticks_per_second())
+        throw std::invalid_argument("Clock does not match operational snapshot");
+    clock_.restore_snapshot(snapshot);
+}
 namespace
 {
 scenario::ScenarioDefinition validated_definition(const WarehouseSnapshot& snapshot)

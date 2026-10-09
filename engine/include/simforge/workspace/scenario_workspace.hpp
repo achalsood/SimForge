@@ -108,6 +108,10 @@ public:
     [[nodiscard]] const std::string& viewed_identity() const noexcept { return viewed_identity_; }
     [[nodiscard]] bool viewing_baseline() const noexcept { return !preview_view_ && active_run_ == 0; }
 private:
+    friend class Project;
+    friend struct ProjectCodec;
+    std::uint64_t persistent_generation_{0};
+    std::uint64_t report_generation_{0}, preview_report_generation_{0};
     static Draft make_draft(const scenario::ScenarioDefinition& definition);
     scenario::ScenarioDefinition checked_draft();
     Candidate& candidate(std::uint64_t id);

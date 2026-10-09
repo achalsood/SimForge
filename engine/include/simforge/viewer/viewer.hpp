@@ -6,6 +6,12 @@
 
 namespace simforge::viewer
 {
+struct CameraPose
+{
+    float yaw{0}, pitch{0}, distance{1};
+    glm::vec3 target{0};
+    bool operator==(const CameraPose&) const = default;
+};
 using visualization::VisualKey;
 using visualization::VisualCategory;
 // SDL/ImGui pointer coordinates are logical units; only GPU rectangles use pixels.
@@ -31,6 +37,8 @@ public:
     [[nodiscard]] float pitch() const noexcept { return pitch_; }
     [[nodiscard]] float distance() const noexcept { return distance_; }
     [[nodiscard]] glm::vec3 target() const noexcept { return target_; }
+    [[nodiscard]] CameraPose pose() const noexcept { return {yaw_,pitch_,distance_,target_}; }
+    void restore_pose(const CameraPose& pose);
 private:
     void fit(renderer::SceneBounds bounds);
     renderer::SceneBounds initial_, bounds_;
@@ -93,7 +101,16 @@ public:
     [[nodiscard]] std::optional<VisualKey> selection() const noexcept { return selection_; }
     [[nodiscard]] double speed() const noexcept { return speed_; }
     [[nodiscard]] const std::string& name() const noexcept { return definition_.name; }
+    [[nodiscard]] const scenario::ScenarioDefinition& definition() const noexcept { return definition_; }
+    // Operational snapshot and scheduling clock are restored independently.
+    void restore_session(const warehouse::WarehouseSnapshot& state, const simulation::ClockSnapshot& clock,
+        const CameraPose& camera, std::optional<VisualKey> selection = {},
+        std::vector<warehouse::CapacityChange> history = {});
+    [[nodiscard]] const std::vector<warehouse::CapacityChange>& command_history() const noexcept { return command_history_; }
 private:
+    void advance_timeline(std::uint64_t tick);
+    std::vector<warehouse::CapacityChange> command_history_;
+    std::size_t next_command_{0};
     void refresh(bool reset = false);
     void cancel_drag() noexcept;
     scenario::ScenarioDefinition definition_;

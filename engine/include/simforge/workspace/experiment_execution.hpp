@@ -27,6 +27,7 @@ public:
     std::uint64_t start(ExperimentRequest request, Observer observer = {});
     void cancel();
     void shutdown();
+    void reserve_request_ids(std::uint64_t last_id);
     [[nodiscard]] ExperimentProgress progress() const;
     [[nodiscard]] std::optional<ExperimentProgress> last_unsuccessful_attempt() const;
     [[nodiscard]] std::optional<Comparison> take_result(std::uint64_t request_id);

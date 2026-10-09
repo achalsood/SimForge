@@ -53,6 +53,19 @@ void OrbitCamera::fit(renderer::SceneBounds bounds)
 }
 void OrbitCamera::frame(renderer::SceneBounds bounds) { fit(bounds); }
 void OrbitCamera::reset() { fit(initial_); }
+void OrbitCamera::restore_pose(const CameraPose& pose)
+{
+    if (!std::isfinite(pose.yaw) || !std::isfinite(pose.pitch) || !std::isfinite(pose.distance) ||
+        !renderer::finite(pose.target) || std::abs(pose.yaw)>7 || pose.pitch < -1.57f || pose.pitch > 1.57f ||
+        pose.distance <= 0 || pose.distance > radius_*20+6)
+        throw std::invalid_argument("Invalid saved camera pose");
+    const auto center=(bounds_.minimum+bounds_.maximum)*0.5f;
+    if (glm::any(glm::greaterThan(glm::abs(pose.target-center),glm::vec3{radius_*3+1})))
+        throw std::invalid_argument("Saved camera target exceeds scene bounds");
+    auto replacement=*this;
+    replacement.yaw_=pose.yaw; replacement.pitch_=pose.pitch; replacement.distance_=pose.distance;
+    replacement.target_=pose.target; replacement.adjusted_=true; (void)replacement.camera(); *this=replacement;
+}
 void OrbitCamera::set_aspect(float aspect, bool preserve_pose)
 {
     positive(aspect); if (aspect == aspect_) return;
@@ -178,7 +191,54 @@ void ViewerController::replace_scenario(const scenario::ScenarioDefinition& defi
     auto camera = std::make_unique<OrbitCamera>(scene->layout().bounds,static_cast<float>(pixels.width)/pixels.height);
     auto initial = runtime->capture_snapshot(); runtime->set_time_scale(speed_);
     definition_ = definition; runtime_ = std::move(runtime); scene_ = std::move(scene); camera_ = std::move(camera); initial_ = std::move(initial);
-    result_preview_ = false; selection_.reset(); cancel_drag(); refresh(true);
+    result_preview_ = false; command_history_.clear(); next_command_=0; selection_.reset(); cancel_drag(); refresh(true);
+}
+void ViewerController::restore_session(const warehouse::WarehouseSnapshot& state, const simulation::ClockSnapshot& clock,
+    const CameraPose& camera, std::optional<VisualKey> selection, std::vector<warehouse::CapacityChange> history)
+{
+    simulation::validate_snapshot(clock);
+    if (clock.ticks != state.current_tick || clock.ticks_per_second != state.tick_rate)
+        throw std::invalid_argument("Saved simulation clock is inconsistent");
+    auto prepared=std::make_unique<warehouse::WarehouseSimulation>(definition_);
+    prepared->restore_snapshot(state); prepared->restore_clock(clock);
+    if(history.empty()) history=state.capacity_changes;
+    if(history.size()>warehouse::max_capacity_changes || history.size()<state.capacity_changes.size() ||
+        !std::equal(state.capacity_changes.begin(),state.capacity_changes.end(),history.begin()))
+        throw std::invalid_argument("Saved command history conflicts with operational snapshot");
+    std::uint64_t previous=0;
+    for(const auto& command:history) {
+        (void)warehouse::resource_name(command.resource);
+        if(command.tick<previous || command.tick>state.horizon_ticks || command.capacity>100000 ||
+            command.started_before>scenario::max_warehouse_shipments) throw std::invalid_argument("Invalid saved command timeline");
+        previous=command.tick;
+    }
+    if(history.size()>state.capacity_changes.size() && history[state.capacity_changes.size()].tick<state.current_tick)
+        throw std::invalid_argument("Saved command timeline is behind its clock");
+    if(history.size()>state.capacity_changes.size()) {
+        // A backward seek can retain future recorded commands. Validate that tail
+        // in isolation; the playable runtime still restores the exact saved snapshot.
+        auto check=warehouse::WarehouseSimulation::create_from(state);
+        for(std::size_t i=state.capacity_changes.size();i<history.size();++i) {
+            const auto& command=history[i];check.advance_to(command.tick);
+            if(check.metrics().started!=command.started_before) throw std::invalid_argument("Recorded command reservation history mismatch");
+            check.set_resource_capacity(command.resource,command.capacity);
+        }
+        if(check.capture_snapshot().capacity_changes!=history) throw std::invalid_argument("Recorded command timeline mismatch");
+    }
+    auto pose=*camera_; pose.restore_pose(camera);
+    set_speed(clock.time_scale); runtime_=std::move(prepared); *camera_=pose;
+    command_history_=std::move(history); next_command_=state.capacity_changes.size();
+    selection_.reset(); cancel_drag(); refresh(true); select(selection);
+}
+void ViewerController::advance_timeline(std::uint64_t tick)
+{
+    while(next_command_<command_history_.size() && command_history_[next_command_].tick<=tick) {
+        const auto& command=command_history_[next_command_];
+        runtime_->advance_to(command.tick);
+        if(runtime_->metrics().started!=command.started_before) throw std::invalid_argument("Recorded command history diverged");
+        runtime_->set_resource_capacity(command.resource,command.capacity); ++next_command_;
+    }
+    runtime_->advance_to(tick);
 }
 void ViewerController::toggle_playback()
 {
@@ -190,7 +250,7 @@ void ViewerController::step()
 {
     if (result_preview_) return;
     if (!runtime_->clock().paused() || observation_.at_horizon) return;
-    runtime_->advance_by(1); refresh();
+    advance_timeline(runtime_->clock().tick_count()+1); refresh();
 }
 void ViewerController::set_speed(double speed)
 {
@@ -200,14 +260,14 @@ void ViewerController::set_speed(double speed)
 void ViewerController::reset()
 {
     if (result_preview_) throw std::logic_error("Final result preview has no playback timeline; return to baseline");
-    runtime_->restore_snapshot(initial_); runtime_->set_time_scale(speed_); runtime_->pause(); selection_.reset(); cancel_drag(); refresh(true);
+    runtime_->restore_snapshot(initial_); next_command_=0; runtime_->set_time_scale(speed_); runtime_->pause(); selection_.reset(); cancel_drag(); refresh(true);
 }
 void ViewerController::seek(std::uint64_t tick)
 {
     if (result_preview_) throw std::logic_error("Final result preview has no playback timeline; return to baseline");
     if (tick > runtime_->horizon_ticks()) throw std::invalid_argument("Seek target exceeds scenario horizon");
-    if (tick < observation_.tick) runtime_->restore_snapshot(initial_);
-    runtime_->advance_to(tick);
+    if (tick < observation_.tick) {runtime_->restore_snapshot(initial_); next_command_=0;}
+    advance_timeline(tick);
     // A seek establishes a tick boundary; discard old real-time fractional phase.
     if (runtime_->clock().capture_snapshot().remainder != 0) runtime_->restore_snapshot(runtime_->capture_snapshot());
     runtime_->set_time_scale(speed_); runtime_->pause(); selection_.reset(); cancel_drag(); refresh(true);
@@ -218,7 +278,16 @@ void ViewerController::advance(std::chrono::nanoseconds elapsed)
     const auto tick = observation_.tick;
     if (elapsed.count() > 0 && !runtime_->clock().paused())
     {
-        runtime_->advance_elapsed(elapsed);
+        if(command_history_.empty()) runtime_->advance_elapsed(elapsed);
+        else {
+            simulation::SimulationClock scheduled(runtime_->clock().ticks_per_second());
+            scheduled.restore_snapshot(runtime_->clock().capture_snapshot()); (void)scheduled.advance(elapsed);
+            const auto target=std::min(scheduled.tick_count(),runtime_->horizon_ticks());
+            advance_timeline(target);
+            auto state=scheduled.capture_snapshot(); state.ticks=target;
+            if(target==runtime_->horizon_ticks()) state.remainder=0;
+            runtime_->restore_clock(state);
+        }
         // A sub-tick frame can settle arrival zero without changing the tick.
         if (runtime_->clock().tick_count() != tick || runtime_->metrics() != observation_.metrics) refresh();
     }

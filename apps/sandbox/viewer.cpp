@@ -1,6 +1,7 @@
 #include "viewer.hpp"
 #include "dashboard.hpp"
 #include "workspace_panel.hpp"
+#include "project_panel.hpp"
 #include <simforge/workspace/experiment_execution.hpp>
 #include "capture.hpp"
 #include <simforge/platform/window.hpp>
@@ -110,11 +111,14 @@ void verify_geometry(const renderer::CapturedFrame& image, const viewer::Viewpor
 }
 }
 int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<std::filesystem::path>& capture_output,
-    const std::filesystem::path& scenario_path, double speed, bool show_workspace, const simforge::scenario::ScenarioDefinition* prepared_definition)
+    const std::filesystem::path& scenario_path, double speed, bool show_workspace, const simforge::scenario::ScenarioDefinition* prepared_definition, const std::optional<std::filesystem::path>& project_path)
 {
     using namespace simforge;
-    const auto definition = prepared_definition ? *prepared_definition : scenario::load_scenario(scenario_path);
+    const auto definition = prepared_definition ? *prepared_definition : project_path ?
+        scenario::ScenarioDefinition{1,"Warehouse",{60,28800,0},scenario::WarehouseConfig{2,4,2,300,600}} : scenario::load_scenario(scenario_path);
     workspace::ScenarioWorkspace workspace{definition,speed};
+    workspace::Project project{workspace};
+    if(project_path) project.open(*project_path);
     auto& controller = workspace.view(); // Existing live smoke exercises the preserved baseline.
     if (capture_output)
     {
@@ -139,24 +143,44 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         << " | Format: " << initial_info.surface_format << " | Present: " << initial_info.present_mode << " | ImGui: " << IMGUI_VERSION << '\n';
     const auto id = SDL_GetWindowID(window.native_handle());
     DashboardFrame dashboard; DashboardState ui_state; std::vector<ViewerCommand> pending; Measurements measurements;
-    WorkspaceUI workspace_ui;
+    WorkspaceUI workspace_ui; ProjectUI project_ui;
+    if(!smoke_frames) {
+        if(const auto* pref=SDL_GetPrefPath("SimForge","SimForge")) {project_ui.recovery_path=std::filesystem::path(pref)/"session.recovery";
+            project_ui.show_recovery=project_ui.recovery_deferred=workspace::Project::recovery_available(project_ui.recovery_path);}
+    }
     ui_state.panels.workspace = show_workspace;
     if(show_workspace) ui_state.panels.mode=viewer::ApplicationMode::Editor;
     workspace_ui.path = scenario_path.string();
+    if(project_path) { const auto& p=project.preferences();
+        ui_state.panels={p.metrics,p.inspector,p.metrics_explicit,p.focus,p.workspace,static_cast<viewer::ApplicationMode>(p.application_mode)};
+        workspace_ui.mode=static_cast<int>(p.comparison_mode);workspace_ui.objective=static_cast<int>(p.objective);
+        workspace_ui.current_checkpoint=p.current_checkpoint;workspace_ui.checkpoint_seconds=p.checkpoint_seconds;workspace_ui.editing=p.selected_candidate;
+        workspace_ui.notes=p.notes;workspace_ui.result_name=p.result_name;workspace_ui.current_tab=p.editor_tab;
+        if(p.application_mode==1) workspace_ui.requested_tab=p.editor_tab;
+        if(workspace.report()) {workspace_ui.result_order=workspace.report()->ranking;for(const auto& c:workspace.report()->candidates) if(!c.rank) workspace_ui.result_order.push_back(c.candidate.name);}
+    }
     bool discard_next_elapsed = false;
     std::optional<float> diagnostic_scale;
     const auto frame = [&](std::chrono::nanoseconds elapsed)
     {
         const auto frame_started = Clock::now();
         std::vector<viewer::InputEvent> events;
-        window.poll_events([&](const SDL_Event& e){ graphics.process_ui_event(e); if (const auto converted = input(e,id)) events.push_back(*converted); });
+        window.poll_events([&](const SDL_Event& e){ graphics.process_ui_event(e); if (const auto converted = input(e,id)) events.push_back(*converted); },[&] {
+            if(smoke_frames || project_ui.close_requested) return true;
+            if(project.dirty() || workspace.execution().progress().active()) {project_ui.confirmation=ProjectAction::Close;return false;}
+            return true;
+        });
         if (!window.is_open()) return false;
         if (workspace.poll_experiment()) {
             workspace_ui.result_order=workspace.report()->ranking;
             for (const auto& r:workspace.report()->candidates) if (!r.rank) workspace_ui.result_order.push_back(r.candidate.name);
             workspace_ui.result_name=workspace.report()->ranking.empty()?"Baseline":workspace.report()->ranking.front();
         }
-        const bool workspace_commands = !workspace_ui.pending.empty() || workspace_ui.dialog_used;
+        capture_project_preferences(project,ui_state,workspace_ui);
+        process_project(project,workspace,project_ui,ui_state,workspace_ui);
+        if(project_ui.close_requested) {window.request_close();return false;}
+        const bool workspace_commands = !workspace_ui.pending.empty() || workspace_ui.dialog_used || project_ui.changed_workspace || project_ui.dialog_used;
+        project_ui.dialog_used=false;
         workspace_ui.dialog_used=false;
         for (const auto& c : workspace_ui.pending)
         {
@@ -236,6 +260,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         ui_state.run_identity=workspace.viewed_identity(); ui_state.active_run=workspace.active_run_id();
         ui_state.runs={{0,"Original Baseline: "+workspace.baseline().name}};
         for (const auto& run : workspace.runs()) ui_state.runs.emplace_back(run.id,run.controller->name()+" / Run #"+std::to_string(run.id));
+        ui_state.project_name=project.info().name;const auto project_location=project.info().path.u8string();ui_state.project_location=std::string(project_location.begin(),project_location.end());ui_state.project_dirty=project.dirty();
         dashboard = draw_dashboard(controller,ui_state); pending = dashboard.commands;
         if(ui_state.select_run) { workspace_ui.pending.push_back({WorkspaceAction::SelectRun,{},{},*ui_state.select_run}); ui_state.select_run.reset(); }
         if(ui_state.remove_run) { workspace_ui.pending.push_back({WorkspaceAction::RemoveRun,{},{},*ui_state.remove_run}); ui_state.remove_run.reset(); }
@@ -249,6 +274,12 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
             else { viewer::InputEvent e{viewer::InputKind::Key}; e.key=viewer::Key::Frame; controller.input(e,{}); }
         }
         if (ui_state.panels.workspace) draw_workspace(workspace,workspace_ui,dashboard);
+        capture_project_preferences(project,ui_state,workspace_ui);
+        draw_project(project,workspace,project_ui,ui_state,dashboard);
+        if(!smoke_frames && !project_ui.recovery_deferred && !project_ui.recovery_path.empty()) {
+            try { (void)project.recover_if_due(project_ui.recovery_path,Clock::now()); }
+            catch(const std::exception& ex) {project_ui.error=std::string{"Recovery save failed: "}+ex.what();}
+        }
         measurements.ui_us += std::chrono::duration<double,std::micro>{Clock::now()-ui_started}.count();
         graphics.end_ui_frame(); const auto present_started = Clock::now();
         const bool presented = graphics.render_frame(controller.present());
@@ -285,7 +316,21 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         }
         window.resize(1280,720); submit(); submit();
     };
-    if (smoke_frames)
+    if(smoke_frames && project_path) {
+        const auto saved=workspace.view().runtime().capture_snapshot();const auto saved_clock=workspace.view().runtime().clock().capture_snapshot();
+        const auto saved_camera=workspace.view().orbit_camera().pose();const auto active=workspace.active_run_id();
+        submit();submit();diagnostic_failure_probe();capture("project-restored");
+        require(workspace.active_run_id()==active && workspace.view().runtime().capture_snapshot()==saved,"Fresh process changed restored run/time");
+        require(workspace.view().orbit_camera().pose()==saved_camera,"Fresh process changed restored camera");
+        require(workspace.view().speed()==saved_clock.time_scale && workspace.view().runtime().clock().paused()==saved_clock.paused,"Fresh process lost playback state");
+        require(workspace.runs().size()==3 && workspace.candidates().size()==1 && workspace.report().has_value(),"Fresh process lost workspace analyses or runs");
+        require(workspace.view().scene().resources().size()>0 && workspace.view().observation().capacity.forklifts==3,"Restored geometry mismatch");
+        auto uninterrupted=warehouse::WarehouseSimulation::create_from(saved);uninterrupted.run();
+        workspace.view().seek(workspace.view().observation().horizon);submit();
+        require(workspace.view().runtime().capture_snapshot()==uninterrupted.capture_snapshot(),"Fresh process deterministic continuation diverged");
+        capture("project-continued");std::cout<<"Project fresh process: exact run/time/camera/report restoration and deterministic continuation verified.\n";
+    }
+    if (smoke_frames && !project_path)
     {
         submit(); submit(); diagnostic_failure_probe(); const auto overview = capture("overview");
         require(graphics.info().ui_vertices > 1000 && graphics.info().ui_draw_calls >= 3,"Dashboard emitted no meaningful UI draw data");
@@ -630,6 +675,40 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         window.resize(1024,768); submit(); SDL_MinimizeWindow(window.native_handle()); frame(std::chrono::nanoseconds{0}); SDL_RestoreWindow(window.native_handle()); submit();
         workspace.return_to_baseline(); submit();
         require(workspace.view().runtime().capture_snapshot()==preserved && graphics.info().pipeline_generations==1 && graphics.info().ui_pipeline_generations==1,"Custom playback rebuilt pipelines or changed baseline");
+        if(const auto* project_test=std::getenv("SIMFORGE_PROJECT_TEST_PATH")) {
+            project_ui.test_path=std::filesystem::u8path(project_test);project.rename("Warehouse study");
+            // Save an existing independent run at an intermediate time through the File menu.
+            workspace.select_run(custom_id);workspace.view().seek(600ULL*workspace.view().observation().tick_rate);submit();
+            const auto saved=workspace.view().runtime().capture_snapshot();const auto saved_camera=workspace.view().orbit_camera().pose();
+            const auto saved_report=workspace.json();
+            click(dashboard.file_menu);submit();click(project_ui.save_button);submit();
+            require(std::filesystem::exists(project_ui.test_path) && project_ui.error.empty() && !project.dirty(),"UI project save failed");
+            capture("project-saved");click(dashboard.file_menu);submit();capture("project-menu");
+            // Dismiss the File popup with Escape before continuing.
+            SDL_Event dismiss{};dismiss.type=SDL_EVENT_KEY_DOWN;dismiss.key.windowID=id;dismiss.key.key=SDLK_ESCAPE;dismiss.key.scancode=SDL_SCANCODE_ESCAPE;dismiss.key.down=true;push(dismiss);submit();
+            dismiss.type=SDL_EVENT_KEY_UP;dismiss.key.down=false;push(dismiss);submit();
+            const auto original_path=project_ui.test_path;
+            workspace.edit(workspace::Field::Workers,"7");
+            click(dashboard.file_menu);submit();click(project_ui.new_button);submit();
+            require(project_ui.confirmation.has_value(),"New did not prompt for unsaved changes");
+            click(project_ui.cancel);submit();require(workspace.view().runtime().capture_snapshot()==saved && workspace.draft().values[2]=="7","Cancel lost unsaved workspace");
+            click(dashboard.file_menu);submit();click(project_ui.new_button);submit();click(project_ui.discard);submit();
+            require(workspace.runs().empty() && !workspace.report(),"New project did not clear retained work");
+            click(dashboard.file_menu);submit();click(project_ui.open_button);submit();
+            project_ui.test_path=original_path.parent_path()/"missing"/"cannot-save.simforge";
+            click(project_ui.confirm_save);submit();require(project_ui.confirmation.has_value() && !project_ui.error.empty() && workspace.runs().empty(),"Failed prompt save proceeded with Open");
+            project_ui.test_path=original_path;click(project_ui.discard);submit();
+            require(project_ui.error.empty() && workspace.active_run_id()==custom_id && workspace.view().runtime().capture_snapshot()==saved,"UI project open did not restore run");
+            require(workspace.json()==saved_report && workspace.view().orbit_camera().pose()==saved_camera,"UI project open lost report/camera");
+            capture("project-restored");
+            const auto malformed=original_path.parent_path()/"invalid.simforge";
+            {std::ofstream out(malformed);out<<"malformed project";}
+            project_ui.test_path=malformed;workspace.edit(workspace::Field::Workers,"8");
+            click(dashboard.file_menu);submit();click(project_ui.open_button);submit();click(project_ui.discard);submit();
+            require(!project_ui.error.empty() && workspace.view().runtime().capture_snapshot()==saved && workspace.draft().values[2]=="8","Malformed UI open damaged current work");
+            project_ui.test_path=original_path;project_ui.error.clear();
+            std::cout<<"Project UI: save/open/new, unsaved Save/Discard/Cancel controls and malformed-file isolation verified.\n";
+        }
         std::cout<<"Custom graphics: draft/candidate/file launches, real shipments/metrics, picking, playback/seek/reset, retained switching, async isolation and resize verified.\n";
         std::cout << "Workspace smoke: injected draft edit/invalid feedback/candidate creation/comparison, actual candidate result camera, preserved baseline, checkpoint and export replay verified.\n";
         std::cout << "Viewer smoke: dashboard GPU text, injected SDL camera/picking/buttons, real inspector, pause/step/reset/seek, sizes, minimize/restore, exact headless snapshot verified.\n";
@@ -644,6 +723,11 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
     if(smoke_frames) require(count==*smoke_frames,"Graphics walkthrough cancelled before all requested frames completed");
     if (smoke_frames && capture_output) write_capture(graphics.capture_frame(),*capture_output);
     if (smoke_frames) require(graphics.info().ui_texture_creations == warmed_texture_creations,"Steady frames repeatedly recreated the font atlas");
+    if(!smoke_frames && !project_ui.recovery_deferred && !project_ui.recovery_path.empty()) {
+        try {if(project.dirty() && !project_ui.close_requested) (void)project.recover_if_due(project_ui.recovery_path,Clock::now()+std::chrono::seconds(61));
+            else project.discard_own_recovery(project_ui.recovery_path);}
+        catch(const std::exception& ex) {std::cerr<<"Recovery save failed: "<<ex.what()<<'\n';}
+    }
     workspace.execution().shutdown();
     graphics.shutdown(); const auto info = graphics.info();
     std::cout << "Viewer frames: " << info.presented_frames << " | 3D draws: " << info.draw_calls << " | UI draws: " << info.ui_draw_calls << " | UI vertices: " << info.ui_vertices
@@ -661,7 +745,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
     require(!info.validation_errors && !info.validation_warnings,"Viewer Vulkan validation was not clean");
     if (smoke_frames && window.is_open())
     {
-        controller.reset(); graphics.initialize(window,options); style_dashboard(); submit();
+        workspace.view().reset(); graphics.initialize(window,options); style_dashboard(); submit();
         ExperimentGate closing_gate; workspace::ExperimentExecution closing_worker;
         closing_worker.start(workspace.capture_request(workspace::ComparisonMode::Initial,analysis::Objective::MaximizeCompleted),
             [&](auto phase,auto,auto,auto){closing_gate.checkpoint(phase);});

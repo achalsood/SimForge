@@ -99,7 +99,7 @@ void ScenarioWorkspace::load(const ScenarioDefinition& d, bool discard)
     // A completion from the prior baseline must not publish after a scenario replacement.
     (void)execution_->take_result(execution_->progress().request_id);
     auto draft = make_draft(d); baseline_ = d; baseline_view_ = std::move(prepared); preview_view_.reset(); runs_.clear(); active_run_ = 0;
-    draft_ = draft_origin_ = std::move(draft); errors_.clear(); candidates_.clear(); report_.reset();
+    ++persistent_generation_; draft_ = draft_origin_ = std::move(draft); errors_.clear(); candidates_.clear(); report_.reset();
     // IDs are never reused within the workspace, including after scenario replacement.
     viewed_identity_ = "LIVE SIMULATION - Original Baseline: "+d.name; status_ = Status::Ready; message_ = "Scenario loaded. Edit initial configuration; the running warehouse is unchanged by typing.";
 }
@@ -109,7 +109,7 @@ void ScenarioWorkspace::edit(Field field, std::string value)
 {
     (void)baseline(); const auto index = static_cast<std::size_t>(field);
     if (index >= draft_.values.size()) throw std::invalid_argument("Unknown draft field");
-    draft_.values[index] = std::move(value); errors_.clear(); status_ = dirty() ? Status::Modified : Status::Ready;
+    if (draft_.values[index] != value) ++persistent_generation_; draft_.values[index] = std::move(value); errors_.clear(); status_ = dirty() ? Status::Modified : Status::Ready;
 }
 bool ScenarioWorkspace::validate_draft()
 {
@@ -143,11 +143,14 @@ ScenarioDefinition ScenarioWorkspace::checked_draft()
 void ScenarioWorkspace::revert(bool discard)
 {
     if (dirty() && !discard) throw std::logic_error("Confirm discarding unsaved changes to revert");
-    draft_ = draft_origin_ = make_draft(baseline()); errors_.clear(); status_ = Status::Ready; message_ = "Draft restored to loaded baseline.";
+    auto prepared=make_draft(baseline());
+    if(draft_!=prepared || draft_origin_!=prepared) ++persistent_generation_;
+    draft_ = draft_origin_ = std::move(prepared); errors_.clear(); status_ = Status::Ready; message_ = "Draft restored to loaded baseline.";
 }
 void ScenarioWorkspace::save_draft(const std::filesystem::path& path)
 {
     const auto d = checked_draft(); analysis::detail::save_output(path,scenario::serialize_scenario(d));
+    if(draft_origin_!=draft_) ++persistent_generation_;
     draft_origin_ = draft_; status_ = Status::Ready; message_ = "Saved new scenario: "+path.string();
 }
 void ScenarioWorkspace::run_draft() { (void)create_run(checked_draft()); }
@@ -160,7 +163,7 @@ std::uint64_t ScenarioWorkspace::create_run(const ScenarioDefinition& d)
     prepared->reset(); // Consistent custom-run policy: untouched tick zero, paused.
     prepared->set_viewport(view().viewport());
     const auto id = next_run_id_;
-    runs_.push_back({id,std::move(prepared)}); ++next_run_id_;
+    ++persistent_generation_; runs_.push_back({id,std::move(prepared)}); ++next_run_id_;
     select_run(id);
     message_ = "Independent run starts paused at tick zero. Press Play. Inactive runs do not advance.";
     return id;
@@ -211,7 +214,7 @@ void ScenarioWorkspace::check_name(const std::string& name, std::optional<std::u
         throw std::invalid_argument("Candidate name is duplicate or reserved: "+name);
 }
 void ScenarioWorkspace::invalidate()
-{ status_ = Status::ComparisonReady; message_ = "Candidates changed. Previous report uses earlier submitted inputs."; }
+{ ++persistent_generation_; status_ = Status::ComparisonReady; message_ = "Candidates changed. Previous report uses earlier submitted inputs."; }
 std::uint64_t ScenarioWorkspace::add_candidate(std::string notes)
 {
     auto d = checked_draft(); check_name(d.name);
@@ -233,7 +236,9 @@ void ScenarioWorkspace::rename_candidate(std::uint64_t id, std::string name)
 void ScenarioWorkspace::edit_candidate(std::uint64_t id, bool discard)
 {
     if (dirty() && !discard) throw std::logic_error("Confirm discarding unsaved draft edits before editing a candidate");
-    draft_ = draft_origin_ = make_draft(candidate(id).definition); errors_.clear(); status_ = Status::Ready;
+    auto prepared=make_draft(candidate(id).definition);
+    if(draft_!=prepared || draft_origin_!=prepared) ++persistent_generation_;
+    draft_ = draft_origin_ = std::move(prepared); errors_.clear(); status_ = Status::Ready;
 }
 void ScenarioWorkspace::update_candidate(std::uint64_t id, std::string notes)
 {
@@ -284,7 +289,7 @@ void ScenarioWorkspace::compare(ComparisonMode mode, analysis::Objective objecti
     if (execution_->progress().active()) throw std::logic_error("An experiment is already active");
     auto prepared = execute_experiment(capture_request(mode,objective,tick));
     (void)execution_->take_result(execution_->progress().request_id);
-    report_ = std::move(prepared); status_ = Status::Results; message_ = "Comparison complete. Best among tested configurations; active baseline preserved.";
+    ++persistent_generation_; ++report_generation_; report_ = std::move(prepared); status_ = Status::Results; message_ = "Comparison complete. Best among tested configurations; active baseline preserved.";
 }
 ExperimentExecution& ScenarioWorkspace::execution() { return *execution_; }
 void ScenarioWorkspace::start_experiment(ComparisonMode mode, analysis::Objective objective, std::optional<std::uint64_t> tick)
@@ -297,7 +302,7 @@ bool ScenarioWorkspace::poll_experiment()
 {
     const auto progress = execution_->progress();
     if (auto completed = execution_->take_result(progress.request_id)) {
-        report_ = std::move(completed); status_ = Status::Results;
+        ++persistent_generation_; ++report_generation_; report_ = std::move(completed); status_ = Status::Results;
         // The preview owns its snapshot. Publication must not switch the active scene/camera.
         message_ = "Experiment complete. Report belongs to submitted inputs."; return true;
     }
@@ -400,6 +405,7 @@ void ScenarioWorkspace::view_result(std::optional<std::string> name)
     if(prepared->observation().metrics != expected) throw std::runtime_error("Result preview metrics do not match report");
     prepared->set_viewport(view().viewport()); view().select(std::nullopt); view().input({viewer::InputKind::FocusLost},{}); preview_view_ = std::move(prepared);
     viewed_identity_ = "FINAL-STATE PREVIEW - Report #"+std::to_string(r.request_id)+": "+(name ? *name : std::string{"Baseline"});
+    preview_report_generation_=report_generation_;
 }
 void ScenarioWorkspace::return_to_baseline()
 { select_run(0); }

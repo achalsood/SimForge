@@ -1,6 +1,8 @@
 #include "graphics.hpp"
 #include "viewer.hpp"
 #include "dashboard.hpp"
+#include "save_dialog.hpp"
+#include <simforge/workspace/project.hpp>
 #include "capture.hpp"
 #include <imgui.h>
 #include <SDL3/SDL.h>
@@ -137,7 +139,7 @@ int run_graphics(std::optional<std::uint64_t> smoke_frames, const std::optional<
     options.ui = !smoke_frames || !scenario_path;
     if (smoke_frames) { options.validation = true; options.require_validation = true; options.capture_frames = true; }
     graphics.initialize(window,options); FailureCapture failure_capture{graphics}; summary(graphics.info());
-    std::optional<std::filesystem::path> open_workspace;
+    std::optional<std::filesystem::path> open_workspace,open_project;
     std::optional<scenario::ScenarioDefinition> loaded_workspace;
     std::array<char,1025> scenario_input{};
     const char* executable_path=SDL_GetBasePath();
@@ -198,10 +200,23 @@ int run_graphics(std::optional<std::uint64_t> smoke_frames, const std::optional<
                         catch(const std::exception& e) { launcher_error=e.what(); }
                     }
                     const auto low=ImGui::GetItemRectMin(),high=ImGui::GetItemRectMax(); launcher_button={(low.x+high.x)*0.5f,(low.y+high.y)*0.5f};
+                    if(!smoke_frames) {
+                        if(ImGui::Button("New Project",{-1,36*scale})) {
+                            try {auto d=scenario::load_scenario(example);loaded_workspace=std::move(d);open_workspace=example;}
+                            catch(const std::exception& e) {launcher_error=e.what();}
+                        }
+                        if(ImGui::Button("Open Project...",{-1,36*scale})) {
+                            if(auto path=project_dialog(true,"project.simforge",launcher_error)) {
+                                try {workspace::ScenarioWorkspace prepared;workspace::Project project(prepared);project.open(*path);open_project=*path;}
+                                catch(const std::exception& e) {launcher_error=e.what();}
+                            }
+                        }
+                    }
                     if(!launcher_error.empty()) ImGui::TextWrapped("%s",launcher_error.c_str());
                     ImGui::End();
                 }
                 graphics.end_ui_frame();
+                if(open_project) break;
                 if(open_workspace)
                 {
                     if(!smoke_frames) break;
@@ -319,6 +334,7 @@ int run_graphics(std::optional<std::uint64_t> smoke_frames, const std::optional<
         if (info.validation_errors != 0 || info.validation_warnings != 0) throw std::runtime_error("Validation messages during lifecycle smoke");
         std::cout << "Graphics smoke passed: 3D geometry, image/color checks, depth occlusion, repeated resize, minimize/restore, close, reinitialize and native-window lease; validation errors: 0\n";
     }
+    if(open_project) {window.destroy();return run_viewer(std::nullopt,std::nullopt,{},speed,false,nullptr,open_project);}
     if(open_workspace) { window.destroy(); return run_viewer(std::nullopt,std::nullopt,*open_workspace,speed,true,&*loaded_workspace); }
     return 0;
 }

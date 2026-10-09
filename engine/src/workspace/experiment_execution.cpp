@@ -17,6 +17,11 @@ const char* execution_state_name(ExecutionState state) noexcept
     return "Unknown";
 }
 ExperimentExecution::~ExperimentExecution() { shutdown(); }
+void ExperimentExecution::reserve_request_ids(std::uint64_t last_id)
+{
+    if(progress().active() || last_id==std::numeric_limits<std::uint64_t>::max()) throw std::invalid_argument("Invalid saved experiment identity");
+    next_id_=std::max(next_id_,last_id+1);
+}
 std::uint64_t ExperimentExecution::start(ExperimentRequest request, Observer observer)
 {
     if (closed_) throw std::logic_error("Experiment service is shut down");

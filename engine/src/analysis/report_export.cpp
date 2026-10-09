@@ -194,6 +194,68 @@ std::string serialize_comparison_csv(const CandidateResult& baseline, std::span<
     row(baseline, true); for (const auto& result : candidates) row(result, false);
     if (text.size() > max_report_bytes) throw std::length_error("CSV byte limit"); return text;
 }
+AnalysisReport parse_report(std::string_view text)
+{
+    using namespace scenario::detail;
+    const auto json=parse_json(text,max_report_bytes);
+    fields(json,{"schema_version","request","checkpoint","units","baseline","candidates","ranking","bottlenecks","warnings","model_limitations"},{},"report");
+    AnalysisReport report;
+    if(integer(json.at("schema_version"),1,"report version")!=1) invalid("report","unsupported version");
+    report.request=detail::parse_request(json.at("request"));
+    const auto metrics=[](const Json& j) {
+        warehouse::WarehouseMetrics m;
+#define RAW(field) m.field=integer(j.at(#field),1000000000000ULL,#field)
+        RAW(elapsed_ticks); RAW(arrived); RAW(started); RAW(completed); RAW(waiting); RAW(in_progress);
+        RAW(total_wait_ticks); RAW(max_wait_ticks); RAW(completed_processing_ticks); RAW(occupied_resource_ticks);
+#undef RAW
+        const auto number=[](const Json& v)->double { if(!v.is_number()) invalid("metric","expected number"); const auto d=v.get<double>(); if(!std::isfinite(d)) invalid("metric","nonfinite"); return d; };
+#define RATIO(field) if(!j.at(#field).is_null()) m.field=number(j.at(#field))
+        RATIO(throughput_per_hour); RATIO(average_wait_seconds); RATIO(maximum_wait_seconds); RATIO(average_processing_seconds);
+        RATIO(loading_bay_utilization); RATIO(worker_utilization); RATIO(forklift_utilization);
+#undef RATIO
+        m.completed_processing_seconds=number(j.at("completed_processing_seconds")); return m;
+    };
+    const auto result=[&](const Json& j) {
+        CandidateResult r; r.candidate=detail::parse_candidates(Json::array({j.at("candidate")})).front();
+        r.metrics=metrics(j.at("metrics"));
+        if(!j.at("eligible").is_boolean()) invalid("eligible","expected boolean"); r.eligible=j.at("eligible").get<bool>();
+        if(!j.at("rank").is_null()) r.rank=static_cast<std::uint32_t>(integer(j.at("rank"),max_candidates,"rank"));
+        r.eligibility_reason=string(j.at("eligibility_reason"),"eligibility_reason");
+        if(r.eligibility_reason.size()>4096) invalid("eligibility_reason","too long");
+        return r;
+    };
+    report.baseline=result(json.at("baseline"));
+    const auto delta=[&](CandidateResult& r) { r.delta=compare_metrics(report.baseline.metrics,r.metrics,report.baseline.candidate.resources,r.candidate.resources); };
+    delta(report.baseline);
+    const auto& candidates=json.at("candidates");
+    if(!candidates.is_array() || candidates.size()>max_candidates) invalid("report","candidate count");
+    for(const auto& j:candidates) { auto r=result(j); delta(r); report.candidates.push_back(std::move(r)); }
+    const auto& evidence=json.at("bottlenecks");
+    if(!evidence.is_array() || evidence.size()!=3) invalid("report","bottleneck count");
+    for(const auto& j:evidence) {
+        BottleneckEvidence e; const auto resource=string(j.at("resource"),"resource");
+        if(resource=="loading_bay") e.resource=ResourceType::LoadingBay;
+        else if(resource=="worker") e.resource=ResourceType::Worker;
+        else if(resource=="forklift") e.resource=ResourceType::Forklift;
+        else invalid("resource","unknown resource");
+        e.baseline_capacity=static_cast<std::uint32_t>(integer(j.at("baseline_capacity"),100000,"capacity"));
+        e.tested_capacity=static_cast<std::uint32_t>(integer(j.at("tested_capacity"),100001,"capacity"));
+        const auto classification=string(j.at("classification"),"classification"); bool found=false;
+        for(auto c:{BottleneckConclusion::LikelyBottleneck,BottleneckConclusion::NoPositiveEffect,BottleneckConclusion::Unavailable,BottleneckConclusion::Inconclusive})
+            if(classification==conclusion_name(c)) {e.conclusion=c; found=true;}
+        if(!found) invalid("classification","unknown conclusion");
+        if(!j.at("result").is_null()) { e.result=result(j.at("result")); delta(*e.result); }
+        e.summary=string(j.at("summary"),"summary"); report.bottlenecks.push_back(std::move(e));
+    }
+    const auto strings=[](const Json& j,std::size_t limit) {
+        if(!j.is_array() || j.size()>limit) invalid("report","text count");
+        std::vector<std::string> out;
+        for(const auto& v:j) {auto s=string(v,"report text"); if(s.size()>4096) invalid("report","text length"); out.push_back(std::move(s));} return out;
+    };
+    report.ranking=strings(json.at("ranking"),max_candidates); report.warnings=strings(json.at("warnings"),100); report.limitations=strings(json.at("model_limitations"),100);
+    if(report_json(report)!=json) invalid("report","inconsistent saved values or provenance");
+    return report;
+}
 AnalysisReport replay_report(std::string_view text)
 {
     using namespace scenario::detail;

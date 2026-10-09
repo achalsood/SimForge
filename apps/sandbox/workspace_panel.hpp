@@ -32,6 +32,7 @@ struct WorkspaceUI
     bool analysis_page{false};
     bool dialog_used{false};
     int requested_tab{-1};
+    int current_tab{0};
     int scroll_target{-1}; // Opt-in smoke navigation: field 0..8, actions 10..13, top 20.
 };
 void apply_workspace(simforge::workspace::ScenarioWorkspace& workspace, const WorkspaceCommand& command);

@@ -190,6 +190,7 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
             if(ui.analysis_page) { if(index!=2) return false; }
             else if(index==2 || !ImGui::BeginTabItem(name,nullptr,requested==index?ImGuiTabItemFlags_SetSelected:ImGuiTabItemFlags_None)) return false;
             ImGui::BeginChild(name,{0,0});
+            ui.current_tab=index;
             if(ui.scroll_target==20) { ImGui::SetScrollY(0); ui.scroll_target=-1; }
             return true;
         };

@@ -1,6 +1,6 @@
 param(
  [Parameter(Mandatory=$true)][string]$Executable,
- [string]$Scenario,[switch]$Live,[ValidateRange(120,10000)][int]$Frames=180,
+ [string]$Scenario,[switch]$Live,[switch]$ProjectRoundTrip,[ValidateRange(120,10000)][int]$Frames=180,
  [ValidateSet('Test','Review')][string]$Mode='Test',
  [ValidateRange(1,100)][int]$KeepRuns=3,[string]$ArtifactRoot,[switch]$ForceFailure
 )
@@ -18,9 +18,10 @@ $manifest|ConvertTo-Json|Set-Content -LiteralPath $marker -Encoding UTF8
 $arguments=@('--graphics-smoke',"$Frames")
 if($Scenario) { $arguments+=@('--scenario',$Scenario) }; if($Live) { $arguments+='--live' }
 if($Mode -eq 'Review') { $arguments+=@('--graphics-capture',(Join-Path $dir 'capture.png')) }
-$oldCapture=$env:SIMFORGE_FAILURE_CAPTURE; $oldFailure=$env:SIMFORGE_TEST_FAIL_AFTER_PRESENT; $oldMetrics=$env:SIMFORGE_CAPTURE_METRICS
+$oldProject=$env:SIMFORGE_PROJECT_TEST_PATH; $oldCapture=$env:SIMFORGE_FAILURE_CAPTURE; $oldFailure=$env:SIMFORGE_TEST_FAIL_AFTER_PRESENT; $oldMetrics=$env:SIMFORGE_CAPTURE_METRICS
 $exitCode=1; $start=[Diagnostics.Stopwatch]::StartNew()
 try {
+ if($ProjectRoundTrip) { $env:SIMFORGE_PROJECT_TEST_PATH=Join-Path $dir "project.simforge" }
  $env:SIMFORGE_FAILURE_CAPTURE=Join-Path $dir 'failure.png'
  if($Mode -eq 'Review') { $env:SIMFORGE_CAPTURE_METRICS='1' }
  if($ForceFailure) { $env:SIMFORGE_TEST_FAIL_AFTER_PRESENT='1' } else { Remove-Item Env:SIMFORGE_TEST_FAIL_AFTER_PRESENT -ErrorAction SilentlyContinue }
@@ -29,9 +30,15 @@ try {
  $ErrorActionPreference='Continue'
  & $Executable @arguments *> (Join-Path $dir 'console.log')
  $exitCode=$LASTEXITCODE
+ if($ProjectRoundTrip -and $exitCode -eq 0) {
+   $projectArgs=@('--project',(Join-Path $dir 'project.simforge'),'--graphics-smoke',"$Frames")
+   if($Mode -eq 'Review') { $projectArgs+=@('--graphics-capture',(Join-Path $dir 'reopened.png')) }
+   & $Executable @projectArgs *>> (Join-Path $dir 'console.log')
+   $exitCode=$LASTEXITCODE
+ }
  $ErrorActionPreference='Stop'
 } catch { $_|Out-String|Add-Content -LiteralPath (Join-Path $dir 'console.log') } finally {
- $env:SIMFORGE_FAILURE_CAPTURE=$oldCapture; $env:SIMFORGE_TEST_FAIL_AFTER_PRESENT=$oldFailure; $env:SIMFORGE_CAPTURE_METRICS=$oldMetrics
+ $env:SIMFORGE_PROJECT_TEST_PATH=$oldProject; $env:SIMFORGE_FAILURE_CAPTURE=$oldCapture; $env:SIMFORGE_TEST_FAIL_AFTER_PRESENT=$oldFailure; $env:SIMFORGE_CAPTURE_METRICS=$oldMetrics
  $manifest.status=if($exitCode -eq 0){'Success'}else{'Failure'}
  $manifest['finishedUtc']=[DateTime]::UtcNow.ToString('o'); $manifest['elapsedMs']=$start.Elapsed.TotalMilliseconds
  $manifest|ConvertTo-Json|Set-Content -LiteralPath $marker -Encoding UTF8
