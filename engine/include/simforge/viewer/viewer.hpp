@@ -22,7 +22,7 @@ public:
     explicit OrbitCamera(renderer::SceneBounds bounds, float aspect = 16.0f/9.0f);
     void frame(renderer::SceneBounds bounds);
     void reset();
-    void set_aspect(float aspect);
+    void set_aspect(float aspect, bool preserve_pose = false);
     void orbit(glm::vec2 delta);
     void pan(glm::vec2 delta, float viewport_height);
     void zoom(float wheel);
@@ -78,7 +78,7 @@ public:
     void reset(); // Untouched initial runtime, paused; does not settle arrival zero.
     void seek(std::uint64_t tick); // Plain scenario only, pauses and clears animation/selection.
     void advance(std::chrono::nanoseconds elapsed);
-    void set_viewport(Viewport viewport);
+    void set_viewport(Viewport viewport, bool preserve_camera = false);
     void input(const InputEvent& event, InputCapture capture);
     void select(std::optional<VisualKey> key);
     [[nodiscard]] std::optional<Inspector> inspect() const;

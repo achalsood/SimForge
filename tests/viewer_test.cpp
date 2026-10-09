@@ -1,4 +1,5 @@
 #include <simforge/viewer/viewer.hpp>
+#include <simforge/visualization/visual_palette.hpp>
 #include <glm/geometric.hpp>
 #include <algorithm>
 #include <cmath>
@@ -154,8 +155,8 @@ void selection()
     v.advance(1s); check(!v.selection()); v.select(VisualKey{VisualCategory::Shipment,1000}); check(!v.selection());
     v.select(VisualKey{VisualCategory::Worker,1}); const auto& highlighted = v.present();
     const auto index = std::find_if(v.scene().selectables().begin(),v.scene().selectables().end(),[](const auto& o){return o.key == VisualKey{VisualCategory::Worker,1};})->render_index;
-    check(highlighted.objects[index].color == glm::vec3{1,0.52f,0.12f});
-    v.select(std::nullopt); check(v.present().objects[index].color != glm::vec3{1,0.52f,0.12f});
+    check(highlighted.objects[index].color == visualization::palette::selected);
+    v.select(std::nullopt); check(v.present().objects[index].color != visualization::palette::selected);
 }
 void captures()
 {

@@ -1,0 +1,6 @@
+if(NOT DEFINED INPUT OR NOT DEFINED OUTPUT)
+    message(FATAL_ERROR "EmbedFont requires INPUT and OUTPUT")
+endif()
+file(READ "${INPUT}" bytes HEX)
+string(REGEX REPLACE "(..)" "0x\\1," bytes "${bytes}")
+file(WRITE "${OUTPUT}" "#pragma once\nnamespace simforge::renderer::detail {\ninline constexpr unsigned char viewer_font[] = {${bytes}};\n}\n")

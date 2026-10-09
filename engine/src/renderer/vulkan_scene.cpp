@@ -119,7 +119,7 @@ DrawCounts VulkanScene::record(VkCommandBuffer command, VkExtent2D extent, const
         if (!finite(matrix)) throw std::invalid_argument("Drawable object matrix overflow");
         DrawConstants push{};
         for (int col = 0; col < 4; ++col) for (int row = 0; row < 4; ++row) push.mvp[col*4+row] = matrix[col][row];
-        push.tint = {object.color.x,object.color.y,object.color.z,1};
+        push.tint = {object.color.x,object.color.y,object.color.z,object.neutral_material ? 1.0f : 0.0f};
         vkCmdPushConstants(command,layout_,VK_SHADER_STAGE_VERTEX_BIT,0,sizeof(push),&push);
         vkCmdDrawIndexed(command,range.count,1,range.first_index,range.vertex_offset,0);
         ++counts.calls; counts.vertices += range.vertices; counts.indices += range.count;

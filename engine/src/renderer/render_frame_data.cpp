@@ -8,18 +8,19 @@
 
 namespace simforge::renderer
 {
-Camera frame_bounds(const SceneBounds& bounds, float aspect_ratio)
+Camera frame_bounds(const SceneBounds& bounds, float aspect_ratio, float margin)
 {
     if (!finite(bounds.minimum) || !finite(bounds.maximum) ||
         bounds.minimum.x >= bounds.maximum.x || bounds.minimum.y >= bounds.maximum.y || bounds.minimum.z >= bounds.maximum.z)
         throw std::invalid_argument("Scene bounds must be finite and have positive extent");
+    if (!std::isfinite(margin) || margin < 1.01f || margin > 2) throw std::invalid_argument("Invalid framing margin");
     Camera camera; camera.aspect_ratio = aspect_ratio; camera.validate();
     const glm::dvec3 center = (glm::dvec3{bounds.minimum}+glm::dvec3{bounds.maximum})*0.5;
     const auto outward = glm::normalize(glm::dvec3{0.85,1.1,1.25});
     const auto right = glm::normalize(glm::cross(glm::dvec3{0,1,0},outward));
     const auto up = glm::cross(outward,right);
     const double tangent = std::tan(camera.vertical_fov*0.5);
-    const double horizontal = tangent*aspect_ratio/1.12, vertical = tangent/1.12;
+    const double horizontal = tangent*aspect_ratio/margin, vertical = tangent/margin;
     std::array<glm::dvec3,8> projected;
     double distance = 1, radius = 0;
     for (int i = 0; i < 8; ++i)

@@ -43,7 +43,7 @@ OrbitCamera::OrbitCamera(renderer::SceneBounds bounds, float aspect) : initial_{
 { fit(bounds); }
 void OrbitCamera::fit(renderer::SceneBounds bounds)
 {
-    const auto c = renderer::frame_bounds(bounds,aspect_);
+    const auto c = renderer::frame_bounds(bounds,aspect_,1.04f);
     const double radius = glm::length(glm::dvec3{bounds.maximum}-glm::dvec3{bounds.minimum})*0.5;
     const auto offset = glm::dvec3{c.position}-glm::dvec3{c.target}; const double distance = glm::length(offset);
     if (radius <= 0 || radius*20 > std::numeric_limits<float>::max() || !std::isfinite(distance) || distance <= 0)
@@ -53,11 +53,11 @@ void OrbitCamera::fit(renderer::SceneBounds bounds)
 }
 void OrbitCamera::frame(renderer::SceneBounds bounds) { fit(bounds); }
 void OrbitCamera::reset() { fit(initial_); }
-void OrbitCamera::set_aspect(float aspect)
+void OrbitCamera::set_aspect(float aspect, bool preserve_pose)
 {
     positive(aspect); if (aspect == aspect_) return;
     auto replacement = *this; replacement.aspect_ = aspect;
-    if (!adjusted_) replacement.fit(bounds_); else (void)replacement.camera().view_projection();
+    if (!adjusted_ && !preserve_pose) replacement.fit(bounds_); else (void)replacement.camera().view_projection();
     *this = replacement;
 }
 void OrbitCamera::orbit(glm::vec2 delta)
@@ -206,9 +206,9 @@ void ViewerController::refresh(bool reset)
     observation_ = runtime_->capture_observation(scene_->waiting_limit(),scene_->processing_limit()); scene_->set_state(observation_,reset);
     select(selection_);
 }
-void ViewerController::set_viewport(Viewport viewport)
+void ViewerController::set_viewport(Viewport viewport, bool preserve_camera)
 {
-    const auto pixels = viewport.pixels(); camera_->set_aspect(static_cast<float>(pixels.width)/pixels.height); viewport_ = viewport;
+    const auto pixels = viewport.pixels(); camera_->set_aspect(static_cast<float>(pixels.width)/pixels.height,preserve_camera); viewport_ = viewport;
 }
 void ViewerController::cancel_drag() noexcept { drag_.reset(); dragged_ = false; }
 void ViewerController::input(const InputEvent& e, InputCapture capture)

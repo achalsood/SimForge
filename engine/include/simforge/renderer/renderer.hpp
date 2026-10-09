@@ -32,6 +32,7 @@ struct RendererInfo
     float aspect_ratio{0};
     std::uint64_t ui_pipeline_generations{0};
     std::uint32_t ui_vertices{0}, ui_draw_calls{0};
+    std::uint64_t ui_texture_creations{0}, ui_texture_updates{0}; // Backend font atlas events, not font-source reloads.
 };
 struct CapturedFrame
 {

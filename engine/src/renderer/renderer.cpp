@@ -7,6 +7,7 @@
 #include <imgui_impl_sdl3.h>
 #include <imgui_impl_vulkan.h>
 #include <simforge/platform/window.hpp>
+#include "viewer_font.hpp"
 
 namespace simforge::renderer
 {
@@ -104,8 +105,11 @@ struct Renderer::Impl
                 IMGUI_CHECKVERSION(); ui_context = ImGui::CreateContext();
                 ImGui::SetCurrentContext(ui_context);
                 ImGui::GetIO().IniFilename = nullptr; ImGui::GetIO().LogFilename = nullptr;
-                ImGui::GetIO().Fonts->AddFontDefaultVector();
-                ImGui::GetStyle().FontSizeBase = 16.0f;
+                ImFontConfig font_config; font_config.FontDataOwnedByAtlas = false;
+                auto* atlas = ImGui::GetIO().Fonts; atlas->TexMinWidth = atlas->TexMinHeight = 1024;
+                if (!atlas->AddFontFromMemoryTTF(const_cast<unsigned char*>(detail::viewer_font),sizeof(detail::viewer_font),18,&font_config))
+                    throw std::runtime_error("Load embedded Roboto viewer font");
+                ImGui::GetStyle().FontSizeBase = 18.0f;
                 ui_sdl = ImGui_ImplSDL3_InitForVulkan(window.native_handle());
                 if (!ui_sdl) throw std::runtime_error("Initialize ImGui SDL3 backend");
                 initialize_ui_gpu();
@@ -201,7 +205,14 @@ struct Renderer::Impl
             detail::check(vkBeginCommandBuffer(command,&begin),"Begin clear command buffer");
             ImDrawData* ui = nullptr;
             if (ui_context && ui_ready) { ImGui::SetCurrentContext(ui_context); ui = ImGui::GetDrawData(); }
+            std::uint64_t created = 0, updated = 0;
+            if (ui && ui->Textures) for (const auto* texture : *ui->Textures)
+            {
+                if (texture->Status == ImTextureStatus_WantCreate) ++created;
+                if (texture->Status == ImTextureStatus_WantUpdates) ++updated;
+            }
             const auto counts = swapchain->record(command,image,*scene,frame,ui);
+            status.ui_texture_creations += created; status.ui_texture_updates += updated;
             status.ui_vertices = ui ? static_cast<std::uint32_t>(ui->TotalVtxCount) : 0;
             status.ui_draw_calls = 0;
             if (ui) for (const auto* list : ui->CmdLists) status.ui_draw_calls += static_cast<std::uint32_t>(list->CmdBuffer.Size);

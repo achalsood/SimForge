@@ -6,5 +6,7 @@ layout(location = 0) out vec3 color;
 void main()
 {
     gl_Position = draw.mvp * vec4(inPosition, 1.0);
-    color = inColor * draw.tint.rgb;
+    // Presentation state can replace material hue without losing baked face/detail shading.
+    float luminance = dot(inColor, vec3(0.2126, 0.7152, 0.0722));
+    color = mix(inColor, vec3(luminance), draw.tint.a) * draw.tint.rgb;
 }

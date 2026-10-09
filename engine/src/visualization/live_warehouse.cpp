@@ -1,4 +1,5 @@
 #include <simforge/visualization/live_warehouse.hpp>
+#include <simforge/visualization/visual_palette.hpp>
 #include <algorithm>
 #include <cmath>
 #include <iomanip>
@@ -97,8 +98,8 @@ void LiveWarehouseScene::set_state(const warehouse::WarehouseObservation& state,
         else if (o.kind == WarehouseVisualKind::Worker) usage = state.usage.workers;
         else continue;
         const bool busy = o.id <= usage;
-        if (o.kind == WarehouseVisualKind::LoadingBay) o.render.color = busy ? glm::vec3{0.22f,1.0f,0.42f} : glm::vec3{0.60f,0.65f,0.72f};
-        else o.render.color = busy ? glm::vec3{1.0f,0.90f,0.50f} : glm::vec3{0.25f,0.32f,0.40f};
+        o.render.color = busy ? palette::busy : palette::idle;
+        o.render.neutral_material = true;
         o.busy = busy;
     }
     std::vector<ShipmentVisual> next;
@@ -108,7 +109,8 @@ void LiveWarehouseScene::set_state(const warehouse::WarehouseObservation& state,
         {
             const auto& record = records[i];
             ShipmentVisual visual{record.id,record.status,{renderer::MeshId::Pallet,{slots[i],{0,0,0},{1,1,1}},
-                waiting ? (i == 0 ? glm::vec3{1.0f,0.9f,0.55f} : glm::vec3{0.80f,0.90f,1.0f}) : glm::vec3{0.45f,1.0f,0.60f}}};
+                waiting ? (i == 0 ? palette::queue_head : palette::waiting) : palette::processing}};
+            visual.target.neutral_material = true;
             // A small stable tonal variation makes identity changes visible,
             // without claiming a domain material or random shipment property.
             visual.target.color *= 0.82f+0.036f*static_cast<float>(record.id%6);
@@ -169,7 +171,7 @@ void LiveWarehouseScene::present(const renderer::Camera& camera, renderer::Rende
     for (const auto& o : selectables_) if (o.key == *selection)
     {
         highlight_ = std::pair{o.render_index,frame_.objects[o.render_index].color};
-        frame_.objects[o.render_index].color = {1.0f,0.52f,0.12f}; break;
+        frame_.objects[o.render_index].color = palette::selected; break;
     }
 }
 std::string format_live_metrics(const warehouse::WarehouseObservation& state, LiveVisibility visibility)

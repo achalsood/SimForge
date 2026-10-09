@@ -55,7 +55,7 @@ target_include_directories(simforge_render_scene PUBLIC ${CMAKE_CURRENT_SOURCE_D
 target_link_libraries(simforge_render_scene PUBLIC glm::glm-header-only)
 target_compile_features(simforge_render_scene PUBLIC cxx_std_23)
 add_library(simforge_visualization STATIC src/visualization/warehouse_layout.cpp src/visualization/live_warehouse.cpp)
-add_library(simforge_viewer STATIC src/viewer/viewer.cpp)
+add_library(simforge_viewer STATIC src/viewer/viewer.cpp src/viewer/presentation.cpp)
 target_link_libraries(simforge_viewer PUBLIC simforge_visualization)
 target_compile_features(simforge_viewer PUBLIC cxx_std_23)
 target_link_libraries(simforge_visualization PUBLIC simforge_engine simforge_render_scene)
@@ -73,6 +73,12 @@ endif()
 if(SIMFORGE_BUILD_RENDERER)
     find_package(imgui CONFIG REQUIRED)
     find_package(Vulkan 1.4.335 REQUIRED COMPONENTS glslc)
+    set(font_header "${CMAKE_CURRENT_BINARY_DIR}/generated/viewer_font.hpp")
+    add_custom_command(OUTPUT "${font_header}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
+        COMMAND ${CMAKE_COMMAND} "-DINPUT=${PROJECT_SOURCE_DIR}/assets/fonts/Roboto-Regular.ttf" "-DOUTPUT=${font_header}"
+            -P "${PROJECT_SOURCE_DIR}/cmake/EmbedFont.cmake"
+        DEPENDS "${PROJECT_SOURCE_DIR}/assets/fonts/Roboto-Regular.ttf" "${PROJECT_SOURCE_DIR}/cmake/EmbedFont.cmake" VERBATIM)
     set(shader_headers)
     foreach(stage vert frag)
         set(source "${CMAKE_CURRENT_SOURCE_DIR}/shaders/scene.${stage}")
@@ -95,7 +101,7 @@ if(SIMFORGE_BUILD_RENDERER)
     target_compile_features(simforge_render_policy PUBLIC cxx_std_23)
     add_library(simforge_renderer STATIC src/renderer/renderer.cpp src/renderer/vulkan_context.cpp
         src/renderer/vulkan_device.cpp src/renderer/vulkan_swapchain.cpp src/renderer/vulkan_buffer.cpp
-        src/renderer/vulkan_scene.cpp ${shader_headers})
+        src/renderer/vulkan_scene.cpp ${shader_headers} ${font_header})
     target_include_directories(simforge_renderer PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
     target_include_directories(simforge_renderer PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_compile_features(simforge_renderer PUBLIC cxx_std_23)

@@ -1,5 +1,11 @@
 # Vulkan renderer foundation
 
+This document records the renderer foundation and its historical validation.
+The current live viewer includes scenario-driven warehouses, camera interaction,
+selection and the refined operational dashboard. See the
+[interactive viewer guide](interactive-warehouse-viewer.md) for current screenshots,
+185-test Debug/Release results, responsive/DPI behavior and measured UI costs.
+
 The renderer now draws the first static 3D scene: a perspective camera, floor,
 grid and four colored cubes with depth testing. See [3D pipeline and camera details](first-3d-scene.md)
 for shader compilation, geometry/buffer ownership, math conventions, image checks,
@@ -30,6 +36,13 @@ platform (SDL window/surface adapter) <-------------- renderer --> Vulkan
 
 `Renderer::render_frame(const RenderFrameData&)` consumes owned camera/object values.
 Each object supplies a stable built-in mesh ID, transform and linear RGB tint.
+An optional `neutral_material` flag preserves baked vertex luminance while replacing
+its hue with the operational tint. It reuses the existing 80-byte push constants and
+scene pipeline; the default keeps static materials unchanged. No new draw pass or
+warehouse dependency is introduced. Graphical builds embed licensed Roboto through
+`cmake/EmbedFont.cmake`; renderer-disabled CPU viewer tests do not read/load the font
+or link ImGui. Renderer diagnostics count UI texture creation/update requests; prior
+submission completion protects dynamic font uploads and DPI changes.
 The renderer retains no caller references after recording. Future application
 adapters can extract renderable values from simulation, without exposing mutable World pointers, scheduler
 queues, resource managers, or GPU handles. Render assets/caches belong to the

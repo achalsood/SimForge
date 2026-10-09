@@ -12,12 +12,13 @@ enum class MeshId : std::uint32_t { Cube = 1, Floor = 2, Grid = 3, Dock = 4, Rac
 inline constexpr std::size_t builtin_mesh_count = 8;
 struct SceneBounds { glm::vec3 minimum, maximum; };
 struct RenderViewport { std::uint32_t x, y, width, height; };
-[[nodiscard]] Camera frame_bounds(const SceneBounds& bounds, float aspect_ratio);
+[[nodiscard]] Camera frame_bounds(const SceneBounds& bounds, float aspect_ratio, float margin = 1.12f);
 struct RenderObject
 {
     MeshId mesh{MeshId::Cube};
     RenderTransform transform;
     glm::vec3 color{1.0f}; // Linear RGB in [0,1]; opaque.
+    bool neutral_material{false}; // Retain baked vertex luminance, replace its hue with color.
 };
 struct RenderFrameData
 {

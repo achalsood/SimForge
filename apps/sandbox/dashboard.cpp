@@ -6,184 +6,360 @@
 namespace
 {
 using namespace simforge;
+using namespace simforge::viewer;
+ImVec4 color(glm::vec3 rgb) { return {rgb.x,rgb.y,rgb.z,1}; }
+ImU32 packed(glm::vec3 rgb) { return ImGui::ColorConvertFloat4ToU32(color(rgb)); }
+struct Font
+{
+    explicit Font(float size) { ImGui::PushFont(nullptr,size); }
+    ~Font() { ImGui::PopFont(); }
+};
 constexpr auto fixed_panel = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
     ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings;
-void panel(const char* name, ImVec2 pos, ImVec2 size)
-{ ImGui::SetNextWindowPos(pos); ImGui::SetNextWindowSize(size); ImGui::Begin(name,nullptr,fixed_panel); }
+void panel(const char* name, Rect r, float vertical_padding = -1)
+{
+    ImGui::SetNextWindowPos({r.origin.x,r.origin.y}); ImGui::SetNextWindowSize({r.size.x,r.size.y});
+    if (vertical_padding >= 0) ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,{ImGui::GetStyle().WindowPadding.x,vertical_padding});
+    ImGui::Begin(name,nullptr,fixed_panel);
+    if (vertical_padding >= 0) ImGui::PopStyleVar();
+}
 glm::vec2 center()
 { const auto a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax(); return {(a.x+b.x)*0.5f,(a.y+b.y)*0.5f}; }
-void row(const char* name, const std::string& value)
+void tooltip(const char* text)
 {
-    ImGui::TextDisabled("%s",name);
-    const float width = ImGui::GetWindowContentRegionMax().x-ImGui::GetCursorPosX();
-    if (ImGui::CalcTextSize(name).x+ImGui::CalcTextSize(value.c_str()).x+8 <= width)
-        ImGui::SameLine(ImGui::GetWindowContentRegionMax().x-ImGui::CalcTextSize(value.c_str()).x);
-    ImGui::TextUnformatted(value.c_str());
+    if (!ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) return;
+    const float width = std::min(340*ImGui::GetStyle().FontScaleDpi,ImGui::GetIO().DisplaySize.x-2*ImGui::GetStyle().WindowPadding.x);
+    ImGui::SetNextWindowSize({width,0},ImGuiCond_Always);
+    ImGui::BeginTooltip(); ImGui::PushTextWrapPos(ImGui::GetCursorPosX()+ImGui::GetContentRegionAvail().x);
+    ImGui::TextUnformatted(text); ImGui::PopTextWrapPos(); ImGui::EndTooltip();
 }
-void count(const char* name, std::uint64_t value) { row(name,std::to_string(value)); }
-void utilization(const char* label, std::optional<double> value)
+void property(const char* name, const std::string& value, glm::vec3 accent = design::text, float size = design::body)
 {
-    ImGui::TextDisabled("%s",label);
-    const auto text = viewer::format_number(value,100,"%");
-    ImGui::ProgressBar(value ? static_cast<float>(*value) : 0,ImVec2{-1,17},text.c_str());
+    const float width = ImGui::GetContentRegionAvail().x;
+    float label_width = 0, value_width = 0;
+    { Font font{design::label}; label_width = ImGui::CalcTextSize(name).x; ImGui::TextColored(color(design::secondary),"%s",name); }
+    { Font font{size}; value_width = ImGui::CalcTextSize(value.c_str()).x; }
+    if (label_width+value_width+ImGui::GetStyle().ItemSpacing.x <= width)
+        ImGui::SameLine(ImGui::GetWindowContentRegionMax().x-value_width);
+    { Font font{size}; ImGui::TextColored(color(accent),"%s",value.c_str()); }
 }
-const char* category(viewer::VisualCategory c)
+void section(const char* name)
+{
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,{ImGui::GetStyle().ItemSpacing.x,4*ImGui::GetStyle().FontScaleDpi});
+    { Font font{design::heading}; ImGui::TextUnformatted(name); }
+    ImGui::Separator(); ImGui::PopStyleVar();
+}
+void kpi(const char* name, std::uint64_t value, glm::vec3 accent)
+{
+    { Font font{design::label}; ImGui::TextColored(color(design::secondary),"%s",name); }
+    { Font font{design::metric}; ImGui::TextColored(color(accent),"%llu",static_cast<unsigned long long>(value)); }
+}
+void utilization(const char* label, std::optional<double> value, std::uint32_t usage, std::uint32_t capacity)
+{
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,{ImGui::GetStyle().ItemSpacing.x,4*ImGui::GetStyle().FontScaleDpi});
+    const auto caption = std::string{label}+"  "+std::to_string(usage)+"/"+std::to_string(capacity);
+    property(caption.c_str(),display_percent(value),value ? design::processing : design::secondary);
+    tooltip("Active usage / aggregate capacity; the percentage is cumulative utilization.");
+    ImGui::PushStyleColor(ImGuiCol_PlotHistogram,color(design::processing));
+    ImGui::ProgressBar(value ? static_cast<float>(*value) : 0,{-1,6*ImGui::GetStyle().FontScaleDpi},"");
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar();
+}
+enum class Icon { Play, Pause, Step, Reset, Sidebar, Inspect, Focus };
+bool icon_button(const char* id, const char* label, Icon icon, ImVec2 size, const char* help)
+{
+    const std::string caption = *label ? std::string{"    "}+label+"##"+id : std::string{"##"}+id;
+    const bool clicked = ImGui::Button(caption.c_str(),size); tooltip(help);
+    const auto low = ImGui::GetItemRectMin(), high = ImGui::GetItemRectMax();
+    const float s = ImGui::GetStyle().FontScaleDpi, x = low.x+(*label ? 18 : size.x/s*0.5f)*s, y = (low.y+high.y)*0.5f;
+    auto* d = ImGui::GetWindowDrawList(); const auto ink = packed(ImGui::IsItemHovered()?design::text:design::secondary);
+    const float r = 6*s, line = 1.7f*s;
+    if (icon == Icon::Play || icon == Icon::Step)
+    {
+        d->AddTriangleFilled({x-r*0.65f,y-r},{x+r*0.75f,y},{x-r*0.65f,y+r},ink);
+        if (icon == Icon::Step) d->AddLine({x+r,y-r},{x+r,y+r},ink,line);
+    }
+    else if (icon == Icon::Pause)
+    { for (float offset : {-3.0f,3.0f}) d->AddRectFilled({x+(offset-1)*s,y-r},{x+(offset+1)*s,y+r},ink); }
+    else if (icon == Icon::Reset)
+    {
+        d->PathArcTo({x,y},r,0.6f,5.5f,16); d->PathStroke(ink,ImDrawFlags_None,line);
+        d->AddTriangleFilled({x+r,y-4*s},{x+r-6*s,y-5*s},{x+r-1*s,y+1*s},ink);
+    }
+    else if (icon == Icon::Sidebar)
+    { d->AddRect({x-r,y-r},{x+r,y+r},ink,1.0f,line,ImDrawFlags_None); d->AddLine({x-2*s,y-r},{x-2*s,y+r},ink,line); }
+    else if (icon == Icon::Inspect)
+    { d->AddCircle({x-1*s,y-1*s},r*0.7f,ink,12,line); d->AddLine({x+3*s,y+3*s},{x+7*s,y+7*s},ink,line); }
+    else
+    {
+        for (float sign : {-1.0f,1.0f})
+        { d->AddLine({x+sign*r,y-sign*r},{x+sign*r,y-sign*2*s},ink,line); d->AddLine({x+sign*r,y-sign*r},{x+sign*2*s,y-sign*r},ink,line); }
+    }
+    return clicked;
+}
+const char* category(VisualCategory c)
 {
     switch(c)
     {
-    case viewer::VisualCategory::Shipment: return "Shipment";
-    case viewer::VisualCategory::LoadingBay: return "Loading bay";
-    case viewer::VisualCategory::Worker: return "Worker";
-    case viewer::VisualCategory::Forklift: return "Forklift";
+    case VisualCategory::Shipment: return "Shipment";
+    case VisualCategory::LoadingBay: return "Loading bay";
+    case VisualCategory::Worker: return "Worker";
+    case VisualCategory::Forklift: return "Forklift";
     default: return "Storage rack";
     }
 }
-}
-void style_dashboard()
+DashboardLayout layout_for(const ViewerController& v, const DashboardState& state)
 {
-    ImGui::StyleColorsDark(); auto& s = ImGui::GetStyle();
-    s.WindowPadding = {16,12}; s.FramePadding = {8,6}; s.ItemSpacing = {8,8};
-    s.WindowRounding = 0; s.FrameRounding = 4; s.GrabRounding = 3; s.WindowBorderSize = 1;
-    s.Colors[ImGuiCol_Text] = {0.88f,0.92f,0.95f,1}; s.Colors[ImGuiCol_TextDisabled] = {0.52f,0.63f,0.70f,1};
-    s.Colors[ImGuiCol_WindowBg] = {0.008f,0.014f,0.023f,1}; s.Colors[ImGuiCol_Border] = {0.045f,0.075f,0.10f,1};
-    s.Colors[ImGuiCol_FrameBg] = {0.10f,0.15f,0.20f,1}; s.Colors[ImGuiCol_Button] = {0.13f,0.21f,0.26f,1};
-    s.Colors[ImGuiCol_ButtonHovered] = {0.18f,0.34f,0.39f,1}; s.Colors[ImGuiCol_ButtonActive] = {0.20f,0.42f,0.43f,1};
-    s.Colors[ImGuiCol_PlotHistogram] = {0.20f,0.68f,0.57f,1}; s.Colors[ImGuiCol_SliderGrab] = {0.95f,0.66f,0.22f,1};
-    s.Colors[ImGuiCol_CheckMark] = {0.95f,0.66f,0.22f,1};
+    const auto& io = ImGui::GetIO();
+    return dashboard_layout({io.DisplaySize.x,io.DisplaySize.y},{io.DisplayFramebufferScale.x,io.DisplayFramebufferScale.y},
+        state.scale,state.panels,v.selection().has_value(),state.feedback_error);
 }
-simforge::viewer::Viewport dashboard_viewport(const simforge::viewer::ViewerController& v)
+}
+void style_dashboard(float scale)
 {
-    const auto& io = ImGui::GetIO(); const float width = io.DisplaySize.x, height = io.DisplaySize.y;
-    const float header = width < 1100 ? 76.0f : 56.0f, footer = width < 1000 ? 154.0f : 126.0f;
-    const float left = std::clamp(width*0.19f,200.0f,248.0f);
-    const float right = v.selection() && width >= 1000 ? std::clamp(width*0.20f,220.0f,276.0f) : 0;
-    return {{left+4,header+4},{std::max(1.0f,width-left-right-8),std::max(1.0f,height-header-footer-8)},
-        {io.DisplayFramebufferScale.x,io.DisplayFramebufferScale.y}};
+    using namespace simforge::viewer;
+    ImGuiStyle style; ImGui::StyleColorsDark(&style);
+    style.FontSizeBase = design::body; style.FontScaleDpi = scale;
+    style.WindowPadding = {design::padding,design::padding}; style.FramePadding = {12,10}; style.ItemSpacing = {design::gap,8};
+    style.WindowRounding = 0; style.FrameRounding = design::corner; style.GrabRounding = design::corner; style.WindowBorderSize = 1;
+    style.Colors[ImGuiCol_Text] = color(design::text); style.Colors[ImGuiCol_TextDisabled] = color(design::secondary);
+    style.Colors[ImGuiCol_WindowBg] = color(design::navy); style.Colors[ImGuiCol_Border] = color(design::border);
+    style.Colors[ImGuiCol_PopupBg] = color(design::panel);
+    style.Colors[ImGuiCol_FrameBg] = {0.038f,0.065f,0.092f,1};
+    style.Colors[ImGuiCol_Button] = {0.040f,0.080f,0.12f,1}; style.Colors[ImGuiCol_ButtonHovered] = {0.07f,0.17f,0.24f,1};
+    style.Colors[ImGuiCol_ButtonActive] = {0.08f,0.23f,0.35f,1}; style.Colors[ImGuiCol_Header] = {0.035f,0.065f,0.095f,1};
+    style.Colors[ImGuiCol_HeaderHovered] = {0.06f,0.14f,0.21f,1}; style.Colors[ImGuiCol_HeaderActive] = {0.08f,0.20f,0.30f,1};
+    style.Colors[ImGuiCol_Tab] = style.Colors[ImGuiCol_Button]; style.Colors[ImGuiCol_TabSelected] = style.Colors[ImGuiCol_HeaderActive];
+    style.Colors[ImGuiCol_SliderGrab] = color(design::processing); style.Colors[ImGuiCol_SliderGrabActive] = color(design::text);
+    style.Colors[ImGuiCol_CheckMark] = color(design::completed);
+    style.ScaleAllSizes(scale); ImGui::GetStyle() = style;
 }
+simforge::viewer::Viewport dashboard_viewport(const simforge::viewer::ViewerController& v, const DashboardState& state)
+{ return layout_for(v,state).viewport; }
 DashboardFrame draw_dashboard(const simforge::viewer::ViewerController& v, DashboardState& draft)
 {
     using namespace simforge;
-    const auto& io = ImGui::GetIO(); const auto& state = v.observation(); const auto& m = state.metrics;
-    const auto inspector = v.inspect();
-    const float width = io.DisplaySize.x, height = io.DisplaySize.y;
-    const float header = width < 1100 ? 76.0f : 56.0f, footer = width < 1000 ? 154.0f : 126.0f;
-    const float left = std::clamp(width*0.19f,200.0f,248.0f);
-    const float right = inspector ? std::clamp(width*0.20f,220.0f,276.0f) : 0;
-    // Inspector becomes a metrics tab on narrow windows, preserving a useful viewport.
-    const bool narrow = width < 1000;
-    const float sidebar = narrow ? 0 : right;
-    DashboardFrame result; result.viewport = dashboard_viewport(v);
-    panel("Header",{0,0},{width,header});
-    ImGui::TextColored({0.96f,0.68f,0.27f,1},"SIMFORGE"); ImGui::SameLine();
-    auto name = v.name();
-    const auto available_name = width >= 1100 ? width-570 : width-150;
-    while (!name.empty() && ImGui::CalcTextSize(name.c_str()).x > available_name) name.pop_back();
-    if (name != v.name()) name += "...";
-    ImGui::TextUnformatted(name.c_str()); if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s",v.name().c_str());
-    if (width >= 1100) ImGui::SameLine(width-430);
-    const char* status = state.at_horizon ? "Horizon reached" : v.runtime().clock().paused() ? "Paused" : "Live";
-    ImGui::TextColored({0.30f,0.82f,0.68f,1},"%s",status); ImGui::SameLine();
-    ImGui::Text("%s / %s",viewer::format_time(state.tick,state.tick_rate).c_str(),viewer::format_time(state.horizon,state.tick_rate).c_str());
-    ImGui::End();
-    const auto inspection = [&]
+    using namespace simforge::viewer;
+    const auto layout = layout_for(v,draft);
+    const auto& state = v.observation(); const auto& m = state.metrics; const auto inspection = v.inspect();
+    const float s = draft.scale, width = ImGui::GetIO().DisplaySize.x;
+    DashboardFrame result; result.layout = layout; result.viewport = layout.viewport;
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,{12*s,8*s});
+    panel("Header",layout.header,(layout.header.size.y-layout.control_height)*0.5f);
+    const bool tiny = width/s < 500;
+    { Font font{20}; ImGui::AlignTextToFramePadding(); ImGui::TextColored(color(design::text),"%s",tiny ? "SF" : "SIMFORGE"); }
+    ImGui::SameLine();
+    if (icon_button("Metrics","",Icon::Sidebar,{40*s,layout.control_height},"Show or hide operational metrics"))
+    { draft.panels.metrics = !layout.metrics_visible; draft.panels.metrics_explicit = true; draft.panel_changed = true; }
+    result.metrics_toggle = center(); ImGui::SameLine();
+    if (icon_button("Focus","",Icon::Focus,{40*s,layout.control_height},"Warehouse focus: hide or restore side panels"))
+    { draft.panels.focus = !draft.panels.focus; draft.panel_changed = true; }
+    result.focus_toggle = center(); ImGui::SameLine(); ImGui::BeginDisabled(!inspection);
+    if (icon_button("Inspector","",Icon::Inspect,{40*s,layout.control_height},"Show or hide selected-object details (selection is retained)"))
+    { draft.panels.inspector = !draft.panels.inspector; draft.panel_changed = true; }
+    result.inspector_toggle = center(); ImGui::EndDisabled();
+    const auto status = playback_status(state.at_horizon,v.runtime().clock().paused(),draft.seeking);
+    const auto accent = status == PresentationStatus::Completed ? design::completed : status == PresentationStatus::Paused ? design::waiting : design::processing;
+    if (!tiny)
     {
-        if (!inspector) return;
-        const auto& i = *inspector;
-        ImGui::TextColored({0.96f,0.68f,0.27f,1},"INSPECTOR"); ImGui::Separator();
-        ImGui::Text("%s #%u",category(i.key.category),i.key.id);
+        const float status_width = layout.compact ? 110*s : 240*s;
+        ImGui::SameLine(); ImGui::BeginGroup();
+        const float available = width-status_width-ImGui::GetCursorPosX()-32*s;
+        auto name = v.name();
+        { Font font{design::body};
+          while (!name.empty() && ImGui::CalcTextSize((name+"...").c_str()).x > available)
+          { auto end = name.size()-1; while (end && (static_cast<unsigned char>(name[end])&0xC0) == 0x80) --end; name.resize(end); }
+          ImGui::TextUnformatted(name == v.name() ? name.c_str() : (name+"...").c_str()); tooltip(v.name().c_str()); }
+        ImGui::EndGroup();
+        ImGui::SameLine(width-status_width-16*s);
+        ImGui::BeginGroup();
+        { Font font{design::label}; ImGui::TextColored(color(accent),"%s",status_label(status).data()); }
+        if (!layout.compact) { ImGui::SameLine(); Font font{20}; ImGui::TextUnformatted(format_time(state.tick,state.tick_rate).c_str()); }
+        ImGui::EndGroup();
+    }
+    else { ImGui::SameLine(); Font font{design::label}; ImGui::TextColored(color(accent),"%s",status_label(status).data()); tooltip(v.name().c_str()); }
+    ImGui::End(); ImGui::PopStyleVar();
+    const auto inspect = [&]
+    {
+        if (!inspection) return;
+        const auto& i = *inspection;
+        section("Selected object");
+        { Font font{24}; ImGui::Text("%s #%u",category(i.key.category),i.key.id); }
         if (i.shipment)
         {
-            const auto& r = *i.shipment;
-            row("Status",r.status == warehouse::ShipmentStatus::Waiting ? "Waiting" : r.status == warehouse::ShipmentStatus::InProgress ? "Processing" : "Completed");
-            row("Arrival",viewer::format_time(r.arrival_tick,state.tick_rate));
-            const auto time = [&](std::optional<std::uint64_t> t){ return t ? viewer::format_time(*t,state.tick_rate) : "N/A"; };
-            row("Service start",time(r.start_tick)); row("Completion",time(r.completion_tick));
-            row("Queue wait",time(i.waiting_ticks)); row("Processing elapsed",time(i.processing_ticks));
-            ImGui::Spacing(); ImGui::TextWrapped("Timestamps are actual runtime events. Completion is N/A until recorded.");
+            const auto& record = *i.shipment;
+            property("Status",record.status == warehouse::ShipmentStatus::Waiting ? "Waiting" : "Processing",
+                record.status == warehouse::ShipmentStatus::Waiting ? design::waiting : design::processing);
+            section("Event timestamps");
+            const auto timestamp = [&](std::optional<std::uint64_t> tick){ return tick ? format_time(*tick,state.tick_rate) : "N/A"; };
+            property("Arrival",format_time(record.arrival_tick,state.tick_rate));
+            property("Service start",timestamp(record.start_tick)); property("Completion",timestamp(record.completion_tick));
+            section("Elapsed durations"); property("Queue wait",timestamp(i.waiting_ticks)); property("Processing",timestamp(i.processing_ticks));
+            ImGui::Spacing(); { Font font{design::label}; ImGui::TextWrapped("N/A means not yet recorded. Processing time is elapsed, not a predicted completion."); }
         }
-        else if (i.key.category != viewer::VisualCategory::Rack)
+        else if (i.key.category != VisualCategory::Rack)
         {
-            row("Display state",i.busy ? "Busy" : "Idle"); count("Aggregate capacity",i.capacity); count("Aggregate usage",i.usage);
-            utilization("Cumulative utilization",i.utilization);
-            ImGui::Spacing(); ImGui::TextWrapped("Deterministic visual capacity slot. No physical resource identity or shipment assignment is tracked.");
+            property("Display slot",i.busy ? "Busy" : "Idle",i.busy ? design::processing : design::secondary);
+            utilization("Aggregate utilization",i.utilization,i.usage,i.capacity);
+            section("Capacity representation");
+            { Font font{design::label}; ImGui::TextWrapped("This is a deterministic visual capacity slot. Physical resource identity and shipment assignments are not tracked."); }
         }
-        ImGui::Separator(); ImGui::TextDisabled("Visual position"); ImGui::Text("%.1f, %.1f, %.1f",i.position.x,i.position.y,i.position.z);
-        if (ImGui::Button("Clear selection")) result.commands.push_back({ViewerAction::ClearSelection});
+        section("Visual position"); property("X / Y / Z",display_decimal(i.position.x)+" / "+display_decimal(i.position.y)+" / "+display_decimal(i.position.z));
+        if (ImGui::Button("Clear selection",{-1,40*s})) result.commands.push_back({ViewerAction::ClearSelection});
     };
     const auto metrics = [&]
     {
-        ImGui::TextDisabled("OPERATIONS"); ImGui::Separator();
-        count("Arrived",m.arrived); count("Started",m.started); count("Completed",m.completed); count("Waiting",m.waiting); count("Processing",m.in_progress);
-        ImGui::Separator(); ImGui::TextDisabled("Completed / hour"); ImGui::TextUnformatted(viewer::format_number(m.throughput_per_hour).c_str());
-        ImGui::TextDisabled("Average queue wait"); ImGui::TextUnformatted(viewer::format_number(m.average_wait_seconds,1," s").c_str());
-        ImGui::Separator(); utilization("Loading bays",m.loading_bay_utilization); utilization("Workers",m.worker_utilization); utilization("Forklifts",m.forklift_utilization);
-        ImGui::Separator(); const auto visibility = v.scene().visibility();
-        count("Hidden queue",visibility.hidden_waiting); count("Visible queue",visibility.visible_waiting);
-        if (visibility.hidden_processing) count("Hidden processing",visibility.hidden_processing);
-        ImGui::TextWrapped("Utilization is cumulative busy time / available capacity time.");
-    };
-    panel("Metrics",{0,header},{left,height-header-footer});
-    if (narrow && inspector && ImGui::BeginTabBar("Sidebar"))
-    {
-        if (ImGui::BeginTabItem("Inspect")) { inspection(); ImGui::EndTabItem(); }
-        if (ImGui::BeginTabItem("Metrics"))
+        section("Operations");
+        const bool two_columns = ImGui::GetContentRegionAvail().x/s >= 155;
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,{ImGui::GetStyle().ItemSpacing.x,2*s});
+        if (ImGui::BeginTable("Operations",two_columns ? 2 : 1,ImGuiTableFlags_SizingStretchSame))
         {
-            metrics();
-            ImGui::EndTabItem();
+            for (const auto& k : {std::pair{"Arrivals",std::pair{m.arrived,design::text}},
+                std::pair{"Completed",std::pair{m.completed,design::completed}},
+                std::pair{"Waiting",std::pair{m.waiting,design::waiting}},
+                std::pair{"In progress",std::pair{m.in_progress,design::processing}}})
+            { ImGui::TableNextColumn(); kpi(k.first,k.second.first,k.second.second); }
+            ImGui::EndTable();
         }
-        ImGui::EndTabBar();
+        ImGui::PopStyleVar();
+        property("Hidden queue",std::to_string(v.scene().visibility().hidden_waiting),design::waiting);
+        tooltip("Real waiting shipments beyond the bounded visible FIFO queue.");
+        if (!draft.performance_user_choice) ImGui::SetNextItemOpen(layout.metrics.size.y/s >= 430,ImGuiCond_Always);
+        const bool performance = ImGui::CollapsingHeader("Performance");
+        if (ImGui::IsItemClicked()) draft.performance_user_choice = true;
+        if (performance)
+        {
+            property("Started",std::to_string(m.started));
+            property("Throughput / h",display_decimal(m.throughput_per_hour),design::text,20); tooltip("Completed shipments per simulated hour.");
+            property("Average wait",display_duration(m.average_wait_seconds),design::text,20);
+            property("Maximum wait",display_duration(m.maximum_wait_seconds),design::text,20);
+        }
+        section("Resources");
+        utilization("Bays",m.loading_bay_utilization,state.usage.loading_bays,state.capacity.loading_bays);
+        utilization("Workers",m.worker_utilization,state.usage.workers,state.capacity.workers);
+        utilization("Forklifts",m.forklift_utilization,state.usage.forklifts,state.capacity.forklifts);
+        { Font font{design::label}; ImGui::TextWrapped("Utilization = cumulative busy time / available capacity time."); }
+    };
+    if (layout.metrics.size.x > 0)
+    {
+        ImGui::PushStyleColor(ImGuiCol_WindowBg,color(design::panel)); panel("Metrics",layout.metrics);
+        if (layout.shared_inspector && layout.metrics_visible && ImGui::BeginTabBar("Sidebar"))
+        {
+            if (ImGui::BeginTabItem("Operations")) { metrics(); ImGui::EndTabItem(); }
+            const auto tab_flags = draft.select_inspector_tab ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None;
+            if (ImGui::BeginTabItem("Inspector",nullptr,tab_flags)) { inspect(); ImGui::EndTabItem(); }
+            ImGui::EndTabBar(); draft.select_inspector_tab = false;
+        }
+        else if (layout.shared_inspector) inspect(); else metrics();
+        ImGui::End(); ImGui::PopStyleColor();
     }
-    else metrics();
-    ImGui::End();
-    if (inspector && !narrow) { panel("Inspector",{width-sidebar,header},{sidebar,height-header-footer}); inspection(); ImGui::End(); }
-    panel("Playback",{0,height-footer},{width,footer});
-    const char* playback = state.at_horizon ? "Horizon" : !v.runtime().clock().paused() ? "Pause" : state.tick == 0 && m.arrived == 0 ? "Play" : "Resume";
+    if (layout.inspector.size.x > 0 && !layout.shared_inspector)
+    { ImGui::PushStyleColor(ImGuiCol_WindowBg,color(design::panel)); panel("Inspector",layout.inspector); inspect(); ImGui::End(); ImGui::PopStyleColor(); }
+    panel("Playback",layout.playback,10*s);
     ImGui::BeginDisabled(state.at_horizon);
-    if (ImGui::Button(playback,{90,0})) result.commands.push_back({ViewerAction::Toggle}); result.play = center();
-    ImGui::EndDisabled();
-    ImGui::SameLine(); ImGui::BeginDisabled(!v.runtime().clock().paused() || state.at_horizon);
-    if (ImGui::Button("Step 1 tick")) result.commands.push_back({ViewerAction::Step}); result.step = center(); ImGui::EndDisabled();
-    ImGui::SameLine(); if (ImGui::Button("Reset")) result.commands.push_back({ViewerAction::Reset}); result.reset = center();
-    ImGui::SameLine(); ImGui::SetNextItemWidth(std::clamp(width-430,120.0f,190.0f));
-    double speed = v.speed(); if (ImGui::InputDouble("Speed x",&speed,0,0,"%.2f",ImGuiInputTextFlags_EnterReturnsTrue) && std::isfinite(speed) && speed >= 0.01 && speed <= 3600)
-        result.commands.push_back({ViewerAction::Speed,speed}); result.speed = center();
-    bool first_preset = true;
-    for (const int preset : {1,10,60,300,900})
-    { if (!first_preset || width >= 1000) ImGui::SameLine(); first_preset = false;
-      const auto label = std::to_string(preset)+"x"; if (ImGui::Button(label.c_str())) result.commands.push_back({ViewerAction::Speed,static_cast<double>(preset)}); }
+    const bool paused = v.runtime().clock().paused();
+    const char* play = state.at_horizon ? "Complete" : paused ? state.tick == 0 && m.arrived == 0 ? "Play" : "Resume" : "Pause";
+    if (icon_button("Playback",layout.compact ? "" : play,paused ? Icon::Play : Icon::Pause,
+        {layout.compact ? 56*s : 104*s,layout.control_height},state.at_horizon ? "Run complete. Reset or seek to continue." : "Play / pause (Space)"))
+        result.commands.push_back({ViewerAction::Toggle});
+    result.play = center(); ImGui::EndDisabled(); ImGui::SameLine();
+    ImGui::BeginDisabled(!paused || state.at_horizon);
+    if (icon_button("Step",layout.compact ? "" : "Step",Icon::Step,{layout.compact ? 48*s : 84*s,layout.control_height},"Advance exactly one simulation tick while paused (Right arrow)"))
+        result.commands.push_back({ViewerAction::Step});
+    result.step = center(); ImGui::EndDisabled(); ImGui::SameLine();
+    if (icon_button("Reset",layout.compact ? "" : "Reset",Icon::Reset,{layout.compact ? 48*s : 88*s,layout.control_height},"Restore untouched initial state and pause"))
+        result.commands.push_back({ViewerAction::Reset});
+    result.reset = center(); ImGui::SameLine();
+    ImGui::SetNextItemWidth(96*s);
+    const std::string speed_label = display_speed(v.speed());
+    if (ImGui::BeginCombo("##Speed",speed_label.c_str()))
+    {
+        for (double speed : {1.0,10.0,60.0,300.0,900.0})
+        { const auto label = display_speed(speed); if (ImGui::Selectable(label.c_str(),speed == v.speed())) result.commands.push_back({ViewerAction::Speed,speed}); }
+        if (ImGui::Selectable("Custom speed...")) { draft.custom_requested = true; draft.custom_speed = v.speed(); }
+        ImGui::EndCombo();
+    }
+    result.speed = center(); tooltip("Simulated time / real time. Range 0.01-3600x.");
+    if (draft.custom_requested) { ImGui::OpenPopup("CustomSpeed"); draft.custom_requested = false; }
+    if (ImGui::BeginPopup("CustomSpeed"))
+    {
+        ImGui::TextUnformatted("Playback speed (0.01-3600x)"); ImGui::SetNextItemWidth(210*s);
+        const bool entered = ImGui::InputDouble("##Value",&draft.custom_speed,0,0,"%.2f",ImGuiInputTextFlags_EnterReturnsTrue);
+        if (ImGui::Button("Apply") || entered)
+        {
+            if (std::isfinite(draft.custom_speed) && draft.custom_speed >= 0.01 && draft.custom_speed <= 3600)
+            { result.commands.push_back({ViewerAction::Speed,draft.custom_speed}); draft.feedback_error = false; ImGui::CloseCurrentPopup(); }
+            else { draft.feedback = "Speed must be 0.01-3600x"; draft.feedback_error = true; }
+        }
+        if (draft.feedback_error) ImGui::TextColored(color(design::error),"%s",draft.feedback.c_str());
+        ImGui::EndPopup();
+    }
+    if (!layout.compact)
+    {
+        ImGui::SameLine(); ImGui::SetNextItemWidth(88*s);
+        double speed = v.speed();
+        if (ImGui::InputDouble("x##CustomSpeed",&speed,0,0,"%.6g",ImGuiInputTextFlags_EnterReturnsTrue))
+        {
+            if (std::isfinite(speed) && speed >= 0.01 && speed <= 3600) { result.commands.push_back({ViewerAction::Speed,speed}); draft.feedback_error = false; }
+            else { draft.feedback = "Speed must be 0.01-3600x"; draft.feedback_error = true; }
+        }
+        result.speed = center(); tooltip(draft.feedback_error ? draft.feedback.c_str() : "Custom playback speed; press Enter to apply.");
+    }
+    if (!layout.compact) ImGui::SameLine(layout.playback.size.x-210*s);
+    {
+        Font font{20}; if (layout.compact) ImGui::Spacing();
+        ImGui::Text("%s / %s",format_time(state.tick,state.tick_rate).c_str(),format_time(state.horizon,state.tick_rate).c_str());
+    }
     if (!draft.seeking) draft.seek_tick = state.tick;
     const std::uint64_t zero = 0;
-    ImGui::SetNextItemWidth(-1); ImGui::SliderScalar("##Timeline",ImGuiDataType_U64,&draft.seek_tick,&zero,&state.horizon,"%llu ticks");
-    const auto timeline_min = ImGui::GetItemRectMin(), timeline_max = ImGui::GetItemRectMax();
-    result.timeline_min = {timeline_min.x,timeline_min.y}; result.timeline_max = {timeline_max.x,timeline_max.y};
+    if (!layout.compact) { Font font{design::label}; ImGui::TextColored(color(design::secondary),"Plain scenario"); ImGui::SameLine(layout.padding+108*s); }
+    const auto display = format_time(draft.seek_tick,state.tick_rate);
+    ImGui::SetNextItemWidth(-1); ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,{8*s,5*s});
+    ImGui::SliderScalar("##Timeline",ImGuiDataType_U64,&draft.seek_tick,&zero,&state.horizon,display.c_str());
+    ImGui::PopStyleVar();
+    tooltip("Plain, unmodified scenarios only. Drag and release to restore/replay all events to the target tick.");
+    const auto a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
+    result.timeline_min = {a.x,a.y}; result.timeline_max = {b.x,b.y};
     if (ImGui::IsItemDeactivatedAfterEdit()) result.commands.push_back({ViewerAction::Seek,0,draft.seek_tick});
     draft.seeking = ImGui::IsItemActive();
-    ImGui::PushStyleColor(ImGuiCol_Text,ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-    ImGui::TextWrapped("Seek: plain scenarios only | Space playback | Right: 1 tick | F frame | R camera reset | Speed 0.01-3600x");
-    ImGui::PopStyleColor();
+    if (draft.feedback_error) { Font font{design::label}; ImGui::TextColored(color(design::error),"%s",draft.feedback.c_str()); }
     ImGui::End();
-    auto* draw = ImGui::GetForegroundDrawList(); const auto p = result.viewport.origin;
-    draw->PushClipRect({p.x,p.y},{p.x+result.viewport.size.x,p.y+result.viewport.size.y});
-    draw->AddText({p.x+14,p.y+10},IM_COL32(150,174,187,255),result.viewport.size.x < 650 ? "LMB orbit / click inspect | Wheel zoom" : "LMB orbit / click inspect   MMB pan   Wheel zoom");
-    draw->PopClipRect();
-    if (inspector)
+    auto* draw = ImGui::GetForegroundDrawList(); const auto p = layout.viewport.origin, end = p+layout.viewport.size;
+    draw->PushClipRect({p.x,p.y},{end.x,end.y});
+    if (layout.viewport.size.x/s >= 600)
     {
-        const auto& objects = v.scene().selectables();
-        const auto selected = std::find_if(objects.begin(),objects.end(),[&](const auto& o){return o.key == inspector->key;});
+        Font font{design::label};
+        draw->AddText(ImGui::GetFont(),ImGui::GetFontSize(),{p.x+16*s,p.y+12*s},packed(design::secondary),"Orbit: drag   Inspect: click   Pan: middle drag   Zoom: wheel");
+    }
+    if (!draft.feedback.empty() && !draft.feedback_error)
+    {
+        Font font{design::label}; draw->AddText(ImGui::GetFont(),ImGui::GetFontSize(),{p.x+16*s,end.y-26*s},packed(design::secondary),draft.feedback.c_str());
+    }
+    if (inspection)
+    {
+        const auto objects = v.scene().selectables();
+        const auto selected = std::find_if(objects.begin(),objects.end(),[&](const auto& o){return o.key == inspection->key;});
         if (selected != objects.end())
         {
             ImVec2 low{1e9f,1e9f}, high{-1e9f,-1e9f}; bool visible = true;
-            const auto matrix = v.orbit_camera().camera().view_projection();
-            for (int c = 0; c < 8; ++c)
+            const auto matrix = v.orbit_camera().camera().view_projection(); const auto pixels = layout.viewport.pixels();
+            for (int corner = 0; corner < 8; ++corner)
             {
-                auto point = matrix*glm::vec4{(c&1)?selected->bounds.maximum.x:selected->bounds.minimum.x,
-                    (c&2)?selected->bounds.maximum.y:selected->bounds.minimum.y,(c&4)?selected->bounds.maximum.z:selected->bounds.minimum.z,1};
+                auto point = matrix*glm::vec4{(corner&1)?selected->bounds.maximum.x:selected->bounds.minimum.x,
+                    (corner&2)?selected->bounds.maximum.y:selected->bounds.minimum.y,(corner&4)?selected->bounds.maximum.z:selected->bounds.minimum.z,1};
                 if (point.w <= 0) { visible = false; break; } point /= point.w;
-                const float x = p.x+(point.x+1)*0.5f*result.viewport.size.x, y = p.y+(point.y+1)*0.5f*result.viewport.size.y;
+                const float x = (pixels.x+(point.x+1)*0.5f*pixels.width)/layout.viewport.framebuffer_scale.x;
+                const float y = (pixels.y+(point.y+1)*0.5f*pixels.height)/layout.viewport.framebuffer_scale.y;
                 low.x = std::min(low.x,x); low.y = std::min(low.y,y); high.x = std::max(high.x,x); high.y = std::max(high.y,y);
             }
-            if (visible) { draw->PushClipRect({p.x,p.y},{p.x+result.viewport.size.x,p.y+result.viewport.size.y}); draw->AddRect(low,high,IM_COL32(255,182,65,255),3.0f,2.0f,ImDrawFlags_None); draw->PopClipRect(); }
+            if (visible)
+            {
+                draw->AddRect(low,high,IM_COL32(8,14,22,255),3.0f,6*s,ImDrawFlags_None);
+                draw->AddRect(low,high,IM_COL32(255,225,140,255),3.0f,3*s,ImDrawFlags_None);
+                const auto caption = std::string{category(inspection->key.category)}+" #"+std::to_string(inspection->key.id);
+                Font font{design::label}; draw->AddText(ImGui::GetFont(),ImGui::GetFontSize(),{low.x,low.y-20*s},IM_COL32(255,235,190,255),caption.c_str());
+            }
         }
     }
-    return result;
+    draw->PopClipRect(); return result;
 }

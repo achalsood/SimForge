@@ -65,6 +65,9 @@ Live warehouse playback now shows real arrivals, FIFO waiting, processing,
 completions and aggregate resource activity, with independently paced rendering.
 The interactive viewer adds an in-window dashboard, orbit/pan/zoom, shipment and
 resource inspection, visible playback controls, and correct plain-scenario seeking.
+Its refined presentation uses embedded Roboto, larger operational KPIs, consistent
+state colors, collapsible panels and tighter warehouse framing. Font provenance
+and the redistribution license are recorded in [assets/fonts](assets/fonts/README.md).
 See the [interactive viewer guide, screenshots and validation](docs/interactive-warehouse-viewer.md).
 See [live visualization, timing, metrics and verified captures](docs/live-warehouse-visualization.md).
 GPU resources remain separate from simulation. See [renderer architecture and setup](docs/vulkan-renderer.md)
@@ -138,8 +141,13 @@ Reset restores the untouched initial runtime and pauses. Seeking pauses; backwar
 seeking restores the initial state and replays events. The viewer accepts plain
 scenarios only; graphical recorded-command playback remains unsupported.
 
-The minimum client size is 640x480. Sidebars scroll; below 1000 pixels, an inspector
-shares the metrics sidebar through tabs. Resource IDs describe visual capacity
+The minimum client size is 640x480. Header buttons toggle metrics, warehouse focus
+and the inspector; panel toggles preserve the camera and selection. Sidebars scroll,
+and the inspector shares the operations panel when effective width is limited.
+Compact layouts use playback icons with tooltips, a separate time row and custom
+speed through the speed menu. Performance (Started, throughput and wait durations)
+can be expanded independently. DPI-aware typography is tested at 100-200% UI scale.
+Resource IDs describe visual capacity
 slots, with aggregate usage/utilization, rather than physical shipment assignments.
 Physics, pathfinding, AI and scenario editing remain outside this milestone.
 
@@ -220,6 +228,7 @@ engine/       Simulation, visualization, renderer and shaders
 apps/         User-facing executables
 tests/        Automated tests
 benchmarks/   Performance benchmarks
+assets/       Redistributable viewer font and license
 docs/         Architecture and design documentation
 cmake/        CMake helper modules
 ```
