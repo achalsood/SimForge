@@ -147,17 +147,22 @@ DashboardFrame draw_dashboard(const simforge::viewer::ViewerController& v, Dashb
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,{12*s,8*s});
     panel("Header",layout.header,(layout.header.size.y-layout.control_height)*0.5f);
     const bool tiny = width/s < 500;
+    const float toolbar_width = (tiny ? 36 : 40)*s;
     { Font font{20}; ImGui::AlignTextToFramePadding(); ImGui::TextColored(color(design::text),"%s",tiny ? "SF" : "SIMFORGE"); }
     ImGui::SameLine();
-    if (icon_button("Metrics","",Icon::Sidebar,{40*s,layout.control_height},"Show or hide operational metrics"))
+    if (icon_button("Metrics","",Icon::Sidebar,{toolbar_width,layout.control_height},"Show or hide operational metrics"))
     { draft.panels.metrics = !layout.metrics_visible; draft.panels.metrics_explicit = true; draft.panel_changed = true; }
     result.metrics_toggle = center(); ImGui::SameLine();
-    if (icon_button("Focus","",Icon::Focus,{40*s,layout.control_height},"Warehouse focus: hide or restore side panels"))
+    if (icon_button("Focus","",Icon::Focus,{toolbar_width,layout.control_height},"Warehouse focus: hide or restore side panels"))
     { draft.panels.focus = !draft.panels.focus; draft.panel_changed = true; }
     result.focus_toggle = center(); ImGui::SameLine(); ImGui::BeginDisabled(!inspection);
-    if (icon_button("Inspector","",Icon::Inspect,{40*s,layout.control_height},"Show or hide selected-object details (selection is retained)"))
+    if (icon_button("Inspector","",Icon::Inspect,{toolbar_width,layout.control_height},"Show or hide selected-object details (selection is retained)"))
     { draft.panels.inspector = !draft.panels.inspector; draft.panel_changed = true; }
     result.inspector_toggle = center(); ImGui::EndDisabled();
+    ImGui::SameLine();
+    if (icon_button("Workspace","",Icon::Sidebar,{toolbar_width,layout.control_height},"Scenario workspace: edit, compare and export"))
+    { draft.panels.workspace = !draft.panels.workspace; draft.panel_changed = true; draft.workspace_changed = true; }
+    result.workspace_toggle = center();
     const auto status = playback_status(state.at_horizon,v.runtime().clock().paused(),draft.seeking);
     const auto accent = status == PresentationStatus::Completed ? design::completed : status == PresentationStatus::Paused ? design::waiting : design::processing;
     if (!tiny)
@@ -240,7 +245,7 @@ DashboardFrame draw_dashboard(const simforge::viewer::ViewerController& v, Dashb
         utilization("Forklifts",m.forklift_utilization,state.usage.forklifts,state.capacity.forklifts);
         { Font font{design::label}; ImGui::TextWrapped("Utilization = cumulative busy time / available capacity time."); }
     };
-    if (layout.metrics.size.x > 0)
+    if (layout.metrics.size.x > 0 && !draft.panels.workspace)
     {
         ImGui::PushStyleColor(ImGuiCol_WindowBg,color(design::panel)); panel("Metrics",layout.metrics);
         if (layout.shared_inspector && layout.metrics_visible && ImGui::BeginTabBar("Sidebar"))
@@ -256,7 +261,7 @@ DashboardFrame draw_dashboard(const simforge::viewer::ViewerController& v, Dashb
     if (layout.inspector.size.x > 0 && !layout.shared_inspector)
     { ImGui::PushStyleColor(ImGuiCol_WindowBg,color(design::panel)); panel("Inspector",layout.inspector); inspect(); ImGui::End(); ImGui::PopStyleColor(); }
     panel("Playback",layout.playback,10*s);
-    ImGui::BeginDisabled(state.at_horizon);
+    ImGui::BeginDisabled(state.at_horizon || v.result_preview());
     const bool paused = v.runtime().clock().paused();
     const char* play = state.at_horizon ? "Complete" : paused ? state.tick == 0 && m.arrived == 0 ? "Play" : "Resume" : "Pause";
     if (icon_button("Playback",layout.compact ? "" : play,paused ? Icon::Play : Icon::Pause,
@@ -267,9 +272,11 @@ DashboardFrame draw_dashboard(const simforge::viewer::ViewerController& v, Dashb
     if (icon_button("Step",layout.compact ? "" : "Step",Icon::Step,{layout.compact ? 48*s : 84*s,layout.control_height},"Advance exactly one simulation tick while paused (Right arrow)"))
         result.commands.push_back({ViewerAction::Step});
     result.step = center(); ImGui::EndDisabled(); ImGui::SameLine();
+    ImGui::BeginDisabled(v.result_preview());
     if (icon_button("Reset",layout.compact ? "" : "Reset",Icon::Reset,{layout.compact ? 48*s : 88*s,layout.control_height},"Restore untouched initial state and pause"))
         result.commands.push_back({ViewerAction::Reset});
-    result.reset = center(); ImGui::SameLine();
+    result.reset = center(); ImGui::EndDisabled(); ImGui::SameLine();
+    ImGui::BeginDisabled(v.result_preview());
     ImGui::SetNextItemWidth(96*s);
     const std::string speed_label = display_speed(v.speed());
     if (ImGui::BeginCombo("##Speed",speed_label.c_str()))
@@ -305,6 +312,7 @@ DashboardFrame draw_dashboard(const simforge::viewer::ViewerController& v, Dashb
         }
         result.speed = center(); tooltip(draft.feedback_error ? draft.feedback.c_str() : "Custom playback speed; press Enter to apply.");
     }
+    ImGui::EndDisabled();
     if (!layout.compact) ImGui::SameLine(layout.playback.size.x-210*s);
     {
         Font font{20}; if (layout.compact) ImGui::Spacing();
@@ -315,6 +323,7 @@ DashboardFrame draw_dashboard(const simforge::viewer::ViewerController& v, Dashb
     if (!layout.compact) { Font font{design::label}; ImGui::TextColored(color(design::secondary),"Plain scenario"); ImGui::SameLine(layout.padding+108*s); }
     const auto display = format_time(draft.seek_tick,state.tick_rate);
     ImGui::SetNextItemWidth(-1); ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,{8*s,5*s});
+    ImGui::BeginDisabled(v.result_preview());
     ImGui::SliderScalar("##Timeline",ImGuiDataType_U64,&draft.seek_tick,&zero,&state.horizon,display.c_str());
     ImGui::PopStyleVar();
     tooltip("Plain, unmodified scenarios only. Drag and release to restore/replay all events to the target tick.");
@@ -322,10 +331,13 @@ DashboardFrame draw_dashboard(const simforge::viewer::ViewerController& v, Dashb
     result.timeline_min = {a.x,a.y}; result.timeline_max = {b.x,b.y};
     if (ImGui::IsItemDeactivatedAfterEdit()) result.commands.push_back({ViewerAction::Seek,0,draft.seek_tick});
     draft.seeking = ImGui::IsItemActive();
+    ImGui::EndDisabled();
     if (draft.feedback_error) { Font font{design::label}; ImGui::TextColored(color(design::error),"%s",draft.feedback.c_str()); }
     ImGui::End();
     auto* draw = ImGui::GetForegroundDrawList(); const auto p = layout.viewport.origin, end = p+layout.viewport.size;
     draw->PushClipRect({p.x,p.y},{end.x,end.y});
+    if (v.result_preview())
+    { Font font{design::heading}; draw->AddText(ImGui::GetFont(),ImGui::GetFontSize(),{p.x+16*s,p.y+40*s},packed(design::completed),"Final result preview - return to baseline for playback"); }
     if (layout.viewport.size.x/s >= 600)
     {
         Font font{design::label};

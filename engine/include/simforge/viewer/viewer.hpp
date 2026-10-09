@@ -71,6 +71,8 @@ class ViewerController
 {
 public:
     explicit ViewerController(const scenario::ScenarioDefinition& definition, double speed = 300);
+    ViewerController(const scenario::ScenarioDefinition& visual_definition, const warehouse::WarehouseSnapshot& result);
+    [[nodiscard]] bool result_preview() const noexcept { return result_preview_; }
     void replace_scenario(const scenario::ScenarioDefinition& definition);
     void toggle_playback();
     void step(); // Exactly one tick, only while paused.
@@ -106,5 +108,6 @@ private:
     std::optional<MouseButton> drag_;
     glm::vec2 press_{0}, previous_{0};
     bool dragged_{false};
+    bool result_preview_{false};
 };
 }

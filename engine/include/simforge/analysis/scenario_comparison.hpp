@@ -96,6 +96,8 @@ void rank_candidates(std::vector<CandidateResult>& candidates, Objective objecti
 [[nodiscard]] AnalysisReport run_comparison(const ComparisonRequest& request);
 [[nodiscard]] std::string serialize_report(const AnalysisReport& report);
 [[nodiscard]] std::string serialize_csv(const AnalysisReport& report);
+// Same CSV columns/escaping for independently executed scenarios with matching intervals.
+[[nodiscard]] std::string serialize_comparison_csv(const CandidateResult& baseline, std::span<const CandidateResult> candidates);
 // Validates schema, reruns the embedded inputs, and checks every exported field.
 [[nodiscard]] AnalysisReport replay_report(std::string_view json);
 void save_report(const std::filesystem::path& path, const AnalysisReport& report);

@@ -1,5 +1,8 @@
 #include "graphics.hpp"
 #include "viewer.hpp"
+#include "dashboard.hpp"
+#include <imgui.h>
+#include <SDL3/SDL.h>
 #include <simforge/platform/window.hpp>
 #include <simforge/renderer/renderer.hpp>
 #include <simforge/renderer/geometry.hpp>
@@ -139,8 +142,21 @@ int run_graphics(std::optional<std::uint64_t> smoke_frames, const std::optional<
     window.create("SimForge Vulkan Sandbox",1280,720,platform::WindowMode::Vulkan);
     renderer::Renderer graphics;
     renderer::RendererOptions options;
+    options.ui = !smoke_frames || !scenario_path;
     if (smoke_frames) { options.validation = true; options.require_validation = true; options.capture_frames = true; }
     graphics.initialize(window,options); summary(graphics.info());
+    std::optional<std::filesystem::path> open_workspace;
+    std::optional<scenario::ScenarioDefinition> loaded_workspace;
+    std::array<char,1025> scenario_input{};
+    const char* executable_path=SDL_GetBasePath();
+    const auto example = std::filesystem::exists("examples/warehouse-baseline.json") ? std::filesystem::path{"examples/warehouse-baseline.json"} :
+        (executable_path?std::filesystem::path{executable_path}:std::filesystem::current_path())/"examples/warehouse-baseline.json";
+    const auto example_name = example.u8string();
+    std::copy_n(reinterpret_cast<const char*>(example_name.data()),std::min(example_name.size(),scenario_input.size()-1),scenario_input.data());
+    std::string launcher_error;
+    float launcher_scale=0;
+    bool launcher_verified=false;
+    glm::vec2 launcher_button{0};
     std::cout << "Scene: " << (scenario_path ? scenario_path->string() : "cube demo") << " | Objects: " << frame.objects.size()
               << " | Unique GPU meshes: " << renderer::builtin_mesh_count << " | Static scene built once\n";
     if (layout)
@@ -159,7 +175,51 @@ int run_graphics(std::optional<std::uint64_t> smoke_frames, const std::optional<
     std::uint64_t skipped_before_minimize = 0, generations_before_minimize = 0;
     while (window.is_open())
     {
-        window.poll_events(); if (!window.is_open()) break;
+        window.poll_events([&](const SDL_Event& event){ if(options.ui) graphics.process_ui_event(event); }); if (!window.is_open()) break;
+        if(options.ui)
+        {
+            const auto pixels=window.pixel_size();
+            const float density=pixels.width && window.width()?static_cast<float>(pixels.width)/window.width():1;
+            const float scale=std::clamp(SDL_GetWindowDisplayScale(window.native_handle())/density,1.0f,2.0f);
+            if(scale!=launcher_scale) { style_dashboard(scale); launcher_scale=scale; }
+            if(graphics.begin_ui_frame())
+            {
+                if(!launcher_verified)
+                {
+                    ImGui::SetNextWindowPos({20*scale,20*scale},ImGuiCond_FirstUseEver);
+                    ImGui::SetNextWindowSize({std::min(460*scale,static_cast<float>(window.width())-40),0});
+                    ImGui::Begin("SIMFORGE | Open a warehouse",nullptr,ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoSavedSettings);
+                    ImGui::TextWrapped("Open a warehouse scenario to edit configurations, compare results and export reports. The static scene demo remains available behind this panel.");
+                    ImGui::TextUnformatted("Local scenario JSON path"); ImGui::SetNextItemWidth(-1);
+                    ImGui::InputText("##Scenario",scenario_input.data(),scenario_input.size());
+                    if(ImGui::Button("Open warehouse workspace",{-1,36*scale}))
+                    {
+                        try
+                        {
+                            auto path=std::filesystem::u8path(scenario_input.data());
+                            // Prepare CPU validation/layout before leaving the working demo.
+                            auto definition=scenario::load_scenario(path);
+                            (void)visualization::build_warehouse_layout(definition);
+                            loaded_workspace=std::move(definition);
+                            open_workspace=std::move(path);
+                        }
+                        catch(const std::exception& e) { launcher_error=e.what(); }
+                    }
+                    const auto low=ImGui::GetItemRectMin(),high=ImGui::GetItemRectMax(); launcher_button={(low.x+high.x)*0.5f,(low.y+high.y)*0.5f};
+                    if(!launcher_error.empty()) ImGui::TextWrapped("%s",launcher_error.c_str());
+                    ImGui::End();
+                }
+                graphics.end_ui_frame();
+                if(open_workspace)
+                {
+                    if(!smoke_frames) break;
+                    viewer::ViewerController prepared{*loaded_workspace};
+                    if(prepared.observation().tick!=0 || prepared.name().empty()) throw std::runtime_error("Launcher did not prepare the loaded warehouse");
+                    launcher_verified=true; open_workspace.reset();
+                    std::cout<<"Launcher smoke: real ImGui Open button loaded/prepared bundled scenario through injected SDL input.\n";
+                }
+            }
+        }
         if (smoke_frames)
         {
             const auto count = graphics.info().presented_frames;
@@ -202,6 +262,25 @@ int run_graphics(std::optional<std::uint64_t> smoke_frames, const std::optional<
         const auto duration = std::chrono::duration<double,std::milli>{timer::now()-render_started}.count();
         if (presented)
         {
+            if(smoke_frames && !scenario_path && !launcher_verified)
+            {
+                const auto count=graphics.info().presented_frames;
+                const auto window_id=SDL_GetWindowID(window.native_handle());
+                // ImGui's first auto-sized window frame measures contents before becoming visible.
+                if(count==2)
+                {
+                    const auto image=graphics.capture_frame();
+                    if(graphics.info().ui_vertices<100 || graphics.info().ui_draw_calls==0) throw std::runtime_error("Launcher UI absent in Vulkan output");
+                    if(capture_output) save_capture(image,capture_output->parent_path()/(capture_output->stem().string()+"-launcher.ppm"));
+                    SDL_Event motion{}; motion.type=SDL_EVENT_MOUSE_MOTION; motion.motion.windowID=window_id; motion.motion.x=launcher_button.x; motion.motion.y=launcher_button.y; SDL_PushEvent(&motion);
+                    SDL_Event press{}; press.type=SDL_EVENT_MOUSE_BUTTON_DOWN; press.button.windowID=window_id; press.button.button=SDL_BUTTON_LEFT; press.button.down=true; press.button.x=launcher_button.x; press.button.y=launcher_button.y; SDL_PushEvent(&press);
+                }
+                if(count==3)
+                {
+                    SDL_Event release{}; release.type=SDL_EVENT_MOUSE_BUTTON_UP; release.button.windowID=window_id; release.button.button=SDL_BUTTON_LEFT; release.button.x=launcher_button.x; release.button.y=launcher_button.y; SDL_PushEvent(&release);
+                }
+                if(count>7) throw std::runtime_error("Injected launcher Open failed: "+launcher_error);
+            }
             render_wall_ms += duration; ++measured_frames;
             if (graphics.info().presented_frames > 100 && steady_times.size() < 10000) steady_times.push_back(duration);
         }
@@ -248,5 +327,6 @@ int run_graphics(std::optional<std::uint64_t> smoke_frames, const std::optional<
         if (info.validation_errors != 0 || info.validation_warnings != 0) throw std::runtime_error("Validation messages during lifecycle smoke");
         std::cout << "Graphics smoke passed: 3D geometry, image/color checks, depth occlusion, repeated resize, minimize/restore, close, reinitialize and native-window lease; validation errors: 0\n";
     }
+    if(open_workspace) { window.destroy(); return run_viewer(std::nullopt,std::nullopt,*open_workspace,speed,true,&*loaded_workspace); }
     return 0;
 }

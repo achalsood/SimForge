@@ -207,3 +207,10 @@ target_compile_definitions(simforge_viewer_presentation_test PRIVATE SIMFORGE_SO
 foreach(case layout panels viewport dpi controls formatting status framing manual collapse picking colors regression)
     add_test(NAME simforge_presentation_${case} COMMAND simforge_viewer_presentation_test ${case})
 endforeach()
+add_executable(simforge_workspace_test workspace_test.cpp)
+target_link_libraries(simforge_workspace_test PRIVATE simforge_workspace)
+target_compile_definitions(simforge_workspace_test PRIVATE SIMFORGE_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+foreach(case empty valid invalid fields revert save file_safety run duplicate rename remove restore update limit candidate_invalid
+    checkpoint initial intervals compatibility reductions determinism order ranking bottleneck undefined checkpoint_zero cache visualization export export_failure tamper randomized load layout)
+    add_test(NAME simforge_workspace_${case} COMMAND simforge_workspace_test ${case})
+endforeach()

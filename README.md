@@ -69,6 +69,9 @@ Its refined presentation uses embedded Roboto, larger operational KPIs, consiste
 state colors, collapsible panels and tighter warehouse framing. Font provenance
 and the redistribution license are recorded in [assets/fonts](assets/fonts/README.md).
 See the [interactive viewer guide, screenshots and validation](docs/interactive-warehouse-viewer.md).
+The [scenario workspace](docs/scenario-workspace.md) now supports in-window initial
+configuration editing, validated alternatives, independent or shared-checkpoint
+comparisons, controlled bottleneck evidence, result previews and JSON/CSV export.
 See [live visualization, timing, metrics and verified captures](docs/live-warehouse-visualization.md).
 GPU resources remain separate from simulation. See [renderer architecture and setup](docs/vulkan-renderer.md)
 and [warehouse visualization, verified screenshot and measurements](docs/warehouse-visualization.md).
@@ -105,7 +108,9 @@ build/windows-release/benchmarks/simforge_live_warehouse_benchmark.exe
 build/windows-release/benchmarks/simforge_viewer_benchmark.exe
 ```
 
-Run the sandbox without arguments for the static 3D viewport:
+Run the sandbox without arguments for the static 3D demo and graphical warehouse
+launcher. Its bundled example path can be opened directly; command-line workflows
+remain available:
 
 ```powershell
 build/windows-debug/apps/sandbox/simforge_sandbox.exe
@@ -149,7 +154,31 @@ speed through the speed menu. Performance (Started, throughput and wait duration
 can be expanded independently. DPI-aware typography is tested at 100-200% UI scale.
 Resource IDs describe visual capacity
 slots, with aggregate usage/utilization, rather than physical shipment assignments.
-Physics, pathfinding, AI and scenario editing remain outside this milestone.
+The fourth header button opens the scenario workspace. Physics, pathfinding and AI
+remain outside this milestone.
+
+## Graphical warehouse experiment
+
+Launch the sandbox, choose **Open warehouse workspace**, and use these tabs:
+
+1. **Edit:** name the draft `Add forklift`, change Forklifts from 2 to 3, and Validate.
+2. **Add as candidate:** stores the alternative while preserving the baseline run.
+3. **Candidates:** choose **Run independent scenarios from start** and maximize completions.
+4. **Run comparison:** baseline finishes with 63 completed/32 waiting; the candidate
+   finishes with 94 completed/0 waiting. Throughput changes from 7.875 to 11.75/hour.
+5. **Results:** inspect signed differences and expand **Controlled resource probes**.
+6. **View this final result:** displays actual candidate geometry/state; return to
+   the preserved baseline for playback.
+7. Enter a new destination path and **Export JSON** or **Export CSV**. JSON contains
+   replay-verifiable inputs/results; CSV summarizes that same report.
+8. **Files:** Save as new scenario to retain the validated draft separately.
+
+For **Compare from shared checkpoint** at 7200 seconds, adding the forklift produces
+87 completions and eight waiting shipments. It preserves the first two hours of
+history, unlike starting with three forklifts. Checkpoint candidates may change only
+capacities; initial comparisons also permit arrival/processing changes, with matching
+duration and tick rate. See the [workspace guide and captures](docs/scenario-workspace.md)
+for limits, measured performance and interpretation.
 
 Use the separate renderer-disabled preset for CPU tests and isolated dependency
 installation:

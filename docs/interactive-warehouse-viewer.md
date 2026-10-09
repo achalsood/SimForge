@@ -1,5 +1,11 @@
 # Interactive Warehouse Viewer
 
+Commit #17 adds the [scenario editing/comparison workspace](scenario-workspace.md).
+The guidance and performance below record the Commit #16 presentation milestone;
+the workspace guide contains current 219-test results, editing/comparison semantics
+and additional captures. The fourth header icon opens the workspace, and a normal
+no-argument launch now includes a warehouse file-entry panel over the static demo.
+
 Commit #16 refines the existing live dashboard, typography, framing and operational
 contrast. The static warehouse and floor/grid/cube demos remain supported. Warehouse
 rules, clock authority, metrics, snapshots, recording/replay and exports are unchanged.
@@ -320,7 +326,7 @@ snapshot, replay or export implementation changed; no new package dependency was
 Large layouts can make individual cargo tiny/occluded in overview; zoom and the ID
 outline help, but no new visibility pass is implemented. At small sizes/high scale,
 sidebars deliberately scroll and not all metrics appear simultaneously. Camera mesh
-collision avoidance, scenario editing, AI, physical assignments/pathfinding,
+collision avoidance, AI, physical assignments/pathfinding,
 completed-shipment history, graphical recorded-command playback and GPU profiling
 remain absent. Other hardware/OS and wider character-set accessibility need testing.
 

@@ -169,6 +169,14 @@ std::string serialize_report(const AnalysisReport& report)
 std::string serialize_csv(const AnalysisReport& report)
 {
     validate_summary(report);
+    return serialize_comparison_csv(report.baseline, report.candidates);
+}
+std::string serialize_comparison_csv(const CandidateResult& baseline, std::span<const CandidateResult> candidates)
+{
+    if (candidates.size() > max_candidates) throw std::length_error("CSV candidate limit");
+    for (const auto& r : candidates)
+        if (r.delta != compare_metrics(baseline.metrics,r.metrics,baseline.candidate.resources,r.candidate.resources))
+            throw std::invalid_argument("CSV candidate deltas do not match baseline");
     std::string text = "candidate,baseline,loading_bays,workers,forklifts,arrived,started,completed,waiting,in_progress,throughput_per_hour,average_wait_seconds,maximum_wait_seconds,loading_bay_utilization,worker_utilization,forklift_utilization,completed_processing_seconds,delta_completed,delta_completed_percent,delta_waiting,delta_throughput_per_hour,delta_average_wait_seconds,delta_average_wait_percent,delta_loading_bays,delta_workers,delta_forklifts,additional_resources,absolute_resource_changes,rank\r\n";
     const auto row = [&](const CandidateResult& r, bool baseline)
     {
@@ -183,7 +191,7 @@ std::string serialize_csv(const AnalysisReport& report)
             std::to_string(d.resources.additions), std::to_string(d.resources.changes), r.rank ? std::to_string(*r.rank) : ""};
         for (std::size_t i = 0; i < values.size(); ++i) { if (i != 0) text += ','; text += values[i]; } text += "\r\n";
     };
-    row(report.baseline, true); for (const auto& result : report.candidates) row(result, false);
+    row(baseline, true); for (const auto& result : candidates) row(result, false);
     if (text.size() > max_report_bytes) throw std::length_error("CSV byte limit"); return text;
 }
 AnalysisReport replay_report(std::string_view text)

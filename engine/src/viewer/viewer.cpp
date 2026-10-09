@@ -151,6 +151,25 @@ std::string format_number(std::optional<double> value, double scale, const char*
 }
 ViewerController::ViewerController(const scenario::ScenarioDefinition& definition, double speed)
 { set_speed(speed); replace_scenario(definition); }
+ViewerController::ViewerController(const scenario::ScenarioDefinition& definition, const warehouse::WarehouseSnapshot& result)
+    : ViewerController(definition)
+{
+    if (result.current_tick != result.horizon_ticks) throw std::invalid_argument("Result preview requires a completed horizon");
+    const auto& c = std::get<scenario::WarehouseConfig>(definition.domain);
+    if (result.capacity != warehouse::ResourceCounts{c.loading_bays,c.workers,c.forklifts})
+        throw std::invalid_argument("Result geometry must match snapshot capacity");
+    // A checkpoint branch retains the original scenario identity even when its
+    // final capacity/layout and display name differ. Restore against that identity.
+    const auto original = scenario::parse_scenario(result.scenario_identity);
+    auto compatible = definition; compatible.name = original.name;
+    auto& visual_config = std::get<scenario::WarehouseConfig>(compatible.domain);
+    const auto& original_config = std::get<scenario::WarehouseConfig>(original.domain);
+    visual_config.loading_bays = original_config.loading_bays; visual_config.workers = original_config.workers; visual_config.forklifts = original_config.forklifts;
+    if (scenario::serialize_scenario(compatible) != scenario::serialize_scenario(original))
+        throw std::invalid_argument("Result preview parameters must match its recorded scenario history");
+    auto runtime = std::make_unique<warehouse::WarehouseSimulation>(original);
+    runtime->restore_snapshot(result); runtime->pause(); runtime_ = std::move(runtime); result_preview_ = true; refresh(true);
+}
 void ViewerController::replace_scenario(const scenario::ScenarioDefinition& definition)
 {
     auto runtime = std::make_unique<warehouse::WarehouseSimulation>(definition);
@@ -159,15 +178,17 @@ void ViewerController::replace_scenario(const scenario::ScenarioDefinition& defi
     auto camera = std::make_unique<OrbitCamera>(scene->layout().bounds,static_cast<float>(pixels.width)/pixels.height);
     auto initial = runtime->capture_snapshot(); runtime->set_time_scale(speed_);
     definition_ = definition; runtime_ = std::move(runtime); scene_ = std::move(scene); camera_ = std::move(camera); initial_ = std::move(initial);
-    selection_.reset(); cancel_drag(); refresh(true);
+    result_preview_ = false; selection_.reset(); cancel_drag(); refresh(true);
 }
 void ViewerController::toggle_playback()
 {
+    if (result_preview_) return;
     if (runtime_->clock().paused()) { if (!observation_.at_horizon) runtime_->resume(); }
     else runtime_->pause();
 }
 void ViewerController::step()
 {
+    if (result_preview_) return;
     if (!runtime_->clock().paused() || observation_.at_horizon) return;
     runtime_->advance_by(1); refresh();
 }
@@ -178,10 +199,12 @@ void ViewerController::set_speed(double speed)
 }
 void ViewerController::reset()
 {
+    if (result_preview_) throw std::logic_error("Final result preview has no playback timeline; return to baseline");
     runtime_->restore_snapshot(initial_); runtime_->set_time_scale(speed_); runtime_->pause(); selection_.reset(); cancel_drag(); refresh(true);
 }
 void ViewerController::seek(std::uint64_t tick)
 {
+    if (result_preview_) throw std::logic_error("Final result preview has no playback timeline; return to baseline");
     if (tick > runtime_->horizon_ticks()) throw std::invalid_argument("Seek target exceeds scenario horizon");
     if (tick < observation_.tick) runtime_->restore_snapshot(initial_);
     runtime_->advance_to(tick);

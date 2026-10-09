@@ -1,5 +1,6 @@
 #include "viewer.hpp"
 #include "dashboard.hpp"
+#include "workspace_panel.hpp"
 #include <simforge/platform/window.hpp>
 #include <simforge/renderer/renderer.hpp>
 #include <SDL3/SDL.h>
@@ -92,17 +93,21 @@ void verify_geometry(const renderer::CapturedFrame& image, const viewer::Viewpor
 }
 }
 int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<std::filesystem::path>& capture_output,
-    const std::filesystem::path& scenario_path, double speed)
+    const std::filesystem::path& scenario_path, double speed, bool show_workspace, const simforge::scenario::ScenarioDefinition* prepared_definition)
 {
     using namespace simforge;
-    const auto definition = scenario::load_scenario(scenario_path);
-    viewer::ViewerController controller{definition,speed};
+    const auto definition = prepared_definition ? *prepared_definition : scenario::load_scenario(scenario_path);
+    workspace::ScenarioWorkspace workspace{definition,speed};
+    auto& controller = workspace.view(); // Existing live smoke exercises the preserved baseline.
     if (capture_output)
     {
         if (!smoke_frames) throw std::invalid_argument("Viewer capture requires graphics smoke");
         if (std::filesystem::exists(*capture_output)) throw std::invalid_argument("Viewer capture output already exists");
-        for (const char* suffix : {"overview","queue","selected","paused","queue-buildup","final","collapsed","focus","inspector-collapsed","size-640","size-800","size-1024","size-1280","size-1600","size-1920","dpi-100","dpi-125","dpi-150","dpi-200"})
+        for (const char* suffix : {"overview","queue","selected","paused","queue-buildup","final","collapsed","focus","inspector-collapsed","size-640","size-800","size-1024","size-1280","size-1600","size-1920","dpi-100","dpi-125","dpi-150","dpi-200","workspace-editor","workspace-invalid","workspace-candidates","workspace-results","workspace-candidate","workspace-inspector","workspace-probes","workspace-checkpoint","workspace-compact","workspace-dpi200"})
             if (std::filesystem::exists(capture_path(*capture_output,suffix))) throw std::invalid_argument("Viewer capture output already exists");
+        for (const auto* extension : {"-comparison.json","-comparison.csv"})
+            if (std::filesystem::exists(capture_output->parent_path()/(capture_output->stem().string()+extension)))
+                throw std::invalid_argument("Comparison capture output already exists");
     }
     platform::Window window; window.create("SimForge | Interactive warehouse",1280,720,platform::WindowMode::Vulkan);
     if (!SDL_SetWindowMinimumSize(window.native_handle(),640,480)) throw std::runtime_error("Set viewer minimum window size");
@@ -114,6 +119,10 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         << " | Format: " << initial_info.surface_format << " | Present: " << initial_info.present_mode << " | ImGui: " << IMGUI_VERSION << '\n';
     const auto id = SDL_GetWindowID(window.native_handle());
     DashboardFrame dashboard; DashboardState ui_state; std::vector<ViewerCommand> pending; Measurements measurements;
+    WorkspaceUI workspace_ui;
+    ui_state.panels.workspace = show_workspace;
+    workspace_ui.path = scenario_path.string();
+    bool discard_next_elapsed = false;
     std::optional<float> diagnostic_scale;
     const auto frame = [&](std::chrono::nanoseconds elapsed)
     {
@@ -121,9 +130,30 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         std::vector<viewer::InputEvent> events;
         window.poll_events([&](const SDL_Event& e){ graphics.process_ui_event(e); if (const auto converted = input(e,id)) events.push_back(*converted); });
         if (!window.is_open()) return false;
+        const bool workspace_commands = !workspace_ui.pending.empty();
+        for (const auto& c : workspace_ui.pending)
+        {
+            try
+            {
+                apply_workspace(workspace,c); workspace_ui.error.clear();
+                if (c.action == WorkspaceAction::Edit)
+                {
+                    workspace_ui.editing = c.id; workspace_ui.requested_tab = 0;
+                    const auto found = std::find_if(workspace.candidates().begin(),workspace.candidates().end(),[&](const auto& candidate){return candidate.id == c.id;});
+                    if (found != workspace.candidates().end()) workspace_ui.notes = found->notes;
+                }
+                if (c.action == WorkspaceAction::Open || c.action == WorkspaceAction::Revert) workspace_ui.editing.reset();
+                if (c.action == WorkspaceAction::Compare && workspace.report()) workspace_ui.result_name = workspace.report()->ranking.empty() ? "Baseline" : workspace.report()->ranking.front();
+            }
+            catch (const std::exception& e) { workspace_ui.error = e.what(); }
+        }
+        workspace_ui.pending.clear();
+        auto& controller = workspace.view();
+        if (workspace_commands) pending.clear(); // Old-view controls must not cross a scene switch.
         if (ui_state.feedback_tick && !ui_state.feedback_error && (*ui_state.feedback_tick != controller.observation().tick || ui_state.feedback_paused != controller.runtime().clock().paused()))
         { ui_state.feedback.clear(); ui_state.feedback_tick.reset(); }
-        bool discontinuity = false;
+        bool discontinuity = workspace_commands || discard_next_elapsed;
+        discard_next_elapsed = workspace_commands; // Synchronous experiments never become baseline wall input.
         for (const auto& c : pending)
         {
             try
@@ -150,14 +180,18 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         }
         const auto input_started = Clock::now();
         const auto& io = ImGui::GetIO();
-        controller.set_viewport(dashboard_viewport(controller,ui_state),ui_state.panel_changed); ui_state.panel_changed = false;
-        for (const auto& e : events) controller.input(e,{io.WantCaptureMouse,io.WantCaptureKeyboard || io.WantTextInput});
+        const auto input_layout = viewer::dashboard_layout({io.DisplaySize.x,io.DisplaySize.y},{io.DisplayFramebufferScale.x,io.DisplayFramebufferScale.y},
+            ui_state.scale,ui_state.panels,controller.selection().has_value(),ui_state.feedback_error);
+        controller.set_viewport(input_layout.viewport,ui_state.panel_changed && !ui_state.workspace_changed);
+        ui_state.panel_changed = false; ui_state.workspace_changed = false;
+        for (const auto& e : events) controller.input(e,{io.WantCaptureMouse || input_layout.workspace_overlay,io.WantCaptureKeyboard || io.WantTextInput});
         measurements.input_us += std::chrono::duration<double,std::micro>{Clock::now()-input_started}.count();
         const auto ui_started = Clock::now();
         if (controller.selection() != ui_state.last_selection)
         { if (controller.selection()) { ui_state.panels.inspector = true; ui_state.select_inspector_tab = true; } ui_state.last_selection = controller.selection(); }
         controller.set_viewport(dashboard_viewport(controller,ui_state),ui_state.panel_changed); ui_state.panel_changed = false;
         dashboard = draw_dashboard(controller,ui_state); pending = dashboard.commands;
+        if (ui_state.panels.workspace && !ui_state.panels.focus) draw_workspace(workspace,workspace_ui,dashboard);
         measurements.ui_us += std::chrono::duration<double,std::micro>{Clock::now()-ui_started}.count();
         graphics.end_ui_frame(); const auto present_started = Clock::now();
         const bool presented = graphics.render_frame(controller.present());
@@ -173,9 +207,10 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
     const auto capture = [&](const char* suffix)
     {
         // Keep the published diagnostic view unobstructed by pointer-hover help.
-        motion(id,controller.viewport().origin+controller.viewport().size-glm::vec2{5,5}); submit();
+        motion(id,workspace.view().viewport().origin+workspace.view().viewport().size-glm::vec2{5,5}); submit();
         const auto image = graphics.capture_frame();
-        verify_geometry(image,controller.viewport());
+        if(dashboard.layout.workspace_overlay) require(graphics.info().ui_vertices>100,"Compact editor page did not render UI");
+        else verify_geometry(image,workspace.view().viewport());
         if (capture_output) save(image,capture_path(*capture_output,suffix));
         return image;
     };
@@ -308,6 +343,71 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         warehouse::WarehouseSimulation reference{definition}; reference.run();
         require(controller.runtime().capture_snapshot() == reference.capture_snapshot(),"Seek horizon disagrees with headless runtime");
         require(graphics.info().pipeline_generations == 1 && graphics.info().ui_pipeline_generations == 1,"Ordinary interaction recreated a graphics pipeline");
+        const auto preserved = controller.runtime().capture_snapshot();
+        click(dashboard.workspace_toggle); submit();
+        require(ui_state.panels.workspace && workspace.draft().values[1] == std::to_string(std::get<scenario::WarehouseConfig>(definition.domain).loading_bays),"Workspace editor initial configuration mismatch");
+        capture("workspace-editor");
+        const auto enter_text = [&](glm::vec2 target, const char* value)
+        {
+            click(target);
+            const auto key = [&](SDL_Keycode code, SDL_Scancode scan, bool down, SDL_Keymod mods)
+            { SDL_Event e{}; e.type = down ? SDL_EVENT_KEY_DOWN : SDL_EVENT_KEY_UP; e.key.windowID = id; e.key.key = code; e.key.scancode = scan; e.key.down = down; e.key.mod = mods; push(e); submit(); };
+            key(SDLK_LCTRL,SDL_SCANCODE_LCTRL,true,SDL_KMOD_LCTRL); key(SDLK_A,SDL_SCANCODE_A,true,SDL_KMOD_LCTRL);
+            key(SDLK_A,SDL_SCANCODE_A,false,SDL_KMOD_LCTRL); key(SDLK_LCTRL,SDL_SCANCODE_LCTRL,false,SDL_KMOD_NONE);
+            SDL_Event text{}; text.type = SDL_EVENT_TEXT_INPUT; text.text.windowID = id; text.text.text = value; push(text); submit();
+        };
+        workspace_ui.scroll_target = 3; submit(); submit(); enter_text(workspace_ui.forklift_field,"-1");
+        workspace_ui.scroll_target = 10; submit(); submit(); click(workspace_ui.validate);
+        require(!workspace.errors().empty() && workspace.baseline_viewer().runtime().capture_snapshot() == preserved,"Invalid draft changed baseline or lacked validation errors");
+        workspace_ui.scroll_target = 3; submit(); submit(); capture("workspace-invalid");
+        enter_text(workspace_ui.forklift_field,std::to_string(std::get<scenario::WarehouseConfig>(definition.domain).forklifts+1).c_str());
+        workspace_ui.scroll_target = 0; submit(); submit(); enter_text(workspace_ui.name_field,"Add forklift");
+        workspace_ui.scroll_target = 10; submit(); submit(); click(workspace_ui.add);
+        require(workspace.candidates().size() == 1,"Injected candidate creation failed");
+        workspace_ui.requested_tab = 1; workspace_ui.scroll_target = 11; submit(); submit(); submit();
+        capture("workspace-candidates"); click(workspace_ui.compare); submit();
+        if (!workspace.report()) throw std::runtime_error("Workspace comparison did not produce a report at "+std::to_string(workspace_ui.compare.x)+","+std::to_string(workspace_ui.compare.y)+": "+workspace_ui.error);
+        workspace_ui.requested_tab = 2; workspace_ui.scroll_target = 20; submit(); submit(); capture("workspace-results");
+        workspace_ui.result_name = "Add forklift"; workspace_ui.scroll_target = 12; submit(); submit(); click(workspace_ui.candidate_view); submit();
+        require(workspace.view().result_preview() && workspace.view().observation().metrics == workspace.report()->candidates.front().metrics,"Candidate preview did not display its actual report state");
+        require(!workspace.view().selection(),"Candidate view retained stale selection");
+        workspace_ui.scroll_target = 14; submit(); submit(); capture("workspace-candidate");
+        const auto selected_camera = workspace.view().orbit_camera().camera().position;
+        auto p2 = workspace.view().viewport().origin+workspace.view().viewport().size*0.5f;
+        button(id,p2,true); submit(); motion(id,p2+glm::vec2{30,10}); submit(); button(id,p2+glm::vec2{30,10},false); submit();
+        require(workspace.view().orbit_camera().camera().position != selected_camera,"Candidate camera controls failed");
+        bool preview_picked = false;
+        for (const auto& o : workspace.view().scene().selectables())
+        {
+            auto clip = workspace.view().orbit_camera().camera().view_projection()*glm::vec4{(o.bounds.minimum+o.bounds.maximum)*0.5f,1};
+            if (clip.w <= 0) continue; clip /= clip.w;
+            const auto v = workspace.view().viewport(); const auto pixels = v.pixels();
+            const glm::vec2 point{(pixels.x+(clip.x+1)*pixels.width*0.5f)/v.framebuffer_scale.x,(pixels.y+(clip.y+1)*pixels.height*0.5f)/v.framebuffer_scale.y};
+            if (!v.contains(point)) continue; click(point);
+            if (workspace.view().inspect()) { preview_picked = true; break; }
+        }
+        require(preview_picked,"Candidate result picking/inspection failed");
+        click(dashboard.workspace_toggle); submit(); capture("workspace-inspector"); click(dashboard.workspace_toggle); submit();
+        workspace.return_to_baseline(); submit();
+        require(workspace.view().runtime().capture_snapshot() == preserved,"Comparison/view switching advanced baseline");
+        workspace_ui.pending.push_back({WorkspaceAction::Compare,{},{},0,workspace::ComparisonMode::Checkpoint,analysis::Objective::MaximizeCompleted,
+            std::min<std::uint64_t>(definition.simulation.duration_seconds,7200)*definition.simulation.tick_rate}); submit();
+        workspace_ui.scroll_target = 20; submit(); submit(); capture("workspace-checkpoint");
+        workspace_ui.scroll_target = 12; submit(); submit(); click(workspace_ui.probe_toggle);
+        workspace_ui.scroll_target = 13; submit(); submit(); capture("workspace-probes");
+        require(workspace.report()->executions.front().request.checkpoint.current_tick == std::min<std::uint64_t>(definition.simulation.duration_seconds,7200)*definition.simulation.tick_rate,"Checkpoint workflow used the wrong time");
+        window.resize(640,480); submit(); capture("workspace-compact");
+        diagnostic_scale = 2.0f; submit(); submit(); require(dashboard.layout.workspace_overlay,"Small high-DPI editor did not use its expanded page"); capture("workspace-dpi200");
+        diagnostic_scale.reset(); window.resize(1280,720); submit();
+        if(capture_output)
+        {
+            const auto json = capture_output->parent_path()/(capture_output->stem().string()+"-comparison.json");
+            const auto csv = capture_output->parent_path()/(capture_output->stem().string()+"-comparison.csv");
+            workspace.export_json(json); workspace.export_csv(csv); workspace::ScenarioWorkspace::verify_export(workspace.json());
+        }
+        click(dashboard.workspace_toggle); submit();
+        require(workspace.baseline_viewer().runtime().capture_snapshot() == preserved && graphics.info().pipeline_generations == 1 && graphics.info().ui_pipeline_generations == 1,"Workspace modified baseline or rebuilt pipelines");
+        std::cout << "Workspace smoke: injected draft edit/invalid feedback/candidate creation/comparison, actual candidate result camera, preserved baseline, checkpoint and export replay verified.\n";
         std::cout << "Viewer smoke: dashboard GPU text, injected SDL camera/picking/buttons, real inspector, pause/step/reset/seek, sizes, minimize/restore, exact headless snapshot verified.\n";
     }
     auto previous = Clock::now(); std::uint64_t count = 0;
@@ -324,12 +424,13 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
               << " | Scene/UI pipeline generations: " << info.pipeline_generations << '/' << info.ui_pipeline_generations
               << " | Validation errors/warnings: " << info.validation_errors << '/' << info.validation_warnings << '\n';
     std::cout << "UI scale: " << ui_state.scale << " | Font texture creations/updates: " << info.ui_texture_creations << '/' << info.ui_texture_updates
-              << " | Layout generations: " << controller.scene().layout_generations() << " | Static/dynamic objects: "
-              << controller.scene().frame().objects.size()-controller.scene().resources().size()-controller.scene().shipments().size() << '/'
-              << controller.scene().resources().size()+controller.scene().shipments().size() << '\n';
+              << " | Layout generations: " << workspace.view().scene().layout_generations() << " | Static/dynamic objects: "
+              << workspace.view().scene().frame().objects.size()-workspace.view().scene().resources().size()-workspace.view().scene().shipments().size() << '/'
+              << workspace.view().scene().resources().size()+workspace.view().scene().shipments().size() << '\n';
     if (measurements.frames) std::cout << "CPU means (includes present synchronization): UI build " << measurements.ui_us/measurements.frames
         << " us | dynamic " << measurements.dynamic_us/measurements.frames << " us | input " << measurements.input_us/measurements.frames
         << " us | record/submit/present " << measurements.present_ms/measurements.frames << " ms\n";
+    if (workspace_ui.results_frames) std::cout << "Workspace result UI mean: " << workspace_ui.results_ui_us/workspace_ui.results_frames << " us\n";
     if (measurements.frames) std::cout << "CPU total frame mean: " << measurements.total_ms/measurements.frames << " ms (poll, commands, runtime, UI, GPU fence waits and present; no GPU timer)\n";
     require(!info.validation_errors && !info.validation_warnings,"Viewer Vulkan validation was not clean");
     if (smoke_frames)

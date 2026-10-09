@@ -23,11 +23,17 @@ DashboardLayout dashboard_layout(glm::vec2 surface, glm::vec2 framebuffer_scale,
     layout.metrics_visible = metrics;
     const bool inspector = !panels.focus && panels.inspector && selected;
     layout.shared_inspector = inspector && (surface.x < 1600 || surface.x/scale < 1200);
-    const float left = metrics || layout.shared_inspector ? std::min(276*scale,surface.x*(layout.compact ? 0.40f : 0.25f)) : 0;
+    const float left = panels.workspace && !panels.focus ? std::min(440*scale,surface.x*0.48f) :
+        metrics || layout.shared_inspector ? std::min(276*scale,surface.x*(layout.compact ? 0.40f : 0.25f)) : 0;
     const float right = inspector && !layout.shared_inspector ? 312*scale : 0;
     layout.header = {{0,0},{surface.x,header}};
     layout.playback = {{0,surface.y-footer},{surface.x,footer}};
     layout.metrics = {{0,header},{left,middle}};
+    layout.workspace = layout.metrics;
+    // At the smallest window/highest scale, an editor page needs more height
+    // than the scene sidebar can offer. The header toggle remains accessible.
+    layout.workspace_overlay = panels.workspace && !panels.focus && middle/scale < 100;
+    if(layout.workspace_overlay) layout.workspace = {{0,header},{surface.x,surface.y-header}};
     layout.inspector = {{layout.shared_inspector ? 0 : surface.x-right,header},{layout.shared_inspector ? left : right,middle}};
     layout.viewport = {{left,header},{surface.x-left-right,middle},framebuffer_scale};
     float x = layout.padding;

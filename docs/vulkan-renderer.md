@@ -4,7 +4,12 @@ This document records the renderer foundation and its historical validation.
 The current live viewer includes scenario-driven warehouses, camera interaction,
 selection and the refined operational dashboard. See the
 [interactive viewer guide](interactive-warehouse-viewer.md) for current screenshots,
-185-test Debug/Release results, responsive/DPI behavior and measured UI costs.
+historical presentation results, responsive/DPI behavior and measured UI costs.
+The [scenario workspace](scenario-workspace.md) documents current 219-test
+Debug/Release validation. Candidate result switches replace CPU scene/runtime values
+and reuse the same GPU meshes, swapchain and pipelines. Core renderer dependencies
+remain independent of workspace/analysis, and result previews never omit recorded
+capacity history by offering an unsupported seek timeline.
 
 The renderer now draws the first static 3D scene: a perspective camera, floor,
 grid and four colored cubes with depth testing. See [3D pipeline and camera details](first-3d-scene.md)

@@ -21,14 +21,17 @@ struct Rect
 struct PanelPreferences
 {
     bool metrics{true}, inspector{true}, metrics_explicit{false}, focus{false};
+    bool workspace{false};
 };
 struct DashboardLayout
 {
     Rect header, metrics, inspector, playback;
+    Rect workspace;
     Rect play, step, reset, speed, timeline;
     Viewport viewport;
     bool compact{false}, shared_inspector{false};
     bool metrics_visible{false};
+    bool workspace_overlay{false};
     float scale{1}, control_height{40}, padding{16}, gap{10};
 };
 // Pure logical layout. Compact defaults to a scene-first view; an explicit panel
