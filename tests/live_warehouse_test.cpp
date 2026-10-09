@@ -104,7 +104,9 @@ void capacity()
     check(scene.layout_generations() == 3 && scene.resources().size() == 6+runtime.resource_usage().workers);
     const auto short_definition = definition(10,10,2,{2,2,2}); WarehouseSimulation short_run{short_definition}; LiveWarehouseScene short_scene{short_definition};
     short_run.run(); short_run.set_resource_capacity(ResourceType::Worker,0); audit(observe(short_run,short_scene),short_scene);
-    runtime.set_forklift_capacity(257); rejects([&] { (void)observe(runtime,scene); });
+    runtime.set_forklift_capacity(257); const auto large=observe(runtime,scene);
+    check(large.capacity.forklifts==257);
+    check(std::count_if(scene.resources().begin(),scene.resources().end(),[](const auto& r){return r.kind==WarehouseVisualKind::Forklift;})==256);
 }
 void overflow()
 {

@@ -108,8 +108,10 @@ void run(std::string_view test) {
         failure.wait(); failure.release(); check(finish(w.execution()).state==ExecutionState::Failed); check(!w.poll_experiment() && w.json()==json);
         w.start_experiment(ComparisonMode::Initial,analysis::Objective::MaximizeCompleted); finish(w.execution()); check(w.poll_experiment());
         w.view_result("Candidate"); check(w.view().observation().metrics==w.report()->candidates.front().metrics);
+        const auto preview=w.view().runtime().capture_snapshot();
+        const auto camera=w.view().orbit_camera().camera().view_projection();
         w.start_experiment(ComparisonMode::Initial,analysis::Objective::MaximizeCompleted); finish(w.execution()); check(w.poll_experiment());
-        check(w.viewing_baseline());
+        check(w.view().result_preview() && w.view().runtime().capture_snapshot()==preview && w.view().orbit_camera().camera().view_projection()==camera);
         w.start_experiment(ComparisonMode::Initial,analysis::Objective::MaximizeCompleted); finish(w.execution());
         auto replacement=definition(); replacement.name="Replacement baseline"; w.load(replacement,true);
         check(!w.poll_experiment() && !w.report());

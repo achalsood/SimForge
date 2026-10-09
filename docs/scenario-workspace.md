@@ -39,8 +39,9 @@ keyboard shortcuts, timeline, static warehouse and cube graphics smoke remain.
 7. **View this final result** reconstructs the candidate's actual final state and
    verifies its metrics against the report. Its scene has three forklifts and the
    appropriate operational counts, rather than baseline metrics over new geometry.
-   **Return to preserved baseline** restores the original viewer, camera, selection
-   and simulation position.
+   **Return to preserved baseline** restores the original viewer, camera and
+   simulation position, clearing selection across scene changes. **Simulate This
+   Candidate** starts an independent playable run for initial comparisons.
 8. Enter a new full destination path and choose **Export JSON** or **Export CSV**.
    Success/failure and destination appear in the workspace. Existing files are
    never overwritten. Change the filename before exporting the second format.
@@ -69,14 +70,14 @@ scenario validation -> ScenarioWorkspace -> WarehouseSimulation / simforge_analy
 `simforge_analysis` and the existing JSON support. No SDL, Vulkan or ImGui dependency
 is introduced into simulation, warehouse, analysis or workspace. Workspace owns
 application definitions, raw draft text, validation, stable candidate IDs, reports
-and baseline/alternative controllers. Warehouse alone owns its rules and clock;
+and baseline/custom-run/preview controllers. Warehouse alone owns its rules and clock;
 renderer owns GPU assets. `apps/sandbox/workspace_panel.*` reads this state and
 queues typed actions for application processing before the next frame.
 
 Comparisons operate on owned submitted inputs and leave the live baseline untouched.
 One CPU worker owns independent runtimes and publishes complete reports for main-thread
 adoption. The selected viewer continues its normal playback; returning from a result
-preview resumes the preserved baseline. SDL, Vulkan and ImGui stay on the main thread.
+preview can resume the selected retained live run. SDL, Vulkan and ImGui stay on the main thread.
 Final async result snapshots support previews without rerunning comparisons. Candidate
 edits preserve previous reports, whose labels identify their saved inputs.
 
@@ -92,18 +93,21 @@ because ImGui redraws. Configuration differences are cached on candidate changes
 The existing schema is authoritative: resources may be zero, combined capacity
 is at most 100000; seconds 1..604800; rate 1..1000 Hz; at most 10M ticks and 100K
 arrivals. Zero capacity blocks service under existing model semantics. Seed is
-retained but this warehouse model has no random behavior. The graphical adapter
-still supports at most 256 of each resource. Larger candidates can be analyzed
-and saved; attempting a 3D run/preview fails explicitly and retains the current view.
+retained but this warehouse model has no random behavior. Live playback and previews
+display at most 256 slots per resource; larger capacities remain authoritative
+and are explicitly identified in the dashboard. The static demo retains its old bound.
 
-Draft typing never changes the active runtime. **Run draft from start** prepares a
-new independent runtime/layout/camera and switches only after successful preparation.
+Draft typing never changes the active runtime. **Run Simulation** prepares a
+new independent runtime/layout/camera, starts paused at tick zero and switches only
+after successful preparation. Up to eight custom runs are retained alongside the
+original baseline. See [custom scenario playback](custom-scenario-playback.md).
 The loaded baseline is retained. Revert always restores the loaded baseline, not
 the current candidate. Unsaved edits are marked; successful Save/Add/Update records
 the accepted draft as its origin. Failed validation/file operations retain edits.
-Opening another scenario requires confirmation when draft edits or candidates would
-be discarded. Revert/Edit requires confirmation for a dirty draft. Cancelling keeps
-the edit target and state. Opening successfully clears candidates/results.
+Opening another scenario as a replacement requires confirmation for the baseline,
+retained runs and workspace state. **Load file as playable run** preserves them.
+Revert/Edit requires confirmation for a dirty draft. Cancelling keeps the edit
+target and state. Opening successfully clears runs/candidates/results.
 
 Candidates have monotonically assigned workspace IDs, validated definitions, unique
 names, optional notes and cached input differences. Add, rename, duplicate, edit,
@@ -170,7 +174,7 @@ UI pipelines. Result previews are labelled, paused and have disabled playback/re
 seek controls; they do not silently omit capacity interventions. Picking, inspector
 and camera remain available. Close the workspace sidebar to expose the normal object
 inspector; reopen it to return to comparison details. Returning to the preserved
-baseline retains its camera/selection. Untouched cameras refit when workspace width
+baseline retains its camera and clears selection. Untouched cameras refit when workspace width
 changes; manually adjusted cameras keep their pose. F explicitly reframes.
 
 Normal launch first shows the existing static demo with a file-entry panel. Opening

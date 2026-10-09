@@ -1,5 +1,9 @@
 # Scenario-driven warehouse visualization
 
+For interactive custom scenarios, see [custom scenario playback](custom-scenario-playback.md).
+Live scenes retain all validated capacity and show at most 256 slots per resource
+with a dashboard notice; this historical static-mode guide retains its original bounds.
+
 The graphical sandbox now builds a **static representative warehouse** from an
 existing validated warehouse scenario. It draws the configured number of loading
 bays, forklifts and workers, with procedural storage, cargo staging and travel

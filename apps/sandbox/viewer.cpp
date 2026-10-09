@@ -120,7 +120,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
     {
         if (!smoke_frames) throw std::invalid_argument("Viewer capture requires graphics smoke");
         if (std::filesystem::exists(*capture_output)) throw std::invalid_argument("Viewer capture output already exists");
-        for (const char* suffix : {"overview","queue","selected","paused","queue-buildup","final","collapsed","focus","inspector-collapsed","size-640","size-800","size-1024","size-1280","size-1600","size-1920","dpi-100","dpi-125","dpi-150","dpi-200","workspace-editor","workspace-invalid","workspace-candidates","workspace-results","workspace-running","workspace-cancelled","workspace-candidate","workspace-inspector","workspace-probes","workspace-checkpoint","workspace-compact","workspace-dpi200"})
+        for (const char* suffix : {"overview","queue","selected","paused","queue-buildup","final","collapsed","focus","inspector-collapsed","size-640","size-800","size-1024","size-1280","size-1600","size-1920","dpi-100","dpi-125","dpi-150","dpi-200","workspace-editor","workspace-invalid","workspace-candidates","workspace-results","workspace-running","workspace-cancelled","workspace-candidate","workspace-inspector","workspace-probes","workspace-checkpoint","workspace-compact","workspace-dpi200","custom-initial","custom-processing","custom-candidate-final","custom-file-final"})
             if (std::filesystem::exists(capture_path(*capture_output,suffix))) throw std::invalid_argument("Viewer capture output already exists");
         for (const auto* extension : {"-comparison.json","-comparison.csv"})
             if (std::filesystem::exists(capture_output->parent_path()/(capture_output->stem().string()+extension)))
@@ -151,9 +151,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         std::vector<viewer::InputEvent> events;
         window.poll_events([&](const SDL_Event& e){ graphics.process_ui_event(e); if (const auto converted = input(e,id)) events.push_back(*converted); });
         if (!window.is_open()) return false;
-        const bool preview_before_publication=workspace.view().result_preview();
         if (workspace.poll_experiment()) {
-            if (preview_before_publication) pending.clear(); // Prior-preview controls must not cross the scene switch.
             workspace_ui.result_order=workspace.report()->ranking;
             for (const auto& r:workspace.report()->candidates) if (!r.rank) workspace_ui.result_order.push_back(r.candidate.name);
             workspace_ui.result_name=workspace.report()->ranking.empty()?"Baseline":workspace.report()->ranking.front();
@@ -179,8 +177,11 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
                     if(workspace_ui.result_name.empty()) workspace_ui.result_name=workspace.report()->ranking.empty()?"Baseline":workspace.report()->ranking.front();
                     ui_state.panels.mode=viewer::ApplicationMode::Analysis; ui_state.panels.workspace=true; ui_state.panel_changed=ui_state.workspace_changed=true;
                 }
-                if(c.action==WorkspaceAction::View || c.action==WorkspaceAction::Run || c.action==WorkspaceAction::Baseline)
-                { ui_state.panels.mode=viewer::ApplicationMode::Simulation; ui_state.panels.workspace=false; ui_state.panel_changed=ui_state.workspace_changed=true; }
+                if(c.action==WorkspaceAction::View || c.action==WorkspaceAction::Run || c.action==WorkspaceAction::Baseline ||
+                    c.action==WorkspaceAction::SelectRun || c.action==WorkspaceAction::RemoveRun || c.action==WorkspaceAction::Live || c.action==WorkspaceAction::LoadRun ||
+                    c.action==WorkspaceAction::SimulateCandidate || c.action==WorkspaceAction::SimulateResult)
+                { workspace_ui.requested_tab=-1; ui_state.panels.mode=viewer::ApplicationMode::Simulation; ui_state.panels.workspace=false; ui_state.panel_changed=ui_state.workspace_changed=true;
+                  ui_state.seeking=false; ui_state.last_selection.reset(); ui_state.feedback.clear(); ui_state.feedback_tick.reset(); }
             }
             catch (const std::exception& e) { workspace_ui.error = e.what(); }
         }
@@ -232,7 +233,13 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         controller.set_viewport(dashboard_viewport(controller,ui_state),ui_state.panel_changed); ui_state.panel_changed = false;
         ui_state.results_available=workspace.report().has_value();
         ui_state.viewing_baseline=workspace.viewing_baseline();
+        ui_state.run_identity=workspace.viewed_identity(); ui_state.active_run=workspace.active_run_id();
+        ui_state.runs={{0,"Original Baseline: "+workspace.baseline().name}};
+        for (const auto& run : workspace.runs()) ui_state.runs.emplace_back(run.id,run.controller->name()+" / Run #"+std::to_string(run.id));
         dashboard = draw_dashboard(controller,ui_state); pending = dashboard.commands;
+        if(ui_state.select_run) { workspace_ui.pending.push_back({WorkspaceAction::SelectRun,{},{},*ui_state.select_run}); ui_state.select_run.reset(); }
+        if(ui_state.remove_run) { workspace_ui.pending.push_back({WorkspaceAction::RemoveRun,{},{},*ui_state.remove_run}); ui_state.remove_run.reset(); }
+        if(ui_state.return_live) { workspace_ui.pending.push_back({WorkspaceAction::Live}); ui_state.return_live=false; }
         if(ui_state.context_action)
         {
             ui_state.context_action=false;
@@ -549,6 +556,81 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         }
         click(dashboard.simulation_mode); submit();
         require(workspace.baseline_viewer().runtime().capture_snapshot() == preserved && graphics.info().pipeline_generations == 1 && graphics.info().ui_pipeline_generations == 1,"Workspace modified baseline or rebuilt pipelines");
+        const auto custom_buffers_before=graphics.info().buffer_allocations;
+        // Commit 20: use real ImGui/SDL launch and controls on an independent custom runtime.
+        workspace.revert(true); workspace.edit(workspace::Field::Name,"Custom three-forklift warehouse"); workspace.edit(workspace::Field::Forklifts,"3");
+        click(dashboard.workspace_toggle); workspace_ui.requested_tab=0; workspace_ui.scroll_target=17; submit(); submit();
+        click(workspace_ui.run_simulation); submit();
+        require(workspace.active_run_id()!=0 && ui_state.panels.mode==viewer::ApplicationMode::Simulation && !ui_state.panels.workspace,"Run Simulation did not activate Simulation mode");
+        auto& custom=workspace.view(); const auto custom_id=workspace.active_run_id();
+        require(custom.observation().tick==0 && custom.runtime().clock().paused() && custom.observation().capacity.forklifts==3,"Custom start policy/configuration incorrect");
+        capture("custom-initial"); click(dashboard.play); frame(std::chrono::seconds{2}); click(dashboard.play);
+        require(custom.observation().tick>0 && custom.observation().metrics.arrived>0 && custom.runtime().clock().paused(),"Custom playback failed to evolve");
+        const auto custom_tick=custom.observation().tick; click(dashboard.step); require(custom.observation().tick==custom_tick+1,"Custom single step failed");
+        enter_text(dashboard.speed,"2");
+        SDL_Event enter{}; enter.type=SDL_EVENT_KEY_DOWN; enter.key.windowID=id; enter.key.key=SDLK_RETURN; enter.key.scancode=SDL_SCANCODE_RETURN; enter.key.down=true; push(enter); submit();
+        enter.type=SDL_EVENT_KEY_UP; enter.key.down=false; push(enter); submit(); require(custom.speed()==2,"Custom speed UI did not address the active run");
+        const auto custom_definition=scenario::parse_scenario(custom.runtime().capture_snapshot().scenario_identity);
+        const auto seek_custom_slider=[&](float fraction) {
+            const auto a=dashboard.timeline_min,b=dashboard.timeline_max; click({a.x+(b.x-a.x)*fraction,(a.y+b.y)*0.5f});
+            warehouse::WarehouseSimulation expected{custom_definition}; expected.advance_to(custom.observation().tick);
+            require(custom.runtime().capture_snapshot()==expected.capture_snapshot(),"Custom timeline UI did not reconstruct actual state");
+        };
+        seek_custom_slider(0.20f); const auto custom_forward=custom.observation().tick; seek_custom_slider(0.02f);
+        require(custom.observation().tick<custom_forward,"Custom backward timeline UI failed");
+        custom.seek(std::min<std::uint64_t>(custom.observation().horizon,600ULL*custom.observation().tick_rate)); submit();
+        require(!custom.scene().shipments().empty(),"Custom operational cargo missing");
+        bool custom_picked=false;
+        for(const auto& o:custom.scene().selectables()) {
+            if(o.key.category!=viewer::VisualCategory::Shipment) continue;
+            auto clip=custom.orbit_camera().camera().view_projection()*glm::vec4{(o.bounds.minimum+o.bounds.maximum)*0.5f,1};
+            if(clip.w<=0) continue; clip/=clip.w;
+            const auto v=custom.viewport(); const auto pixels=v.pixels();
+            const glm::vec2 point{(pixels.x+(clip.x+1)*pixels.width*0.5f)/v.framebuffer_scale.x,(pixels.y+(clip.y+1)*pixels.height*0.5f)/v.framebuffer_scale.y};
+            if(!v.contains(point)) continue; click(point);
+            if(custom.inspect() && custom.inspect()->shipment) {custom_picked=true; break;}
+        }
+        require(custom_picked,"Custom shipment picking failed"); capture("custom-processing");
+        const auto saved_custom=custom.runtime().capture_snapshot();
+        const auto choose_run=[&](std::uint64_t run) {
+            click(dashboard.run_selector); submit();
+            const auto found=std::find_if(dashboard.run_choices.begin(),dashboard.run_choices.end(),[&](const auto& choice){return choice.first==run;});
+            require(found!=dashboard.run_choices.end(),"Run selector did not expose retained run");
+            const auto point=found->second; click(point); submit();
+        };
+        choose_run(0);
+        require(workspace.view().runtime().capture_snapshot()==preserved && !workspace.view().selection(),"Custom launch modified baseline");
+        choose_run(custom_id);
+        require(custom.runtime().capture_snapshot()==saved_custom && custom.speed()==2 && !custom.selection(),"Custom switching lost state");
+        {
+            ExperimentGate gate; workspace.execution().start(workspace.capture_request(workspace::ComparisonMode::Initial,analysis::Objective::MaximizeCompleted),
+                [&](auto phase,auto,auto,auto){gate.checkpoint(phase);}); gate.wait(); submit();
+            const auto before=custom.orbit_camera().camera().position;
+            const auto p=custom.viewport().origin+custom.viewport().size*0.5f;
+            button(id,p,true); submit(); motion(id,p+glm::vec2{30,10}); submit(); button(id,p+glm::vec2{30,10},false); submit();
+            require(custom.orbit_camera().camera().position!=before,"Custom viewport froze during experiment");
+            gate.release(); wait_experiment(); require(custom.runtime().capture_snapshot()==saved_custom,"Background work mutated custom run");
+        }
+        click(dashboard.analysis_mode); workspace_ui.result_name="Add forklift"; workspace_ui.scroll_target=18; submit(); submit();
+        click(workspace_ui.simulate_result); submit();
+        require(workspace.active_run_id()!=custom_id && workspace.view().observation().tick==0 && !workspace.view().result_preview(),"Simulate This Candidate failed");
+        workspace.view().seek(workspace.view().observation().horizon); submit();
+        require(workspace.view().observation().metrics==workspace.report()->candidates.front().metrics,"Playable candidate differs from report"); capture("custom-candidate-final");
+        workspace.view_result("Add forklift"); submit(); require(workspace.view().result_preview(),"Custom candidate preview missing");
+        workspace_ui.pending.push_back({WorkspaceAction::SelectRun,{},{},custom_id}); submit();
+        require(custom.runtime().capture_snapshot()==saved_custom,"Preview destroyed custom run");
+        click(dashboard.reset); require(custom.observation().tick==0,"Custom restart failed");
+        const auto file=std::filesystem::temp_directory_path()/("simforge-playable-"+std::to_string(Clock::now().time_since_epoch().count())+".json");
+        struct FileCleanup { std::filesystem::path path; ~FileCleanup(){std::error_code e; std::filesystem::remove(path,e);} } cleanup{file};
+        workspace.save_draft(file); workspace_ui.pending.push_back({WorkspaceAction::LoadRun,file.string()}); submit();
+        auto loaded=scenario::load_scenario(file); warehouse::WarehouseSimulation headless_custom{loaded}; headless_custom.run();
+        workspace.view().seek(workspace.view().observation().horizon); submit();
+        require(workspace.view().runtime().capture_snapshot()==headless_custom.capture_snapshot(),"Saved-file custom playback differs from headless"); capture("custom-file-final");
+        std::cout<<"Custom GPU buffers before/after: "<<custom_buffers_before<<'/'<<graphics.info().buffer_allocations<<" | 3D/UI draws: "<<graphics.info().draw_calls<<'/'<<graphics.info().ui_draw_calls<<'\n';
+        window.resize(1024,768); submit(); SDL_MinimizeWindow(window.native_handle()); frame(std::chrono::nanoseconds{0}); SDL_RestoreWindow(window.native_handle()); submit();
+        workspace.return_to_baseline(); submit();
+        require(workspace.view().runtime().capture_snapshot()==preserved && graphics.info().pipeline_generations==1 && graphics.info().ui_pipeline_generations==1,"Custom playback rebuilt pipelines or changed baseline");
+        std::cout<<"Custom graphics: draft/candidate/file launches, real shipments/metrics, picking, playback/seek/reset, retained switching, async isolation and resize verified.\n";
         std::cout << "Workspace smoke: injected draft edit/invalid feedback/candidate creation/comparison, actual candidate result camera, preserved baseline, checkpoint and export replay verified.\n";
         std::cout << "Viewer smoke: dashboard GPU text, injected SDL camera/picking/buttons, real inspector, pause/step/reset/seek, sizes, minimize/restore, exact headless snapshot verified.\n";
     }

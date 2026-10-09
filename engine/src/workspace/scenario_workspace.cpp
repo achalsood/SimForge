@@ -88,20 +88,20 @@ ScenarioWorkspace::ScenarioWorkspace(const ScenarioDefinition& d, double speed) 
 const ScenarioDefinition& ScenarioWorkspace::baseline() const
 { if (!baseline_) throw std::logic_error("No scenario loaded"); return *baseline_; }
 viewer::ViewerController& ScenarioWorkspace::view()
-{ if (alternative_view_) return *alternative_view_; if (!baseline_view_) throw std::logic_error("No scenario loaded"); return *baseline_view_; }
+{ if (preview_view_) return *preview_view_; if (!baseline_view_) throw std::logic_error("No scenario loaded"); if (active_run_) { for (auto& run : runs_) if (run.id == active_run_) return *run.controller; throw std::logic_error("Missing active run"); } return *baseline_view_; }
 const viewer::ViewerController& ScenarioWorkspace::baseline_viewer() const
 { if (!baseline_view_) throw std::logic_error("No scenario loaded"); return *baseline_view_; }
 void ScenarioWorkspace::load(const ScenarioDefinition& d, bool discard)
 {
-    if ((dirty() || !candidates_.empty()) && !discard) throw std::logic_error("Confirm discarding draft/candidates/results before opening another scenario");
+    if (baseline_.has_value() && !discard) throw std::logic_error("Confirm replacing baseline and discarding runs/draft/candidates/results before opening another scenario");
     if (execution_->progress().active()) throw std::logic_error("Cancel the active experiment before replacing the baseline");
     warehouse_only(d); auto prepared = std::make_unique<viewer::ViewerController>(d,speed_);
     // A completion from the prior baseline must not publish after a scenario replacement.
     (void)execution_->take_result(execution_->progress().request_id);
-    auto draft = make_draft(d); baseline_ = d; baseline_view_ = std::move(prepared); alternative_view_.reset();
+    auto draft = make_draft(d); baseline_ = d; baseline_view_ = std::move(prepared); preview_view_.reset(); runs_.clear(); active_run_ = 0;
     draft_ = draft_origin_ = std::move(draft); errors_.clear(); candidates_.clear(); report_.reset();
     // IDs are never reused within the workspace, including after scenario replacement.
-    viewed_identity_ = "Baseline: "+d.name; status_ = Status::Ready; message_ = "Scenario loaded. Edit initial configuration; the running warehouse is unchanged by typing.";
+    viewed_identity_ = "LIVE SIMULATION - Original Baseline: "+d.name; status_ = Status::Ready; message_ = "Scenario loaded. Edit initial configuration; the running warehouse is unchanged by typing.";
 }
 void ScenarioWorkspace::open(const std::filesystem::path& path, bool discard) { load(scenario::load_scenario(path),discard); }
 bool ScenarioWorkspace::dirty() const { return baseline_.has_value() && draft_ != draft_origin_; }
@@ -150,11 +150,54 @@ void ScenarioWorkspace::save_draft(const std::filesystem::path& path)
     const auto d = checked_draft(); analysis::detail::save_output(path,scenario::serialize_scenario(d));
     draft_origin_ = draft_; status_ = Status::Ready; message_ = "Saved new scenario: "+path.string();
 }
-void ScenarioWorkspace::run_draft()
+void ScenarioWorkspace::run_draft() { (void)create_run(checked_draft()); }
+std::uint64_t ScenarioWorkspace::create_run(const ScenarioDefinition& d)
 {
-    const auto d = checked_draft(); auto prepared = std::make_unique<viewer::ViewerController>(d,speed_);
-    prepared->set_viewport(view().viewport()); alternative_view_ = std::move(prepared); viewed_identity_ = "Draft run from start: "+d.name;
-    message_ = "New independent draft run. The original baseline is preserved.";
+    warehouse_only(d);
+    if (runs_.size() >= max_custom_runs) throw std::length_error("At most 8 custom runs; remove a retained run first");
+    if (next_run_id_ == std::numeric_limits<std::uint64_t>::max()) throw std::overflow_error("Run identities exhausted");
+    auto prepared = std::make_unique<viewer::ViewerController>(d,speed_);
+    prepared->reset(); // Consistent custom-run policy: untouched tick zero, paused.
+    prepared->set_viewport(view().viewport());
+    const auto id = next_run_id_;
+    runs_.push_back({id,std::move(prepared)}); ++next_run_id_;
+    select_run(id);
+    message_ = "Independent run starts paused at tick zero. Press Play. Inactive runs do not advance.";
+    return id;
+}
+void ScenarioWorkspace::select_run(std::uint64_t id)
+{
+    auto* target = baseline_view_.get();
+    if (id) {
+        const auto found = std::find_if(runs_.begin(),runs_.end(),[&](const auto& r){ return r.id == id; });
+        if (found == runs_.end()) throw std::invalid_argument("Unknown playable run ID");
+        target = found->controller.get();
+    }
+    if (!target) throw std::logic_error("No scenario loaded");
+    const auto viewport = view().viewport();
+    view().select(std::nullopt); view().input({viewer::InputKind::FocusLost},{});
+    target->set_viewport(viewport,true); target->select(std::nullopt);
+    preview_view_.reset(); active_run_ = id;
+    viewed_identity_ = "LIVE SIMULATION - "+(id ? target->name()+" / Run #"+std::to_string(id) : "Original Baseline: "+target->name());
+}
+void ScenarioWorkspace::remove_run(std::uint64_t id)
+{
+    if (!id) throw std::invalid_argument("The original baseline cannot be removed");
+    const auto found = std::find_if(runs_.begin(),runs_.end(),[&](const auto& r){ return r.id == id; });
+    if (found == runs_.end()) throw std::invalid_argument("Unknown playable run ID");
+    if (active_run_ == id) select_run(0);
+    runs_.erase(found);
+}
+void ScenarioWorkspace::resume_live_view() { select_run(active_run_); }
+void ScenarioWorkspace::simulate_candidate(std::uint64_t id) { (void)create_run(candidate(id).definition); }
+void ScenarioWorkspace::simulate_result(std::string_view name)
+{
+    if (!report_) throw std::logic_error("No comparison report");
+    if (report_->mode == ComparisonMode::Checkpoint) throw std::logic_error("Checkpoint interventions are preview-only; initial configuration is a separate timeline");
+    if (name.empty() || name == "Baseline") { (void)create_run(report_->baseline_definition); return; }
+    const auto found = std::find_if(report_->definitions.begin(),report_->definitions.end(),[&](const auto& d){ return d.name == name; });
+    if (found == report_->definitions.end()) throw std::invalid_argument("Unknown report candidate");
+    (void)create_run(*found);
 }
 Candidate& ScenarioWorkspace::candidate(std::uint64_t id)
 {
@@ -255,7 +298,7 @@ bool ScenarioWorkspace::poll_experiment()
     const auto progress = execution_->progress();
     if (auto completed = execution_->take_result(progress.request_id)) {
         report_ = std::move(completed); status_ = Status::Results;
-        if (alternative_view_ && alternative_view_->result_preview()) return_to_baseline();
+        // The preview owns its snapshot. Publication must not switch the active scene/camera.
         message_ = "Experiment complete. Report belongs to submitted inputs."; return true;
     }
     return false;
@@ -355,11 +398,11 @@ void ScenarioWorkspace::view_result(std::optional<std::string> name)
     }
     auto prepared = std::make_unique<viewer::ViewerController>(d,snapshot);
     if(prepared->observation().metrics != expected) throw std::runtime_error("Result preview metrics do not match report");
-    prepared->set_viewport(view().viewport()); alternative_view_ = std::move(prepared);
-    viewed_identity_ = "Report #"+std::to_string(r.request_id)+" final result preview: "+(name ? *name : std::string{"Baseline"});
+    prepared->set_viewport(view().viewport()); view().select(std::nullopt); view().input({viewer::InputKind::FocusLost},{}); preview_view_ = std::move(prepared);
+    viewed_identity_ = "FINAL-STATE PREVIEW - Report #"+std::to_string(r.request_id)+": "+(name ? *name : std::string{"Baseline"});
 }
 void ScenarioWorkspace::return_to_baseline()
-{ alternative_view_.reset(); if(baseline_) viewed_identity_ = "Baseline: "+baseline_->name; }
+{ select_run(0); }
 std::string ScenarioWorkspace::csv() const
 { if(!report_) throw std::logic_error("No comparison report"); return analysis::serialize_comparison_csv(report_->baseline,report_->candidates); }
 std::string ScenarioWorkspace::json() const

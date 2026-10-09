@@ -77,7 +77,7 @@ void visual_switch()
         w.compare(mode,analysis::Objective::MaximizeCompleted); const auto count=w.view().present().objects.size();
         w.view_result("Forklift"); check(w.view().result_preview() && !w.view().selection()); check(w.view().observation().metrics==w.report()->candidates[0].metrics);
         check(w.view().present().objects.size()!=count); rejects([&]{w.view().seek(0);}); rejects([&]{w.view().reset();});
-        w.return_to_baseline(); check(w.view().runtime().capture_snapshot()==saved && w.view().selection()); check(w.view().orbit_camera().camera().position==camera);
+        w.return_to_baseline(); check(w.view().runtime().capture_snapshot()==saved && !w.view().selection()); check(w.view().orbit_camera().camera().position==camera);
     }
     w.view_result("Forklift"); w.restore_candidate(w.candidates().front().id);
     check(w.report().has_value() && !w.viewing_baseline()); w.return_to_baseline(); check(w.view().runtime().capture_snapshot()==saved);

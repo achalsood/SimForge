@@ -1,5 +1,9 @@
 # Interactive Warehouse Viewer
 
+Commit #20 adds retained custom playback, run selection, candidate/file launches
+and explicit preview separation. See [custom scenario playback](custom-scenario-playback.md)
+for current ownership, controls, screenshots, headless equivalence and measurements.
+
 **Current presentation:** Commit #18 adds Simulation, Scenario Editor and Analysis modes, full-width workspace pages, directional lighting and Windows report Save As. See [visual design](visual-design.md) for current controls, screenshots and validation. Historical measurements below describe the milestone that introduced each feature.
 
 Commit #17 adds the [scenario editing/comparison workspace](scenario-workspace.md).

@@ -14,6 +14,8 @@ struct DashboardFrame
     glm::vec2 metrics_toggle{}, inspector_toggle{}, focus_toggle{};
     glm::vec2 workspace_toggle{}, simulation_mode{}, analysis_mode{};
     glm::vec2 context_action{};
+    glm::vec2 run_selector{};
+    std::vector<std::pair<std::uint64_t,glm::vec2>> run_choices;
     simforge::viewer::DashboardLayout layout;
 };
 void style_dashboard(float scale = 1);
@@ -27,6 +29,11 @@ struct DashboardState
     bool context_action{false};
     bool results_available{false};
     bool viewing_baseline{true};
+    std::string run_identity;
+    std::vector<std::pair<std::uint64_t,std::string>> runs;
+    std::uint64_t active_run{0};
+    std::optional<std::uint64_t> select_run, remove_run;
+    bool return_live{false};
     std::optional<simforge::viewer::VisualKey> last_selection;
     std::string feedback;
     bool custom_requested{false};

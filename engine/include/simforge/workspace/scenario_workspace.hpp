@@ -12,6 +12,12 @@ inline constexpr std::array<const char*,9> field_names{"Name","Loading bays","Wo
 struct Draft { std::array<std::string,9> values; bool operator==(const Draft&) const = default; };
 struct ValidationError { std::string field, message; };
 struct Candidate { std::uint64_t id; scenario::ScenarioDefinition definition; std::string notes, changed_inputs; };
+struct PlayableRun
+{
+    std::uint64_t id;
+    std::unique_ptr<viewer::ViewerController> controller;
+};
+inline constexpr std::size_t max_custom_runs = 8;
 enum class ComparisonMode { Initial, Checkpoint };
 enum class Status { Empty, Ready, Modified, Invalid, ComparisonReady, Results, ExportFailed };
 struct Comparison
@@ -62,6 +68,14 @@ public:
     void revert(bool discard_draft = false);
     void save_draft(const std::filesystem::path& path);
     void run_draft();
+    std::uint64_t create_run(const scenario::ScenarioDefinition& definition);
+    void select_run(std::uint64_t id); // 0 is the preserved original baseline.
+    void remove_run(std::uint64_t id);
+    void resume_live_view();
+    void simulate_candidate(std::uint64_t id);
+    void simulate_result(std::string_view name);
+    [[nodiscard]] const std::vector<PlayableRun>& runs() const noexcept { return runs_; }
+    [[nodiscard]] std::uint64_t active_run_id() const noexcept { return active_run_; }
     std::uint64_t add_candidate(std::string notes = {});
     std::uint64_t duplicate_candidate(std::uint64_t id, std::string name);
     void rename_candidate(std::uint64_t id, std::string name);
@@ -92,7 +106,7 @@ public:
     [[nodiscard]] Status status() const noexcept { return status_; }
     [[nodiscard]] const std::string& message() const noexcept { return message_; }
     [[nodiscard]] const std::string& viewed_identity() const noexcept { return viewed_identity_; }
-    [[nodiscard]] bool viewing_baseline() const noexcept { return !alternative_view_; }
+    [[nodiscard]] bool viewing_baseline() const noexcept { return !preview_view_ && active_run_ == 0; }
 private:
     static Draft make_draft(const scenario::ScenarioDefinition& definition);
     scenario::ScenarioDefinition checked_draft();
@@ -104,7 +118,9 @@ private:
     std::vector<ValidationError> errors_;
     std::vector<Candidate> candidates_;
     std::optional<Comparison> report_;
-    std::unique_ptr<viewer::ViewerController> baseline_view_, alternative_view_;
+    std::unique_ptr<viewer::ViewerController> baseline_view_, preview_view_;
+    std::vector<PlayableRun> runs_;
+    std::uint64_t active_run_{0}, next_run_id_{1};
     std::uint64_t next_id_{1};
     double speed_{300};
     Status status_{Status::Empty};

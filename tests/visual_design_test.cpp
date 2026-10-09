@@ -40,7 +40,7 @@ void navigation()
     for(int i=0;i<20;++i) for(auto mode:{viewer::ApplicationMode::Simulation,viewer::ApplicationMode::Editor,viewer::ApplicationMode::Analysis})
     { viewer::PanelPreferences p; p.mode=mode; w.view().set_viewport(viewer::dashboard_layout({1600,900},{1,1},1,p,true).viewport,true); }
     check(w.view().runtime().capture_snapshot()==snapshot && w.draft()==draft && w.json()==json);
-    w.view_result("Extra forklift"); check(w.view().result_preview()); w.return_to_baseline(); check(w.view().runtime().capture_snapshot()==snapshot && w.view().selection());
+    w.view_result("Extra forklift"); check(w.view().result_preview()); w.return_to_baseline(); check(w.view().runtime().capture_snapshot()==snapshot && !w.view().selection());
 }
 void fields()
 {

@@ -161,6 +161,13 @@ remain outside this milestone.
 
 ## Graphical warehouse experiment
 
+Custom warehouses are playable from **Scenario Editor → Run Simulation**. New
+runs start paused at tick zero; press Play. The Operations run dropdown preserves
+the baseline and up to eight custom runs with independent clocks, metrics, speeds
+and cameras. Analysis offers **Simulate This Candidate** for initial comparisons;
+checkpoint results remain explicitly labelled final previews. See the
+[custom playback tutorial and validation](docs/custom-scenario-playback.md).
+
 Launch the sandbox, choose **Open warehouse workspace**, and use these tabs:
 
 1. **Edit:** name the draft `Add forklift`, change Forklifts from 2 to 3, and Validate.

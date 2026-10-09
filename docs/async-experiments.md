@@ -37,8 +37,9 @@ viewer controllers and Vulkan remain on the main thread.
 
 Async computations additionally retain final baseline/candidate snapshots, in canonical
 candidate-name order, so preview selection restores a verified result rather than
-rerunning the experiment. On successful publication an older result preview returns to the preserved baseline;
-independent draft playback is preserved, and preview labels include their report ID.
+rerunning the experiment. On successful publication an older result preview retains
+its owned snapshot and camera; retained custom playback is preserved, and preview
+labels include their report ID. See [custom playback](custom-scenario-playback.md).
 Preview construction/validation and scene creation still
 occur on the main thread. Final snapshots are excluded from export payloads.
 

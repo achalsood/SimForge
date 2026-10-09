@@ -52,7 +52,10 @@ void LiveWarehouseScene::rebuild(warehouse::ResourceCounts capacity)
 {
     auto layout_definition = definition_;
     auto& c = std::get<scenario::WarehouseConfig>(layout_definition.domain);
-    c.loading_bays = capacity.loading_bays; c.workers = capacity.workers; c.forklifts = capacity.forklifts;
+    // Keep GPU presentation bounded without reducing authoritative processing capacity.
+    c.loading_bays = std::min(capacity.loading_bays,max_visual_capacity);
+    c.workers = std::min(capacity.workers,max_visual_capacity);
+    c.forklifts = std::min(capacity.forklifts,max_visual_capacity);
     auto layout = build_warehouse_layout(layout_definition);
     renderer::RenderFrameData frame; frame.framing_bounds = layout.bounds;
     frame.camera = renderer::frame_bounds(layout.bounds,16.0f/9.0f);

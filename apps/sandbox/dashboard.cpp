@@ -157,12 +157,13 @@ DashboardFrame draw_dashboard(const simforge::viewer::ViewerController& v, Dashb
     const auto status = playback_status(state.at_horizon,v.runtime().clock().paused(),draft.seeking);
     const auto accent = status == PresentationStatus::Completed ? design::completed : status == PresentationStatus::Paused ? design::waiting : design::processing;
     const float status_width = (tiny ? 85 : 195)*s;
-    auto name = v.name();
+    const auto full_name = draft.run_identity.empty() ? v.name() : draft.run_identity;
+    auto name = full_name;
     const float available = std::max(20.0f,width-status_width-ImGui::GetCursorPosX()-36*s);
     { Font font{design::label};
       while (!name.empty() && ImGui::CalcTextSize((name+"...").c_str()).x > available)
       { auto end = name.size()-1; while (end && (static_cast<unsigned char>(name[end])&0xC0) == 0x80) --end; name.resize(end); }
-      ImGui::TextUnformatted(name == v.name() ? name.c_str() : (name+"...").c_str()); tooltip(v.name().c_str()); }
+      ImGui::TextUnformatted(name == full_name ? name.c_str() : (name+"...").c_str()); tooltip(full_name.c_str()); }
     ImGui::SameLine(width-status_width-18*s);
     { Font font{design::label}; ImGui::TextColored(color(accent),"%s",v.result_preview() ? "FINAL PREVIEW" : status_label(status).data());
       if (!tiny) { ImGui::SameLine(); ImGui::TextUnformatted(format_time(state.tick,state.tick_rate).c_str()); } }
@@ -235,6 +236,8 @@ DashboardFrame draw_dashboard(const simforge::viewer::ViewerController& v, Dashb
     const auto metrics = [&]
     {
         section("Operations");
+        if(state.capacity.loading_bays > visualization::max_visual_capacity || state.capacity.workers > visualization::max_visual_capacity || state.capacity.forklifts > visualization::max_visual_capacity)
+            ImGui::TextWrapped("Layout shows the first 256 capacity slots per resource. Metrics include all capacity: %u bays / %u workers / %u forklifts.",state.capacity.loading_bays,state.capacity.workers,state.capacity.forklifts);
         const bool two_columns = ImGui::GetContentRegionAvail().x/s >= 155;
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,{ImGui::GetStyle().ItemSpacing.x,2*s});
         if (ImGui::BeginTable("Operations",two_columns ? 2 : 1,ImGuiTableFlags_SizingStretchSame))
@@ -268,6 +271,20 @@ DashboardFrame draw_dashboard(const simforge::viewer::ViewerController& v, Dashb
     if (layout.metrics.size.x > 0 && !draft.panels.workspace)
     {
         ImGui::PushStyleColor(ImGuiCol_WindowBg,color(design::panel)); panel("Metrics",layout.metrics);
+        ImGui::SetNextItemWidth(-1);
+        const auto run_label=draft.active_run ? "Run #"+std::to_string(draft.active_run)+": "+v.name() : "Original Baseline: "+v.name();
+        const bool runs_open=ImGui::BeginCombo("##PlayableRuns",v.result_preview() ? "FINAL-STATE PREVIEW" : run_label.c_str());
+        result.run_selector=center();
+        if (runs_open)
+        {
+            for (const auto& [id,label] : draft.runs) {
+                if (ImGui::Selectable(label.c_str(),!v.result_preview() && id == draft.active_run)) draft.select_run=id;
+                result.run_choices.emplace_back(id,center());
+            }
+            ImGui::EndCombo();
+        }
+        if (v.result_preview() && ImGui::Button("Return to selected live run")) draft.return_live=true;
+        if (draft.active_run && !v.result_preview() && ImGui::Button("Remove current custom run")) draft.remove_run=draft.active_run;
         if (layout.shared_inspector && layout.metrics_visible && ImGui::BeginTabBar("Sidebar"))
         {
             if (ImGui::BeginTabItem("Operations")) { metrics(); ImGui::EndTabItem(); }
@@ -357,7 +374,7 @@ DashboardFrame draw_dashboard(const simforge::viewer::ViewerController& v, Dashb
     auto* draw = ImGui::GetForegroundDrawList(); const auto p = layout.viewport.origin, end = p+layout.viewport.size;
     draw->PushClipRect({p.x,p.y},{end.x,end.y});
     { Font font{design::label}; draw->AddText(ImGui::GetFont(),ImGui::GetFontSize(),{p.x+16*s,p.y+12*s},packed(design::secondary),
-        v.result_preview()?"FINAL RESULT / READ ONLY":draft.viewing_baseline?"BASELINE / LIVE SIMULATION":"DRAFT / INDEPENDENT RUN"); }
+        v.result_preview()?"FINAL RESULT / READ ONLY":draft.viewing_baseline?"BASELINE / LIVE SIMULATION":"CUSTOM / LIVE SIMULATION"); }
     const auto label_at=[&](glm::vec3 position,const std::string& caption)
     {
         auto point=v.orbit_camera().camera().view_projection()*glm::vec4{position,1};

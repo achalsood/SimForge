@@ -191,7 +191,7 @@ int run_graphics(std::optional<std::uint64_t> smoke_frames, const std::optional<
                             auto path=std::filesystem::u8path(scenario_input.data());
                             // Prepare CPU validation/layout before leaving the working demo.
                             auto definition=scenario::load_scenario(path);
-                            (void)visualization::build_warehouse_layout(definition);
+                            (void)viewer::ViewerController{definition};
                             loaded_workspace=std::move(definition);
                             open_workspace=std::move(path);
                         }

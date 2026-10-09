@@ -17,6 +17,12 @@ void apply_workspace(workspace::ScenarioWorkspace& w, const WorkspaceCommand& c)
     case WorkspaceAction::Open: w.open(std::filesystem::u8path(c.text),c.discard); break;
     case WorkspaceAction::Save: w.save_draft(std::filesystem::u8path(c.text)); break;
     case WorkspaceAction::Run: w.run_draft(); break;
+    case WorkspaceAction::SelectRun: w.select_run(c.id); break;
+    case WorkspaceAction::RemoveRun: w.remove_run(c.id); break;
+    case WorkspaceAction::Live: w.resume_live_view(); break;
+    case WorkspaceAction::SimulateCandidate: w.simulate_candidate(c.id); break;
+    case WorkspaceAction::SimulateResult: w.simulate_result(c.text); break;
+    case WorkspaceAction::LoadRun: (void)w.create_run(scenario::load_scenario(std::filesystem::u8path(c.text))); break;
     case WorkspaceAction::Add: w.add_candidate(c.notes); break;
     case WorkspaceAction::Edit: w.edit_candidate(c.id,c.discard); break;
     case WorkspaceAction::Update: w.update_candidate(c.id,c.notes); break;
@@ -112,8 +118,8 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
     if(ImGui::IsItemHovered()) ImGui::SetTooltip("%s",w.message().c_str());
     const auto queue=[&](WorkspaceCommand c)
     {
-        if((w.dirty() && (c.action==WorkspaceAction::Open || c.action==WorkspaceAction::Revert || c.action==WorkspaceAction::Edit)) ||
-            (c.action==WorkspaceAction::Open && !w.candidates().empty()))
+        if((w.dirty() && (c.action==WorkspaceAction::Revert || c.action==WorkspaceAction::Edit)) ||
+            c.action==WorkspaceAction::Open)
         { ui.confirmation=std::move(c); ImGui::OpenPopup("Discard edits?"); }
         else ui.pending.push_back(std::move(c));
     };
@@ -172,7 +178,7 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
     }
     if(ImGui::BeginPopupModal("Discard edits?",nullptr,ImGuiWindowFlags_AlwaysAutoResize))
     {
-        ImGui::TextWrapped("This action discards unsaved draft edits. Opening also clears workspace candidates and results.");
+        ImGui::TextWrapped("This action discards unsaved draft edits. Opening replaces the original baseline and removes retained runs, candidates and results. Load file as playable run preserves them.");
         if(ImGui::Button("Discard and continue") && ui.confirmation) { ui.confirmation->discard=true; ui.pending.push_back(*ui.confirmation); ui.confirmation.reset(); ImGui::CloseCurrentPopup(); }
         ImGui::SameLine(); if(ImGui::Button("Keep editing")) { ui.confirmation.reset(); ImGui::CloseCurrentPopup(); } ImGui::EndPopup();
     }
@@ -231,7 +237,11 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
                 if(ImGui::Button("Add as candidate",{-1,36*s})) queue({WorkspaceAction::Add,{},ui.notes}); ui.add=center();
                 scroll(10);
                 if(ui.editing && ImGui::Button("Update edited candidate",{-1,36*s})) queue({WorkspaceAction::Update,{},ui.notes,*ui.editing});
-                if(ImGui::Button("Run draft from start",{-1,36*s})) queue({WorkspaceAction::Run});
+                ImGui::BeginDisabled(w.runs().size() >= workspace::max_custom_runs);
+                if(ImGui::Button("Run Simulation",{-1,36*s})) queue({WorkspaceAction::Run}); ui.run_simulation=center();
+                scroll(17);
+                ImGui::EndDisabled();
+                ImGui::TextWrapped("Starts paused at tick zero. Press Play in Simulation. Up to 8 retained custom runs.");
                 ImGui::BeginDisabled(w.candidates().empty() || w.execution().progress().active());
                 if(ImGui::Button("Compare alternatives",{-1,36*s})) compare(); ui.editor_compare=center(); scroll(16); ImGui::EndDisabled();
                 ImGui::TextWrapped("Choose comparison mode and objective in Candidates. Inputs are exact integers; zero resources block service.");
@@ -251,6 +261,9 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
                 const auto& capacities=std::get<scenario::WarehouseConfig>(c.definition.domain);
                 ImGui::TextDisabled("%u bays / %u workers / %u forklifts   |   Validated",capacities.loading_bays,capacities.workers,capacities.forklifts);
                 ImGui::TextWrapped("%s",c.changed_inputs.c_str());
+                ImGui::BeginDisabled(w.runs().size() >= workspace::max_custom_runs);
+                if(ImGui::Button("Simulate initial configuration from start")) queue({WorkspaceAction::SimulateCandidate,{},{},c.id});
+                ImGui::EndDisabled();
                 if(expanded)
                 {
                     if(!c.notes.empty()) ImGui::TextWrapped("Notes: %s",c.notes.c_str());
@@ -363,8 +376,14 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
                 metrics(selected);
                 if(found!=report.candidates.end()) ImGui::TextWrapped("Changed inputs: %s",report.changed_inputs.at(static_cast<std::size_t>(found-report.candidates.begin())).c_str());
                 if(ImGui::Button("View this final result",{-1,36*s})) queue({WorkspaceAction::View,found==report.candidates.end()?"":ui.result_name}); ui.candidate_view=center();
-                if(ImGui::Button("Return to preserved baseline",{-1,36*s})) queue({WorkspaceAction::Baseline}); ui.baseline_view=center();
                 scroll(12);
+                ImGui::BeginDisabled(report.mode == workspace::ComparisonMode::Checkpoint || w.runs().size() >= workspace::max_custom_runs);
+                if(ImGui::Button("Simulate This Candidate",{-1,36*s})) queue({WorkspaceAction::SimulateResult,found==report.candidates.end()?"":ui.result_name}); ui.simulate_result=center();
+                scroll(18);
+                ImGui::EndDisabled();
+                if(report.mode == workspace::ComparisonMode::Checkpoint) ImGui::TextWrapped("Checkpoint branches are final previews only. To simulate initial configuration from start, use Candidates; that creates a separate timeline.");
+                if(ImGui::Button("Return to selected live run",{-1,36*s})) queue({WorkspaceAction::Live});
+                if(ImGui::Button("Return to preserved baseline",{-1,36*s})) queue({WorkspaceAction::Baseline}); ui.baseline_view=center();
                 const bool probes=ImGui::CollapsingHeader("Controlled resource probes"); ui.probe_toggle=center();
                 if(probes)
                 {
@@ -402,6 +421,7 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
         {
             ImGui::TextWrapped("Open a local warehouse JSON scenario. Paths are explicit; no new file-picker dependency is required.");
             text("Scenario path",ui.path); if(ImGui::Button("Open scenario",{-1,36*s})) queue({WorkspaceAction::Open,ui.path});
+            if(ImGui::Button("Load file as playable run",{-1,36*s})) queue({WorkspaceAction::LoadRun,ui.path});
             ImGui::Separator(); text("Save draft as new scenario",ui.save_path); if(ImGui::Button("Save as new scenario",{-1,36*s})) queue({WorkspaceAction::Save,ui.save_path});
             ImGui::TextWrapped("Opening a scenario clears workspace candidates/results. Unsaved draft changes require confirmation; failed file operations retain edits.");
             ImGui::TextWrapped("%s",w.message().c_str());

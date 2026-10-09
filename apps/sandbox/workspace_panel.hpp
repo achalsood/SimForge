@@ -1,7 +1,7 @@
 #pragma once
 #include "dashboard.hpp"
 #include <simforge/workspace/scenario_workspace.hpp>
-enum class WorkspaceAction { Validate, Revert, Open, Save, Run, Add, Edit, Update, Rename, Duplicate, Remove, Restore, Compare, Cancel, View, Baseline, Json, Csv };
+enum class WorkspaceAction { Validate, Revert, Open, Save, Run, Add, Edit, Update, Rename, Duplicate, Remove, Restore, Compare, Cancel, View, Baseline, Json, Csv, SelectRun, RemoveRun, Live, SimulateCandidate, SimulateResult, LoadRun };
 struct WorkspaceCommand
 {
     WorkspaceAction action;
@@ -26,6 +26,7 @@ struct WorkspaceUI
     glm::vec2 probe_toggle{};
     glm::vec2 cancel_experiment{};
     glm::vec2 editor_compare{};
+    glm::vec2 run_simulation{}, simulate_result{};
     glm::vec2 export_field{}, export_json{}, export_csv{};
     double results_ui_us{0}; std::uint64_t results_frames{0};
     bool analysis_page{false};
