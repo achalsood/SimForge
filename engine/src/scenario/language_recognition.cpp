@@ -1,69 +1,11 @@
-#include "language_internal.hpp"
+#include "language_phrases.hpp"
 #include <algorithm>
 
 namespace simforge::scenario::language
 {
 namespace
 {
-using detail::Quantity;
-bool is(std::span<const Token> t,std::size_t i,std::string_view word) {return i<t.size() && t[i].text==word;}
-std::size_t articles(std::span<const Token> t,std::size_t i)
-{while(is(t,i,"the")||is(t,i,"a")||is(t,i,"an")) ++i;return i;}
-struct Entity {Field field;std::size_t end;};
-std::optional<Entity> entity(std::span<const Token> t,std::size_t at)
-{
-    auto i=articles(t,at);
-    if(is(t,i,"number")&&is(t,i+1,"of")) i=articles(t,i+2);
-    if(i>=t.size()) return {};
-    const auto word=t[i].text; Field field;auto end=i+1;
-    if(word=="loading" && (is(t,end,"bay")||is(t,end,"bays"))) {field=Field::Bays;++end;}
-    else if(word=="dock"||word=="docks"||word=="bay"||word=="bays") field=Field::Bays;
-    else if(word=="worker"||word=="workers"||word=="staff") field=Field::Workers;
-    else if(word=="forklift"||word=="forklifts") field=Field::Forklifts;
-    else if(word=="lift"&&(is(t,end,"truck")||is(t,end,"trucks"))) {field=Field::Forklifts;++end;}
-    else if(word=="arrival"||word=="arrivals") {
-        if(is(t,end,"rate")||is(t,end,"frequency")) {field=Field::ArrivalRate;++end;}
-        else {field=Field::ArrivalInterval;if(is(t,end,"interval")) ++end;}
-    } else if(word=="interval"&&is(t,end,"between")&&is(t,end+1,"shipments")) {field=Field::ArrivalInterval;end+=2;}
-    else if(word=="processing") {field=Field::Processing;if(is(t,end,"time")||is(t,end,"duration")) ++end;}
-    else if(word=="simulation") {field=Field::Horizon;if(is(t,end,"time")||is(t,end,"duration")||is(t,end,"horizon")) ++end;}
-    else if(word=="duration"||word=="horizon"||word=="shift") field=Field::Horizon;
-    else if(word=="tick"&&is(t,end,"rate")) {field=Field::TickRate;++end;}
-    else if(word=="seed") field=Field::Seed;
-    else if(word=="random"&&is(t,end,"seed")) {field=Field::Seed;++end;}
-    else return {};
-    if(field<=Field::Forklifts && (is(t,end,"capacity")||is(t,end,"count"))) ++end;
-    return Entity{field,end};
-}
-struct Parsed {Operation operation;std::size_t end;};
-Span span(std::span<const Token> t,std::size_t first,std::size_t end)
-{return {t[first].source.begin,t[end-1].source.begin+t[end-1].source.size-t[first].source.begin};}
-Parsed operation(std::span<const Token> t,std::size_t start,std::size_t end,Field field,Action action,Rational n,Unit unit,Pattern pattern)
-{return {{field,action,n,unit,span(t,start,end),Origin::Rule,pattern},end};}
-bool resource(Field field) {return field==Field::Bays||field==Field::Workers||field==Field::Forklifts;}
-struct Amount {Rational number;Unit unit;std::size_t end;};
-std::optional<Amount> amount(std::span<const Token> t,std::size_t at,Field field,bool factor)
-{
-    const auto q=detail::quantity(t,at);if(!q) return {};
-    auto end=q->end;
-    if(is(t,end,"%")||is(t,end,"percent")||is(t,end,"percentage")) return Amount{q->number,Unit::Percent,end+1};
-    if(factor) return Amount{q->number,Unit::Factor,end};
-    if(field==Field::ArrivalRate) {
-        if(is(t,end,"shipment")||is(t,end,"shipments")) ++end;
-        if(is(t,end,"per")||is(t,end,"a")||is(t,end,"an")) {
-            ++end;
-            if(end<t.size()) if(const auto unit=detail::duration_unit(t[end].text)) {
-                const auto rate=*unit==Unit::Seconds?Unit::PerSecond:*unit==Unit::Minutes?Unit::PerMinute:Unit::PerHour;
-                return Amount{q->number,rate,end+1};
-            }
-        }
-        return Amount{q->number,Unit::Count,end};
-    }
-    if(is(t,end,"-") && end+1<t.size() && detail::duration_unit(t[end+1].text)) ++end;
-    if(end<t.size()) if(const auto unit=detail::duration_unit(t[end].text)) return Amount{q->number,*unit,end+1};
-    if(is(t,end,"hz")||is(t,end,"hertz")) return Amount{q->number,Unit::Hertz,end+1};
-    return Amount{q->number,field==Field::Seed?Unit::Integer:resource(field)?Unit::Count:Unit::Count,end};
-}
+using namespace detail::grammar;
 std::optional<Parsed> arrival(std::span<const Token> t,std::size_t start)
 {
     auto i=articles(t,start);
@@ -120,13 +62,6 @@ std::optional<Parsed> horizon(std::span<const Token> t,std::size_t start)
     if(is(t,end,"horizon")||is(t,end,"shift")) return operation(t,start,end+1,Field::Horizon,Action::Set,a->number,a->unit,Pattern::Horizon);
     return {};
 }
-Pattern pattern(Field f)
-{
-    if(resource(f)) return Pattern::Capacity;
-    switch(f) {case Field::ArrivalInterval:return Pattern::Interval;case Field::ArrivalRate:return Pattern::Rate;
-    case Field::Processing:return Pattern::Processing;case Field::Horizon:return Pattern::Horizon;case Field::TickRate:return Pattern::TickRate;
-    case Field::Seed:return Pattern::Seed;default:return Pattern::Structured;}
-}
 std::optional<Parsed> generic(std::span<const Token> t,std::size_t start)
 {
     if(start>=t.size()) return {};
@@ -175,8 +110,16 @@ std::optional<Parsed> generic(std::span<const Token> t,std::size_t start)
 }
 std::size_t prefix(std::span<const Token> t)
 {
-    std::size_t at=0;if(is(t,at,"please")) ++at;
-    if((is(t,at,"i")&&(is(t,at+1,"need")||is(t,at+1,"want")))||(is(t,at,"we")&&is(t,at+1,"need"))) at+=2;
+    std::size_t at=0;
+    if(is(t,at,"please")) ++at;
+    if((is(t,at,"could")||is(t,at,"can")) && (is(t,at+1,"you")||is(t,at+1,"we"))) at+=2;
+    if(is(t,at,"i'd")&&is(t,at+1,"like")&&is(t,at+2,"to")) at+=3;
+    if(is(t,at,"let's")) ++at;
+    if(is(t,at,"we")&&is(t,at+1,"could")&&is(t,at+2,"use")) at+=3;
+    if((is(t,at,"i")&&(is(t,at+1,"need")||is(t,at+1,"want")))||(is(t,at,"we")&&is(t,at+1,"need"))) {
+        at+=2;if(is(t,at,"to")) ++at;
+    }
+    if(is(t,at,"please")) ++at;
     if(is(t,at,"create")||is(t,at,"build")) {
         const auto next=articles(t,at+1);
         if(is(t,next,"warehouse")&&is(t,next+1,"with")) at=next+2;
@@ -189,25 +132,49 @@ bool unchanged(std::span<const Token> t)
 }
 bool uncertain(std::span<const Token> t)
 {
-    constexpr std::array words{"not","no","never","without","except","if","unless","or","maybe","approximately","about","roughly","optimal","faster","more","less","pm","am"};
-    for(const auto& token:t) for(const auto* word:words) if(token.text==word) return true;
+    constexpr std::array words{"not","no","never","without","except","if","unless","or","maybe","approximately","about","roughly","optimal","faster","less","pm","am","considered","discussed","decided","against","would","might"};
+    for(const auto& token:t) {
+        if(token.text.ends_with("n't")) return true;
+        for(const auto* word:words) if(token.text==word) return true;
+    }
+    for(std::size_t i=0;i<t.size();++i) if(is(t,i,"more")) {
+        bool quantified=false;
+        try {
+            for(std::size_t n=i>5?i-5:0;n<i;++n) if(const auto q=detail::quantity(t,n);q&&q->end==i) {
+                const auto f=entity(t,i+1);quantified=f&&resource(f->field);break;
+            }
+        } catch(const detail::Failure&) {return true;}
+        if(!quantified) return true;
+    }
     for(std::size_t i=0;i<t.size();++i) if(is(t,i,"at")&&(is(t,i+1,"least")||is(t,i+1,"most"))) return true;
     for(std::size_t i=0;i<t.size();++i) if(is(t,i,"between") && !(i && is(t,i-1,"interval") && is(t,i+1,"shipments"))) return true;
     return false;
 }
 void clause(std::string_view text,std::span<const Token> t,Recognition& result)
 {
-    if(t.empty()||unchanged(t)) return;
+    if(t.empty()||unchanged(t)||(t.size()==1&&is(t,0,"please"))) return;
+    if(is(t,t.size()-1,"please")) t=t.first(t.size()-1);
+    if(t.empty()) return;
     const auto whole=span(t,0,t.size());
     if(uncertain(t)) {
+        std::string message="Specify one unconditional numeric change to a supported parameter; negation, goals, alternatives, estimates and clock times are not constraints";
+        if(std::any_of(t.begin(),t.end(),[](const auto& token){return token.text=="more";})) {
+            bool numeric=false;std::optional<Field> field;
+            for(std::size_t i=0;i<t.size();++i) {
+                if(const auto f=entity(t,i)) field=f->field;
+                try {if(detail::quantity(t,i)) numeric=true;} catch(const detail::Failure&) {numeric=true;}
+            }
+            if(field&&!numeric) message=std::string{"I found a request to change "}+entity_name(*field)+", but no quantity was specified. State an exact count or factor";
+        }
         detail::diagnose(result.diagnostics,Code::AmbiguousInstruction,Stage::Recognition,whole,
-            "Specify one unconditional numeric change to a supported parameter; goals, alternatives, estimates and clock times are not constraints");return;
+            std::move(message));return;
     }
     const auto start=prefix(t);
     try {
         std::optional<Parsed> parsed=arrival(t,start);
         if(!parsed) parsed=processing(t,start);
         if(!parsed) parsed=horizon(t,start);
+        if(!parsed) parsed=conversational(t,start);
         if(!parsed) parsed=generic(t,start);
         if(parsed) {
             if(result.operations.size()==max_operations) {detail::diagnose(result.diagnostics,Code::InputLimit,Stage::Recognition,whole,"At most 64 operations are supported");return;}
@@ -217,9 +184,14 @@ void clause(std::string_view text,std::span<const Token> t,Recognition& result)
             return;
         }
     } catch(const detail::Failure& e) {detail::diagnose(result.diagnostics,e.code,Stage::Recognition,whole,e.what());return;}
-    bool known=false;
-    for(std::size_t i=0;i<t.size();++i) if(entity(t,i)||is(t,i,"process")||is(t,i,"waiting")||is(t,i,"throughput")||is(t,i,"capacity")) known=true;
+    bool known=false;std::optional<Field> known_field;
+
+    for(std::size_t i=0;i<t.size();++i) {
+        if(const auto f=entity(t,i)) {known=true;known_field=f->field;}
+        if(is(t,i,"process")||is(t,i,"waiting")||is(t,i,"throughput")||is(t,i,"capacity")) known=true;
+    }
     detail::diagnose(result.diagnostics,known?Code::AmbiguousInstruction:Code::UnsupportedInstruction,Stage::Recognition,whole,
+        known_field?std::string{"I found a request involving "}+entity_name(*known_field)+", but could not associate an exact quantity and operation. Specify the count, factor, percentage or time units":
         known?"Specify a supported field, an exact quantity and appropriate units; no numeric change can be inferred from this request":
             "This instruction cannot be represented by aggregate bays, workers, forklifts, arrival interval, processing time or simulation duration");
     (void)text;
@@ -232,14 +204,32 @@ Recognition recognize(std::string_view text,std::span<const Token> tokens)
     for(const auto& token:tokens) if(token.source.begin>text.size()||token.source.size>text.size()-token.source.begin) {
         detail::diagnose(result.diagnostics,Code::UnsupportedCharacter,Stage::Recognition,{},"Token source span is invalid");return result;
     }
-    std::size_t begin=0,clauses=0;
+    std::size_t begin=0,clauses=0;bool alternative=false;
     for(std::size_t i=0;i<=tokens.size();++i) {
         if(i==tokens.size()||tokens[i].kind==TokenKind::Boundary||tokens[i].text=="and"||tokens[i].text=="then"||tokens[i].text=="but") {
             if(i>begin) {
+                if(i<tokens.size() && tokens[i].text=="," && topic(tokens.subspan(begin,i-begin))) continue;
                 if(++clauses>128) {detail::diagnose(result.diagnostics,Code::InputLimit,Stage::Recognition,{},"At most 128 clauses are supported");break;}
-                clause(text,tokens.subspan(begin,i-begin),result);
+                const auto local=tokens.subspan(begin,i-begin);
+                // A bare numeric alternative after "and" inherits only the explicit
+                // preceding absolute capacity field; it is always a conflict.
+                bool numeric_alternative=false;
+                if(alternative && !result.operations.empty()) {
+                    try {
+                        if(const auto q=detail::quantity(local,0);q&&q->end==local.size()) {
+                            const auto& previous=result.operations.back();
+                            if(previous.action==Action::Set&&resource(previous.field)) {
+                                if(result.operations.size()==max_operations) detail::diagnose(result.diagnostics,Code::InputLimit,Stage::Recognition,span(local,0,local.size()),"At most 64 operations are supported");
+                                else result.operations.push_back(operation(local,0,local.size(),previous.field,Action::Set,q->number,Unit::Count,Pattern::Capacity).operation);
+                                detail::diagnose(result.diagnostics,Code::Conflict,Stage::Recognition,span(local,0,local.size()),"Conflicting resource counts. Choose one absolute count");
+                                numeric_alternative=true;
+                            }
+                        }
+                    } catch(const detail::Failure&) {} // Ordinary clause path reports malformed numbers.
+                }
+                if(!numeric_alternative) clause(text,local,result);
             }
-            begin=i+1;
+            alternative=i<tokens.size()&&tokens[i].text=="and";begin=i+1;
         }
     }
     return result;

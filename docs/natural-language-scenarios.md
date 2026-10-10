@@ -4,6 +4,106 @@ SimForge interprets a bounded English grammar on the CPU. It produces a reviewab
 configuration; simulation results come from the existing warehouse engine. There
 is no model, hosted inference, network request, Python runtime, or new dependency.
 
+## Commit 23: conversational interpretation
+
+All six user-reported failures were reproduced through the real interpreter API
+before changing recognition. The six new regression tests failed; tokenization
+succeeded in every case. The UI uses that same API directly.
+
+| Reported phrase | Original recognition defect |
+| --- | --- |
+| `Put in 3 more bays` | Global uncertainty check rejected `more`; `put in` was absent from actions |
+| `Get 3 more bays` | Global `more` rejection and missing `get` action |
+| `We need 3 additional loading bays` | Prefix existed, but quantity parsing expected the entity immediately after `3` |
+| `Get twice as many workers` | Missing conversational verb and multiplier relation |
+| `We need twice as many workers` | Prefix existed; `twice as many` was not a supported factor expression |
+| `Use 3 times as many forklifts` | Numeric recognition found `3`, but the entity matcher expected a resource immediately afterward |
+
+The arithmetic layer already supported multiplication correctly. The defect was
+the mapping from everyday phrases to that typed operation, rather than numeric
+conversion, simulation, or approval. Regression assertions were retained intact.
+
+From the baseline, **Modify** `Get 3 more bays and twice as many workers` proposes
+six bays and twenty workers. Review and explicitly approve before Apply. You can
+then launch a custom run or add a candidate through the existing workflows.
+
+| Expression | Operation |
+| --- | --- |
+| `Get 3 workers`, `We need 12 workers`, `Install 4 docks` | Set absolute capacity |
+| `Put in 3 more bays`, `Hire 3 additional workers`, `Give us 2 extra docks` | Add the explicit quantity |
+| `Get another two forklifts`, `Bring in 3 staff on top of the existing number` | Add the explicit quantity |
+| `Use 3 fewer workers`, `Get rid of 2 forklifts`, `Take away one bay`, `Drop worker capacity by five` | Subtract |
+| `Get twice as many workers`, `Use 3 times as many forklifts`, `Use 2x workers`, `Workers should be doubled` | Multiply by a factor |
+| `Triple the loading bays`, `Make worker capacity four times its current value` | Multiply |
+| `Use half as many forklifts`, `Cut processing time in half` | Multiply by 1/2 |
+| `Halve processing time` | Existing divide-by-two operation |
+| `Make processing twice as fast` | Divide processing duration by two |
+| `Processing should take twice as long` | Multiply processing duration by two |
+| `Shave five minutes off processing`, `Add ten minutes to processing time` | Subtract/add a duration |
+| `Receive shipments twice as often`, `Have shipments arrive half as often` | Multiply arrival frequency; invert back to interval |
+| `For forklifts, add 3` | Explicit topic binds that one command to forklifts |
+
+Conversational verbs do not imply addition on their own: `Get 3 workers` sets
+three, whereas `Get 3 more workers` adds three. Supported relative markers are
+`more`, `additional`, `extra`, `another`, and `on top of the existing number`.
+Staffing is also an alias for worker capacity. Singular/plural resource names and
+existing aliases remain supported. Polite wrappers include Please, Could you,
+Could we, Can we, I'd like to, We need to, We could use, and Let's. ASCII apostrophes
+in contractions preserve their original byte spans; negation is never stripped.
+`A couple of`, `several`, `some`, and `a bunch` are conservatively rejected.
+
+These distinctions are covered by typed-operation and complete-state tests:
+
+* `Increase workers by 2` adds two; `Increase workers to 2` sets two.
+* `Increase workers by a factor of 2` multiplies by two.
+* `Increase workers by 200%` increases ten workers to thirty; `Increase workers
+  to 200% of the current count` makes twenty.
+* Doubling frequency halves the stored interval; doubling the interval halves
+  frequency. Total shipment counts and burst arrivals are not frequencies.
+* Speed and duration use inverse factors for this fixed-work processing model.
+  `Make processing faster` remains incomplete. Fractional final resources or
+  seconds still require explicit correction; no rounding was added.
+
+Negation (`don't`, `not`, `never`, and other `n't` contractions), conditions,
+estimates, alternatives, retrospective decisions, and hypothetical requests block
+approval. There is no exploratory hypothetical mode. `Set forklifts to 3 and 5`
+now surfaces a conflict between explicit numeric alternatives. Multiple commands
+for one physical field remain conflicts; `then` does not authorize sequencing.
+Meaningful unmatched suffixes and unsupported clauses remain visible and blocking.
+
+### Recognition architecture and clause ownership
+
+`language_phrases.hpp/.cpp` owns shared entity/quantity types and focused rules for
+request verbs, quantity modifiers, factors, current-value references, predicates,
+arrival frequency, and processing duration. `language_recognition.cpp` owns
+wrappers, clause boundaries, uncertainty protection, and one-operation emission.
+The exact arithmetic/application library, public IR, simulation rules, renderer,
+and project schema were not changed.
+
+Each clause tries existing arrival, processing, and horizon patterns, then the
+conversational rules, then existing generic commands. Factor relations and explicit
+`to` targets are recognized before count requests. Each successful recognizer
+returns one operation plus the consumed token endpoint. Unconsumed meaningful text
+invalidates the proposal. Explicit topic clauses consume only their adjacent comma
+and command; numeric alternatives inherit a resource field solely to report a
+conflict. There is no nearest-number/entity heuristic or cross-clause pronoun guess.
+Source spans are nonoverlapping original byte ranges. Existing v1 corpus spans and
+recognition patterns remain exact matches.
+
+The UI example now uses conversational addition/multiplication. Review shows the
+operation type in both compact and table layouts. Missing-quantity diagnostics name
+the supported field and request an exact count/factor. Interpretation still runs
+only on explicit request; approval, correction validation, stale-source checks,
+and unchanged active runs remain protected.
+
+Native screenshot inspection caught an existing dialog-position issue when an
+open review was resized from 1600x900 to 640x480 at 200% scale: the old modal
+position left part of it outside the viewport. The dialog now recenters on resize
+and reserves footer space using actual frame heights. Compact mode uses a single
+toolbar row, smaller padding, and concise scrolling value/phrase rows. Native
+assertions check the complete modal rectangle, approval-button bounds, and minimum
+readable review height. Approval controls stay visible while the review scrolls.
+
 ## Tutorial
 
 Open the warehouse workspace, select **Edit**, then **Describe Your Warehouse**.
@@ -67,7 +167,7 @@ shows the editor that Apply would replace.
 
 Set/use/have/allocate express assignments. Add/increase/raise and
 remove/subtract/decrease/reduce/lower/cut express relative changes. Entity-first
-relative changes require `by`. Multiply/divide require a factor; double/halve
+addition/subtraction requires `by`; `to` specifies an absolute target. Multiply/divide require a factor; double/halve
 use two. Percentages accept `%`, `percent`, or `percentage`. These are focused
 phrase patterns, not arbitrary interchangeable English words. Separate clauses
 with commas, periods, semicolons, newlines, or `and`.
@@ -143,7 +243,7 @@ diagnostics. Saturated diagnostic lists retain blocking errors. Interpretation
 runs on an explicit button action, never every frame.
 
 Recognition first rejects uncertainty within each clause, then tries arrival,
-processing, horizon, and generic entity/action patterns in that order. Explicit
+processing, horizon, conversational, and generic entity/action patterns in that order. Explicit
 shipments-per-time rates precede one-shipment/every interval patterns. The exact
 `take ... to process` continuation handles the shared shipment subject in the
 tutorial. Generic parsing identifies the action before its quantity: `by 20%`
@@ -157,78 +257,181 @@ Proposals, diagnostics, and approval are transient and cleared on restoration.
 A genuine pre-language Commit #21 fixture verifies loading three runs, one
 candidate, a report, and a paused active run at tick 36000/speed 2 without migration.
 
-## Evaluation, tests, and performance
+## Evaluation and regression gates
 
-The authored corpus contains **134 cases: 74 supported and 60 rejected**, covering
-compound descriptions, aliases, word numbers, decimals, units/rates, relative
-changes, inheritance, conflicts, ambiguity, unsupported requests, precision,
-overflow, and limits. Each case checks ordered typed operations including source
-text/pattern, every final field, exact error codes, and acceptance. This measures
-documented grammar regression coverage, not general-English accuracy.
+The original **134-case corpus (74 supported, 60 rejected)** is unchanged. It
+checks exact ordered operations, recognition patterns, matched source text, all
+final fields, error-code sets, and acceptance. All 134 cases still match.
 
-Release evaluation achieved **134/134 exact operation matches**, **134/134 exact
-full value matches**, **zero unsafe false acceptances**, and zero failures.
-Unsupported-code detections: 13; ambiguity-code detections: 15. Other rejections
-exercise conflict, numeric, source, and limit checks. Corpus mean/worst timing was
-7.279/38.6 microseconds on this development machine.
+The development corpus adds **174 cases: 119 positive descriptions and 55 rejected
+inputs**, including the reported failures, required conversational examples,
+individually authored compound requests, word-order changes, mathematical
+contrasts, negation, mixed unsupported material, and numeric/range failures.
+Expected semantics were authored rather than captured from parser output. Exact
+normalized-text overlap with the holdout was removed without changing the holdout.
+
+The **48-case holdout (28 positive, 20 rejected)** was separately authored and
+SHA-256 frozen before implementation. It was not evaluated during grammar tuning.
+This is a disjoint evaluation set, not an independent human-author study. Its
+first results and recognition-file hashes are retained in
+[FREEZE.md](../tests/fixtures/scenario-language/holdout/FREEZE.md) and
+[INITIAL-RESULTS.md](../tests/fixtures/scenario-language/holdout/INITIAL-RESULTS.md).
+No grammar changes were made from holdout results. Before evaluation, its gate
+was declared as at least 50% exact positive matches, all rejected cases rejected,
+and zero unsafe acceptances or accepted omissions. Development requires 100%.
+
+| Dataset | Exact supported operations | Exact final scenarios | Correct rejections | Unsafe acceptances | Accepted silent omissions |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Original | 74/74; all 134 operation sequences exact | 74/74; all 134 computed outputs exact | 60/60 | 0 | 0 |
+| Development | 119/119 | 119/119 | 55/55 | 0 | 0 |
+| Frozen holdout | 24/28 (85.7%) | 24/28 (85.7%) | 20/20 | 0 | 0 |
+
+The four holdout positive misses were safely rejected: `arrange a total of six docks`, `staff complement should become fifteen`, `scale the lift truck pool`,
+and `shorten the service time`. They remain measured misses. They were not
+relabeled as rejection examples or used to add new rules.
+
+Version-2 development/holdout fixtures compare ordered field/action/rational/unit
+semantics and the complete final scenario, including inherited fields. Rule
+provenance, nonempty bounded spans, source order, and nonoverlap are checked;
+focused association tests additionally check exact matched phrases. A supported
+case accepted with wrong semantics is counted as unsafe, as is acceptance of a
+rejection case. An accepted positive with fewer required operations, or acceptance
+of a rejection tagged for unmatched material, counts as a silent omission. Safe
+coverage misses lower holdout accuracy. Timing is separate from correctness.
+Corpus versions describe evaluation files only; project schema remains version 1.
 
 ```powershell
 build/windows-release/tests/simforge_scenario_language_eval.exe
+build/windows-release/tests/simforge_scenario_language_eval.exe tests/fixtures/scenario-language/development/corpus.json
+build/windows-release/tests/simforge_scenario_language_eval.exe tests/fixtures/scenario-language/holdout/corpus.json --holdout
 build/windows-release/benchmarks/simforge_scenario_language_benchmark.exe
 ctest --preset windows-debug --output-on-failure
 ctest --test-dir build/windows-release --output-on-failure
 ctest --preset windows-headless --output-on-failure
 ```
 
-Release benchmark, 1000 iterations per case, microseconds:
+The six initially failing regression tests exercise the real interpreter and
+workspace approval/application path. Equivalence groups compare actual typed
+operations and complete scenario state. Contrast pairs distinguish set/add,
+by/to, percentage/factor, interval/frequency, and duration/speed. Dedicated tests
+check clause span ownership, negation with no operations, conflicts, missing
+quantities, fractional output rejection, dirty state, stale proposals, and real
+custom-run capacity. Existing execution, persistence, replay, recovery, and async
+comparison tests remain in the full matrix.
 
-| Case | Tokenize | Recognize | Apply | Validate | Total mean | Total worst |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Create, 164 bytes | 1.159 | 2.401 | 0.464 | 0.221 | 8.183 | 43.500 |
-| Modify, 56 bytes | 0.460 | 0.958 | 0.407 | 0.193 | 5.673 | 29.700 |
-| Unsupported, 55 bytes | 0.303 | 0.917 | 0.234 | 0.189 | 5.195 | 55.300 |
-| Maximum input, 8192 bytes | 41.542 | 46.088 | 4.212 | 0.223 | 107.204 | 321.000 |
+## Performance and native validation
 
-Total includes source validation/serialization, proposal construction, and timing
-overhead beyond listed stages. Maximum input exercises bounded rejection. A
-native Debug Interpret action measured 205.4 microseconds. These results support
-synchronous interpretation on demand.
+Release measurements use 1000 iterations per case and report median/worst total
+interpretation plus tokenize, recognize, apply, validate, and mean total time.
+The total includes source validation/serialization and proposal construction.
+Allocation instrumentation is confined to the benchmark. Requested bytes measure
+cumulative allocation traffic, not live memory. Process peak working set includes
+the executable, CRT, allocator caching, and cumulative high-water memory.
+The maximum-input case is exactly 8192 bytes and exercises bounded rejection.
 
-The final Release native review measured 25.5 microseconds for its Interpret action.
+Current raw measurements are in
+[scenario-language-conversation-benchmarks.csv](scenario-language-conversation-benchmarks.csv).
+The earlier [Commit 22 measurements](scenario-language-benchmarks.csv) are retained
+for comparison. Interpretation remains synchronous and runs only on request.
 
-Benchmark-only allocation instrumentation measured mean allocation count/requested
-bytes: Create 122/16,046; Modify 114/9,806; unsupported 118/9,534; maximum input
-501/313,399. Requested bytes represent cumulative allocation traffic per parse,
-not live memory. Peak process working set ranged from 4,882,432 to 5,505,024 bytes
-(about 5.25 MiB maximum), including CRT/process/allocator caching. It is a cumulative
-process high-water measurement, not parser-exclusive memory. See the
-[raw benchmark CSV](scenario-language-benchmarks.csv).
+Final Release measurements on this development machine (microseconds):
 
-CPU tests cover parser stages, malformed typed inputs, approval/isolation, dirty
-state, stale sources, determinism, actual execution/comparison, project round trips,
-and legacy compatibility. The native walkthrough enters text and clicks controls,
-checks approval/corrections/staleness, launches 3D playback, compares exact state
-and measured results with headless execution, saves, and reopens in a second
-process. It exercises 640x480 at 200% UI scale and checks Vulkan validation.
+| Case | Median total | Worst total | Mean total |
+| --- | ---: | ---: | ---: |
+| Simple assignment | 4.800 | 58.800 | 4.857 |
+| Conversational addition | 5.400 | 77.900 | 5.705 |
+| Conversational multiplication | 5.000 | 9.900 | 5.049 |
+| Multi-clause request | 8.400 | 20.000 | 8.494 |
+| Unsupported input | 5.800 | 8.400 | 5.889 |
+| Maximum input | 146.900 | 316.500 | 145.038 |
+| Original Create request | 9.300 | 54.100 | 9.449 |
+| Original Modify request | 6.200 | 9.800 | 6.202 |
 
-All configurations built without compiler warnings. Full results: **Debug
-352/352**, **Release 352/352**, and **renderer-disabled 323/323** tests passed.
-Both graphical suites include nine graphics tests. The final native review and
-fresh-process reopen each reported **zero Vulkan validation errors and warnings**,
+Maximum-input stage means were 44.214 tokenize, 81.855 recognize, 4.363 apply, and
+0.245 validate microseconds. Mean requested allocation count/bytes were assignment
+110/8,038, addition 112/8,878, multiplication 111/8,374, compound 119/13,398,
+unsupported 118/9,534, and maximum input 501/313,399. Maximum process peak working
+set was **4,902,912 bytes (4.68 MiB)**. Compared with Commit 22, original Create and
+Modify means increased from 8.18/5.67 to 9.45/6.20 microseconds; maximum-input mean
+increased from 107.20 to 145.04. These observed timings include scheduling and
+measurement overhead and do not promise a hard upper bound.
+
+All three configurations built without compiler warnings. Full test results:
+**Windows Debug 365/365**, **Windows Release 365/365**, **renderer-disabled 336/336**.
+One existing constrained-warehouse graphics test timed out in the initial Release
+run at its unchanged 40-second limit. It passed unchanged in isolation (4.18 seconds)
+and the complete Release rerun (4.20 seconds). Interrupted diagnostic artifacts
+were preserved; no timeout or assertion was relaxed.
+
+The native test enters `Get 3 more bays`, reviews ADD and six bays, approves, then
+enters `Get twice as many workers`, reviews MULTIPLY and twenty workers, and
+approves. A compound request adds one forklift and halves processing without
+cross-field association. Vague and negated requests disable approval and Apply.
+A conversational Create proposal launches real **6 bays / 20 workers / 3 forklifts**
+with 300-second arrivals and 900-second processing. Playback snapshots and
+comparison metrics match authoritative headless execution. A second process
+reopens the approved draft, retained runs, report, camera, and clock. The compact
+640x480 review at 200% scale is captured for visual inspection. Existing bounded
+PNG retention and native shutdown checks remain active.
+
+After the screenshot-driven layout correction, the Debug native language test
+passed again (29.16 seconds), and the Release review plus fresh-process reopen
+passed. Both Release processes reported **zero Vulkan validation errors/warnings**
 with synchronization validation enabled and clean shutdown/reinitialization.
+The final native Interpret action measured **31.8 microseconds**. Inspection
+confirmed readable before/proposed values and matched phrases at 640x480/200%,
+visible approval controls, and actual six-bay/twenty-worker/three-forklift playback.
 
-## Real application captures
+## Native captures
 
-* [Description input](artifacts/scenario-language-input.png)
-* [Proposal review](artifacts/scenario-language-review.png)
-* [Unsupported request](artifacts/scenario-language-error.png)
-* [Approved editor](artifacts/scenario-language-applied.png)
-* [Measured 3D playback](artifacts/scenario-language-playback.png)
+These are real application captures, not generated mockups:
 
-## Recommended next milestone
+* [Conversational addition](artifacts/scenario-language-conversation-addition.png)
+* [Conversational multiplication](artifacts/scenario-language-conversation-multiplication.png)
+* [Compound association](artifacts/scenario-language-conversation-compound.png)
+* [Missing-quantity diagnostic](artifacts/scenario-language-conversation-ambiguous.png)
+* [Negated request](artifacts/scenario-language-conversation-negated.png)
+* [Approved custom playback](artifacts/scenario-language-conversation-playback.png)
+* [Compact high-DPI review](artifacts/scenario-language-conversation-compact.png)
 
-Expand the independently authored corpus and refine the documented grammar from
-observed warehouse descriptions before evaluating a specialized local recognizer.
-Retain typed operations, authoritative validation, explicit review, and actual
-simulation execution. New resource types, schedules, stochastic arrivals, and
-optimization objectives need deliberate simulation/schema changes first.
+Earlier Commit 22 captures remain available: [input](artifacts/scenario-language-input.png),
+[review](artifacts/scenario-language-review.png), [error](artifacts/scenario-language-error.png),
+[approved editor](artifacts/scenario-language-applied.png), and
+[playback](artifacts/scenario-language-playback.png).
+
+## Known limitations and next milestone
+
+This remains bounded deterministic English recognition, not general language
+understanding. Unfamiliar synonyms, general pronouns, hypothetical exploration,
+clock schedules, estimates, unquantified goals, and colloquial vague counts are
+rejected. Only ASCII contractions are supported; smart apostrophes remain
+unsupported characters. Final capacities and seconds must be integers. Existing
+3D resource limits and comparison compatibility rules apply. Project proposals
+remain transient; there is no new inference dependency or project migration.
+
+Recommended next milestone: collect descriptions from independent human authors,
+freeze a new untouched holdout, and evaluate coverage before making further grammar
+changes or assessing whether a small local recognizer adds value. Preserve these
+first holdout results. New simulation resource types, schedules, stochastic arrivals,
+and optimization objectives require deliberate model/schema work first.
+
+## Developer extension guide
+
+1. Author a failing input with explicit intended field/action/value/unit and
+   resulting state. Add an adversarial or one-word contrast, not only synonyms.
+2. Put entity aliases, count modifiers, factor relations, or focused phrase rules
+   in `engine/src/scenario/language_phrases.*`. Keep clause/wrapper/uncertainty
+   handling in `language_recognition.cpp`. Do not change arithmetic for wording.
+3. Return one `Parsed` operation with its consumed endpoint and original byte
+   span. Keep semantic words (`by`, `to`, `more`, `per`, `times`, `every`) intact.
+   Unmatched material must remain diagnostic. Do not guess nearest entities.
+4. Keep legacy v1 fixture expectations intact. Add version-2 development cases
+   with a complete validated source, mode, expected semantic operations, expected
+   field overrides, and acceptance classification. Expected values must be authored
+   independently of observed parser output.
+5. Test typed operations, the complete scenario, rejection/approval, and source
+   ownership. Run original/development corpora and renderer-disabled tests.
+6. Freeze a new disjoint holdout and its gates before evaluation. Do not tune
+   against this milestone's holdout or rewrite missed positives as rejections.
+7. For UI changes, run the native language graphics test, inspect actual PNGs,
+   and verify real playback/comparison, Save/Open, and Vulkan validation.

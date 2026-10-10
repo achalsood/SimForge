@@ -34,7 +34,7 @@ target_include_directories(simforge_engine
         ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-add_library(simforge_scenario_language STATIC src/scenario/language_numeric.cpp src/scenario/language_recognition.cpp src/scenario/language_application.cpp)
+add_library(simforge_scenario_language STATIC src/scenario/language_numeric.cpp src/scenario/language_recognition.cpp src/scenario/language_phrases.cpp src/scenario/language_application.cpp)
 target_link_libraries(simforge_scenario_language PUBLIC simforge_engine)
 target_compile_features(simforge_scenario_language PUBLIC cxx_std_23)
 if(MSVC)

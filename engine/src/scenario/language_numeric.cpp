@@ -115,7 +115,11 @@ Tokenization tokenize(std::string_view text)
     while(at<text.size()) {
         const auto start=at;const auto c=static_cast<unsigned char>(text[at]);TokenKind kind;
         if(c==' '||c=='\t'||c=='\r') {++at;continue;}
-        if(letter(c)) {kind=TokenKind::Word;while(at<text.size()&&letter(static_cast<unsigned char>(text[at]))) ++at;}
+        if(letter(c)) {kind=TokenKind::Word;while(at<text.size()) {
+                if(letter(static_cast<unsigned char>(text[at]))) {++at;continue;}
+                if(text[at]=='\'' && at+1<text.size() && letter(static_cast<unsigned char>(text[at+1]))) {++at;continue;}
+                break;
+            }}
         else if(digit(c)) {
             kind=TokenKind::Number;while(at<text.size()&&digit(static_cast<unsigned char>(text[at]))) ++at;
             if(at+1<text.size()&&text[at]=='.'&&digit(static_cast<unsigned char>(text[at+1]))) {++at;while(at<text.size()&&digit(static_cast<unsigned char>(text[at]))) ++at;}

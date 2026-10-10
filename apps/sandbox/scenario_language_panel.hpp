@@ -15,5 +15,8 @@ struct LanguageUI
     int scroll_action{-1}; // Opt-in native walkthrough navigation.
     glm::vec2 description_input{}, interpret{}, create{}, modify{}, approve{}, apply{}, discard{}, edit{}, validate_edits{}, name_input{};
     std::array<glm::vec2,8> edit_inputs{};
+    glm::vec2 modal_min{},modal_max{};
+    float footer_bottom{0}; // Native layout verification uses actual rendered bounds.
+    float review_height{0};
 };
 void draw_language(simforge::workspace::ScenarioWorkspace& workspace,LanguageUI& ui);

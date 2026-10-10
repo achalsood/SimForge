@@ -46,6 +46,14 @@ void corrections(LanguageUI& u)
     } catch(const std::exception& e) {u.error=e.what();}
 }
 const char* row_label(std::size_t index) {return workspace::field_names[index+1];}
+const char* action_title(nl::Action action)
+{
+    switch(action) {
+    case nl::Action::Set:return "Set";case nl::Action::Add:return "Add";case nl::Action::Subtract:return "Subtract";
+    case nl::Action::Multiply:return "Multiply";case nl::Action::Divide:return "Divide";
+    case nl::Action::IncreasePercent:return "Increase by percent";case nl::Action::DecreasePercent:return "Decrease by percent";
+    }return "Review operation";
+}
 const char* diagnostic_title(nl::Code code)
 {
     switch(code) {
@@ -63,27 +71,40 @@ void draw_language(workspace::ScenarioWorkspace& w,LanguageUI& u)
 {
     if(u.open_requested) {u.visible=true;u.open_requested=false;u.input_open=true;u.approved=false;ImGui::OpenPopup("Describe Your Warehouse");}
     const auto display=ImGui::GetIO().DisplaySize;const auto s=ImGui::GetStyle().FontScaleDpi;
-    ImGui::SetNextWindowPos({display.x/2,display.y/2},ImGuiCond_Appearing,{0.5f,0.5f});
+    const bool compact_window=display.x/s<680;
+    if(compact_window) ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,{8*s,6*s});
+    ImGui::SetNextWindowPos({display.x/2,display.y/2},ImGuiCond_Always,{0.5f,0.5f});
     ImGui::SetNextWindowSize({std::min(920*s,display.x-30),std::min(680*s,display.y-30)},ImGuiCond_Always);
-    if(!ImGui::BeginPopupModal("Describe Your Warehouse",&u.visible,ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoResize)) return;
+    if(!ImGui::BeginPopupModal("Describe Your Warehouse",&u.visible,ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoResize)) {
+        if(compact_window) ImGui::PopStyleVar();return;
+    }
+    const auto position=ImGui::GetWindowPos(),size=ImGui::GetWindowSize();
+    u.modal_min={position.x,position.y};u.modal_max={position.x+size.x,position.y+size.y};
     const bool compact=ImGui::GetContentRegionAvail().x/s<600;
+    const auto* interpret_label=u.proposal?"Interpret Again":"Interpret";
     if(compact) {
-        ImGui::SetNextItemWidth(-1);
-        if(ImGui::BeginCombo("##DescriptionMode",u.mode==0?"Create New":"Modify Current Scenario")) {
+        const auto buttons=ImGui::CalcTextSize(interpret_label).x+ImGui::CalcTextSize("Clear").x+ImGui::GetStyle().FramePadding.x*4+ImGui::GetStyle().ItemSpacing.x*2;
+        ImGui::SetNextItemWidth(std::max(80*s,ImGui::GetContentRegionAvail().x-buttons));
+        if(ImGui::BeginCombo("##DescriptionMode",u.mode==0?"Create":"Modify")) {
             if(ImGui::Selectable("Create New",u.mode==0)) {u.mode=0;u.approved=false;}u.create=center();
             if(ImGui::Selectable("Modify Current Scenario",u.mode==1)) {u.mode=1;u.approved=false;}u.modify=center();
             ImGui::EndCombo();
         }
+        ImGui::SameLine();
     } else {
         if(ImGui::RadioButton("Create New",u.mode==0)) {u.mode=0;u.approved=false;}u.create=center();ImGui::SameLine();
         if(ImGui::RadioButton("Modify Current Scenario",u.mode==1)) {u.mode=1;u.approved=false;}u.modify=center();
         ImGui::TextWrapped("%s",u.mode==0?"Start with bundled warehouse-baseline defaults; inherited values are shown below.":"Current scenario means the editor draft. Only explicit changes are proposed.");
     }
-    if(ImGui::Button(u.proposal?"Interpret Again":"Interpret")) interpret(w,u);u.interpret=center();ImGui::SameLine();
+    if(ImGui::Button(interpret_label)) interpret(w,u);u.interpret=center();ImGui::SameLine();
     if(ImGui::Button("Clear")) {u.description.clear();u.proposal.reset();u.error.clear();u.approved=false;u.input_open=true;}
     if(!compact) {ImGui::SameLine();ImGui::TextDisabled("Offline interpretation / explicit review");}
-    ImGui::BeginChild("Language review content",{0,-(compact?52:90)*s});
-    ImGui::SetNextItemOpen(u.input_open,ImGuiCond_Always);u.input_open=ImGui::CollapsingHeader("Description");
+    const auto footer_height=ImGui::GetFrameHeightWithSpacing()*2+ImGui::GetStyle().ItemSpacing.y;
+    ImGui::BeginChild("Language review content",{0,-footer_height});
+    u.review_height=ImGui::GetWindowSize().y;
+    if(!compact||u.input_open||!u.proposal) {
+        ImGui::SetNextItemOpen(u.input_open,ImGuiCond_Always);u.input_open=ImGui::CollapsingHeader("Description");
+    }
     if(u.input_open) {
         std::array<char,nl::max_input_bytes+1> buffer{};std::copy_n(u.description.data(),std::min(u.description.size(),nl::max_input_bytes),buffer.data());
         if(ImGui::InputTextMultiline("##WarehouseDescription",buffer.data(),buffer.size(),{-1,100*s})) {u.description=buffer.data();u.approved=false;}
@@ -93,7 +114,7 @@ void draw_language(workspace::ScenarioWorkspace& w,LanguageUI& u)
             u.mode=0;u.description="Create a warehouse with 4 loading bays, 12 workers and 3 forklifts. Shipments arrive every 5 minutes and take 15 minutes to process. Run the simulation for 8 hours.";
             u.proposal.reset();u.approved=false;
         }ImGui::SameLine();
-        if(ImGui::Button("Modify example")) {u.mode=1;u.description="Add two forklifts and reduce processing duration by 20%.";u.proposal.reset();u.approved=false;}
+        if(ImGui::Button("Modify example")) {u.mode=1;u.description="Get 3 more bays and twice as many workers.";u.proposal.reset();u.approved=false;}
         ImGui::TextDisabled("Use specific parameters; navigation, collision avoidance and optimization goals need a different model.");
     }
     if(!u.error.empty()) ImGui::TextColored({viewer::design::error.x,viewer::design::error.y,viewer::design::error.z,1},"%s",u.error.c_str());
@@ -101,22 +122,23 @@ void draw_language(workspace::ScenarioWorkspace& w,LanguageUI& u)
     if(u.proposal) {
         const auto& p=*u.proposal;stale=p.stamp()!=w.language_stamp()||p.description()!=u.description||static_cast<int>(p.mode())!=u.mode;
         if(stale) ImGui::TextWrapped("Source, description or mode changed. Interpret Again before approval.");
-        ImGui::TextWrapped("Source: %s",p.source().name.c_str());
+        if(!compact) ImGui::TextWrapped("Source: %s",p.source().name.c_str());
         const auto status_color=p.valid()?viewer::design::completed:viewer::design::error;
         ImGui::TextColored({status_color.x,status_color.y,status_color.z,1},"%s",p.valid()?"Ready for review":"Resolve diagnostics");
         if(compact) {
-            ImGui::TextWrapped("Name: %s -> %s",u.editor_before[0].c_str(),p.proposed().name.c_str());
             for(std::size_t i=0;i<nl::physical_fields.size();++i) {
                 const auto field=nl::physical_fields[i];const auto computed=p.computed()[i];
-                ImGui::Separator();ImGui::TextUnformatted(row_label(i));
-                ImGui::TextWrapped("Before: %s   Proposed: %s",u.editor_before[i+1].c_str(),computed?nl::format(*computed).c_str():"Unavailable");
+                if(i) ImGui::Separator();
+                ImGui::TextWrapped("%s: %s -> %s",row_label(i),u.editor_before[i+1].c_str(),computed?nl::format(*computed).c_str():"Unavailable");
                 bool explicit_value=false;
                 for(const auto& op:p.operations()) if(nl::physical_field(op.field)==field) {
-                    ImGui::TextWrapped("From: \"%s\"",p.description().substr(op.source.begin,op.source.size).c_str());explicit_value=true;
+                    ImGui::TextWrapped("%s: \"%s\"",action_title(op.action),p.description().substr(op.source.begin,op.source.size).c_str());explicit_value=true;
                 }
                 for(const auto& op:p.corrections()) if(op.field==field) {ImGui::TextUnformatted("Explicit review correction");explicit_value=true;}
                 if(!explicit_value) ImGui::TextUnformatted(p.mode()==nl::Mode::Create?"Inherited baseline value":"Unchanged");
             }
+            ImGui::TextWrapped("Name: %s -> %s",u.editor_before[0].c_str(),p.proposed().name.c_str());
+            ImGui::TextWrapped("Source: %s",p.source().name.c_str());
         } else if(ImGui::BeginTable("Scenario proposal",4,ImGuiTableFlags_BordersInnerH|ImGuiTableFlags_RowBg|ImGuiTableFlags_SizingStretchProp)) {
             ImGui::TableSetupColumn("Parameter",ImGuiTableColumnFlags_WidthStretch,1.2f);
             ImGui::TableSetupColumn("Before (editor)",ImGuiTableColumnFlags_WidthStretch,0.7f);
@@ -130,7 +152,7 @@ void draw_language(workspace::ScenarioWorkspace& w,LanguageUI& u)
                 ImGui::TableNextColumn();const auto computed=p.computed()[i];ImGui::TextUnformatted(computed?nl::format(*computed).c_str():"Unavailable");
                 ImGui::TableNextColumn();bool explicit_value=false;
                 for(const auto& op:p.operations()) if(nl::physical_field(op.field)==field) {
-                    const auto quote=p.description().substr(op.source.begin,op.source.size);ImGui::TextWrapped("%s: \"%s\"",nl::action_name(op.action),quote.c_str());explicit_value=true;
+                    const auto quote=p.description().substr(op.source.begin,op.source.size);ImGui::TextWrapped("%s: \"%s\"",action_title(op.action),quote.c_str());explicit_value=true;
                 }
                 for(const auto& op:p.corrections()) if(op.field==field) {ImGui::TextUnformatted("Explicit review correction");explicit_value=true;}
                 if(!explicit_value) ImGui::TextDisabled("%s",p.mode()==nl::Mode::Create?"Inherited baseline value":"Unchanged");
@@ -143,6 +165,9 @@ void draw_language(workspace::ScenarioWorkspace& w,LanguageUI& u)
         }
         if(ImGui::Button("Edit Proposal")) {u.edit_open=!u.edit_open;u.approved=false;}u.edit=center();
         if(u.scroll_action==1) {ImGui::SetScrollHereY(0.5f);u.scroll_action=-1;}
+        if(compact) {
+            if(ImGui::Button("Edit description")) {u.input_open=true;u.approved=false;ImGui::SetScrollY(0);}
+        }
         if(u.edit_open) {
             ImGui::TextWrapped("Correct exact values below. Recognition errors and conflicts require revised text and Interpret Again.");
             ImGui::SetNextItemWidth(-1);if(input("##ReviewedName",u.name,256)) {u.name_edited=true;u.approved=false;}u.name_input=center();
@@ -163,5 +188,7 @@ void draw_language(workspace::ScenarioWorkspace& w,LanguageUI& u)
     ImGui::BeginDisabled(!can_approve||!u.approved);
     if(ImGui::Button("Apply to Editor")) {u.apply_requested=true;u.visible=false;ImGui::CloseCurrentPopup();}u.apply=center();ImGui::EndDisabled();ImGui::SameLine();
     if(ImGui::Button("Discard")) {u.proposal.reset();u.approved=false;u.visible=false;ImGui::CloseCurrentPopup();}u.discard=center();
+    u.footer_bottom=ImGui::GetItemRectMax().y;
     ImGui::EndPopup();
+    if(compact_window) ImGui::PopStyleVar();
 }

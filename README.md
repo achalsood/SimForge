@@ -183,8 +183,13 @@ review or correct the values, then explicitly approve and Apply to Editor:
 > arrive every 5 minutes and take 15 minutes to process. Run the simulation for
 > 8 hours.
 
-Modify supports `Add two forklifts and reduce processing time by 20 percent. Keep
-everything else unchanged.` Unsupported clauses, ambiguity, conflicts, and
+Modify understands conversational instructions such as `Get 3 more bays and twice
+as many workers.` From the baseline, this proposes six bays and twenty workers.
+`Get 3 workers` sets three; `Get 3 more workers` adds three. `Use 3 times as many
+forklifts` multiplies the current count. `Make processing twice as fast` halves
+processing duration. Review each matched phrase and operation, approve explicitly,
+then Apply; use Run Simulation or Add as candidate and File Save/Open afterward.
+Unsupported clauses, negation, ambiguity, conflicts, and
 fractional final values block approval. Approved drafts use the existing Run
 Simulation, comparison, and project-save workflows. No model or external API is
 required. See the [tutorial, grammar, evaluation, benchmarks, and native captures](docs/natural-language-scenarios.md).

@@ -1,0 +1,1569 @@
+{
+  "corpus_version": 2,
+  "scope": "Frozen separately authored pre-implementation holdout; no tuning after evaluation",
+  "default_source": {
+    "schema_version": 1,
+    "name": "Warehouse Baseline",
+    "domain": "warehouse",
+    "simulation": {
+      "tick_rate": 60,
+      "duration_seconds": 28800,
+      "random_seed": 12345
+    },
+    "warehouse": {
+      "loading_bays": 3,
+      "workers": 10,
+      "forklifts": 2,
+      "shipment_interval_seconds": 300,
+      "processing_duration_seconds": 900
+    }
+  },
+  "examples": [
+    {
+      "id": "holdout_01",
+      "text": "Could we bring in four extra staff?",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "workers",
+          "action": "add",
+          "value": [
+            4,
+            1
+          ],
+          "unit": "count"
+        }
+      ],
+      "expected_fields": {
+        "workers": 14
+      },
+      "classification": "valid"
+    },
+    {
+      "id": "holdout_02",
+      "text": "I'd like to get two additional docks.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "loading_bays",
+          "action": "add",
+          "value": [
+            2,
+            1
+          ],
+          "unit": "count"
+        }
+      ],
+      "expected_fields": {
+        "loading_bays": 5
+      },
+      "classification": "valid"
+    },
+    {
+      "id": "holdout_03",
+      "text": "For workers, add seven please.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "workers",
+          "action": "add",
+          "value": [
+            7,
+            1
+          ],
+          "unit": "count"
+        }
+      ],
+      "expected_fields": {
+        "workers": 17
+      },
+      "classification": "valid"
+    },
+    {
+      "id": "holdout_04",
+      "text": "Can we use half as many lift trucks?",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "forklifts",
+          "action": "multiply",
+          "value": [
+            1,
+            2
+          ],
+          "unit": "factor"
+        }
+      ],
+      "expected_fields": {
+        "forklifts": 1
+      },
+      "classification": "valid"
+    },
+    {
+      "id": "holdout_05",
+      "text": "Please make the loading bay count twice what it is now.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "loading_bays",
+          "action": "multiply",
+          "value": [
+            2,
+            1
+          ],
+          "unit": "factor"
+        }
+      ],
+      "expected_fields": {
+        "loading_bays": 6
+      },
+      "classification": "valid"
+    },
+    {
+      "id": "holdout_06",
+      "text": "We could use twelve staff.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "workers",
+          "action": "set",
+          "value": [
+            12,
+            1
+          ],
+          "unit": "count"
+        }
+      ],
+      "expected_fields": {
+        "workers": 12
+      },
+      "classification": "valid"
+    },
+    {
+      "id": "holdout_07",
+      "text": "Give us two times as many workers.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "workers",
+          "action": "multiply",
+          "value": [
+            2,
+            1
+          ],
+          "unit": "factor"
+        }
+      ],
+      "expected_fields": {
+        "workers": 20
+      },
+      "classification": "valid"
+    },
+    {
+      "id": "holdout_08",
+      "text": "Put in one more loading bay and get twice as many lift trucks.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "loading_bays",
+          "action": "add",
+          "value": [
+            1,
+            1
+          ],
+          "unit": "count"
+        },
+        {
+          "field": "forklifts",
+          "action": "multiply",
+          "value": [
+            2,
+            1
+          ],
+          "unit": "factor"
+        }
+      ],
+      "expected_fields": {
+        "loading_bays": 4,
+        "forklifts": 4
+      },
+      "classification": "valid"
+    },
+    {
+      "id": "holdout_09",
+      "text": "Hire two fewer workers.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "workers",
+          "action": "subtract",
+          "value": [
+            2,
+            1
+          ],
+          "unit": "count"
+        }
+      ],
+      "expected_fields": {
+        "workers": 8
+      },
+      "classification": "valid"
+    },
+    {
+      "id": "holdout_10",
+      "text": "Can we take away one loading bay?",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "loading_bays",
+          "action": "subtract",
+          "value": [
+            1,
+            1
+          ],
+          "unit": "count"
+        }
+      ],
+      "expected_fields": {
+        "loading_bays": 2
+      },
+      "classification": "valid"
+    },
+    {
+      "id": "holdout_11",
+      "text": "The forklift count should be doubled.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "forklifts",
+          "action": "multiply",
+          "value": [
+            2,
+            1
+          ],
+          "unit": "factor"
+        }
+      ],
+      "expected_fields": {
+        "forklifts": 4
+      },
+      "classification": "valid"
+    },
+    {
+      "id": "holdout_12",
+      "text": "Make processing three times as long.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "processing_duration",
+          "action": "multiply",
+          "value": [
+            3,
+            1
+          ],
+          "unit": "factor"
+        }
+      ],
+      "expected_fields": {
+        "processing_duration": 2700
+      },
+      "classification": "valid"
+    },
+    {
+      "id": "holdout_13",
+      "text": "Receive deliveries half as often.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "arrival_rate",
+          "action": "multiply",
+          "value": [
+            1,
+            2
+          ],
+          "unit": "factor"
+        }
+      ],
+      "expected_fields": {
+        "arrival_interval": 600
+      },
+      "classification": "valid"
+    },
+    {
+      "id": "holdout_14",
+      "text": "Make deliveries arrive every two minutes.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "arrival_interval",
+          "action": "set",
+          "value": [
+            2,
+            1
+          ],
+          "unit": "minutes"
+        }
+      ],
+      "expected_fields": {
+        "arrival_interval": 120
+      },
+      "classification": "valid"
+    },
+    {
+      "id": "holdout_15",
+      "text": "Workers should be tripled.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "workers",
+          "action": "multiply",
+          "value": [
+            3,
+            1
+          ],
+          "unit": "factor"
+        }
+      ],
+      "expected_fields": {
+        "workers": 30
+      },
+      "classification": "valid"
+    },
+    {
+      "id": "holdout_16",
+      "text": "We need one extra forklift on top of the existing number.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "forklifts",
+          "action": "add",
+          "value": [
+            1,
+            1
+          ],
+          "unit": "count"
+        }
+      ],
+      "expected_fields": {
+        "forklifts": 3
+      },
+      "classification": "valid"
+    },
+    {
+      "id": "holdout_17",
+      "text": "Reduce worker capacity to half of its current value.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "workers",
+          "action": "multiply",
+          "value": [
+            1,
+            2
+          ],
+          "unit": "factor"
+        }
+      ],
+      "expected_fields": {
+        "workers": 5
+      },
+      "classification": "valid"
+    },
+    {
+      "id": "holdout_18",
+      "text": "Could you install four docks?",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "loading_bays",
+          "action": "set",
+          "value": [
+            4,
+            1
+          ],
+          "unit": "count"
+        }
+      ],
+      "expected_fields": {
+        "loading_bays": 4
+      },
+      "classification": "valid"
+    },
+    {
+      "id": "holdout_19",
+      "text": "Get 2x as many workers.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "workers",
+          "action": "multiply",
+          "value": [
+            2,
+            1
+          ],
+          "unit": "factor"
+        }
+      ],
+      "expected_fields": {
+        "workers": 20
+      },
+      "classification": "valid"
+    },
+    {
+      "id": "holdout_20",
+      "text": "Make each shipment take half as long.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "processing_duration",
+          "action": "multiply",
+          "value": [
+            1,
+            2
+          ],
+          "unit": "factor"
+        }
+      ],
+      "expected_fields": {
+        "processing_duration": 450
+      },
+      "classification": "valid"
+    },
+    {
+      "id": "holdout_21",
+      "text": "Bring in five workers on top of the existing number.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "workers",
+          "action": "add",
+          "value": [
+            5,
+            1
+          ],
+          "unit": "count"
+        }
+      ],
+      "expected_fields": {
+        "workers": 15
+      },
+      "classification": "valid"
+    },
+    {
+      "id": "holdout_22",
+      "text": "Processing should take twice as long.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "processing_duration",
+          "action": "multiply",
+          "value": [
+            2,
+            1
+          ],
+          "unit": "factor"
+        }
+      ],
+      "expected_fields": {
+        "processing_duration": 1800
+      },
+      "classification": "valid"
+    },
+    {
+      "id": "holdout_23",
+      "text": "Drop the worker count by four.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "workers",
+          "action": "subtract",
+          "value": [
+            4,
+            1
+          ],
+          "unit": "count"
+        }
+      ],
+      "expected_fields": {
+        "workers": 6
+      },
+      "classification": "valid"
+    },
+    {
+      "id": "holdout_24",
+      "text": "Give us another two bays.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "loading_bays",
+          "action": "add",
+          "value": [
+            2,
+            1
+          ],
+          "unit": "count"
+        }
+      ],
+      "expected_fields": {
+        "loading_bays": 5
+      },
+      "classification": "valid"
+    },
+    {
+      "id": "holdout_25",
+      "text": "Could you arrange a total of six docks?",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "loading_bays",
+          "action": "set",
+          "value": [
+            6,
+            1
+          ],
+          "unit": "count"
+        }
+      ],
+      "expected_fields": {
+        "loading_bays": 6
+      },
+      "classification": "valid"
+    },
+    {
+      "id": "holdout_26",
+      "text": "Our staff complement should become fifteen.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "workers",
+          "action": "set",
+          "value": [
+            15,
+            1
+          ],
+          "unit": "count"
+        }
+      ],
+      "expected_fields": {
+        "workers": 15
+      },
+      "classification": "valid"
+    },
+    {
+      "id": "holdout_27",
+      "text": "Scale the lift truck pool to three times its present size.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "forklifts",
+          "action": "multiply",
+          "value": [
+            3,
+            1
+          ],
+          "unit": "factor"
+        }
+      ],
+      "expected_fields": {
+        "forklifts": 6
+      },
+      "classification": "valid"
+    },
+    {
+      "id": "holdout_28",
+      "text": "Please shorten the service time to twelve minutes.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "processing_duration",
+          "action": "set",
+          "value": [
+            12,
+            1
+          ],
+          "unit": "minutes"
+        }
+      ],
+      "expected_fields": {
+        "processing_duration": 720
+      },
+      "classification": "valid"
+    },
+    {
+      "id": "holdout_29",
+      "text": "Don't hire another four workers.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [],
+      "expected_fields": {},
+      "classification": "rejected"
+    },
+    {
+      "id": "holdout_30",
+      "text": "Never double the forklift count.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [],
+      "expected_fields": {},
+      "classification": "rejected"
+    },
+    {
+      "id": "holdout_31",
+      "text": "We discussed adding docks but decided against it.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [],
+      "expected_fields": {},
+      "classification": "rejected"
+    },
+    {
+      "id": "holdout_32",
+      "text": "What if we installed two extra docks?",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [],
+      "expected_fields": {},
+      "classification": "rejected"
+    },
+    {
+      "id": "holdout_33",
+      "text": "Give us several lift trucks.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [],
+      "expected_fields": {},
+      "classification": "rejected"
+    },
+    {
+      "id": "holdout_34",
+      "text": "Bring in a bunch of workers.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [],
+      "expected_fields": {},
+      "classification": "rejected"
+    },
+    {
+      "id": "holdout_35",
+      "text": "We could use some more bays.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [],
+      "expected_fields": {},
+      "classification": "rejected"
+    },
+    {
+      "id": "holdout_36",
+      "text": "Increase staff by two or three.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [],
+      "expected_fields": {},
+      "classification": "rejected"
+    },
+    {
+      "id": "holdout_37",
+      "text": "Please hire between two and six workers.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [],
+      "expected_fields": {},
+      "classification": "rejected"
+    },
+    {
+      "id": "holdout_38",
+      "text": "Get three more forklifts unless we have enough.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [],
+      "expected_fields": {},
+      "classification": "rejected"
+    },
+    {
+      "id": "holdout_39",
+      "text": "Make the warehouse more efficient.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [],
+      "expected_fields": {},
+      "classification": "rejected"
+    },
+    {
+      "id": "holdout_40",
+      "text": "Use 3x forklifts per worker.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [],
+      "expected_fields": {},
+      "classification": "rejected"
+    },
+    {
+      "id": "holdout_41",
+      "text": "Receive twelve shipments in one simultaneous batch.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [],
+      "expected_fields": {},
+      "classification": "rejected"
+    },
+    {
+      "id": "holdout_42",
+      "text": "Have shipments arrive zero times as often.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [],
+      "expected_fields": {},
+      "classification": "rejected"
+    },
+    {
+      "id": "holdout_43",
+      "text": "Cut processing time by 125 percent.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [],
+      "expected_fields": {},
+      "classification": "rejected"
+    },
+    {
+      "id": "holdout_44",
+      "text": "The workers should maybe be doubled.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [],
+      "expected_fields": {},
+      "classification": "rejected"
+    },
+    {
+      "id": "holdout_45",
+      "text": "Install extra docks to reduce congestion.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [],
+      "expected_fields": {},
+      "classification": "rejected"
+    },
+    {
+      "id": "holdout_46",
+      "text": "Get twice as many robots.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [],
+      "expected_fields": {},
+      "classification": "rejected"
+    },
+    {
+      "id": "holdout_47",
+      "text": "Use half as many forklifts on Mondays.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [],
+      "expected_fields": {},
+      "classification": "rejected"
+    },
+    {
+      "id": "holdout_48",
+      "text": "For workers, do not add three.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [],
+      "expected_fields": {},
+      "classification": "rejected"
+    }
+  ]
+}

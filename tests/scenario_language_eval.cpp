@@ -18,10 +18,57 @@ Json operation(const language::Operation& op,std::string_view text)
         {"value",Json::array({op.value.numerator,op.value.denominator})},{"unit",language::unit_name(op.unit)},
         {"source_text",std::string(text.substr(op.source.begin,op.source.size))},{"pattern",language::pattern_name(op.pattern)}};
 }
+int expanded(const std::filesystem::path& path,bool holdout)
+{
+    std::ifstream file(path);Json corpus;file>>corpus;
+    if(corpus.at("corpus_version")!=2||corpus.at("default_source")!=Json::parse(serialize_scenario(language::default_source())))
+        throw std::runtime_error("Expanded corpus defaults/version drifted");
+    std::size_t positives=0,negatives=0,op_matches=0,value_matches=0,rejections=0,unsafe=0,omissions=0;
+    double total_us=0,worst_us=0;std::set<std::string> ids;
+    for(const auto& row:corpus.at("examples")) {
+        const auto id=row.at("id").get<std::string>();if(!ids.insert(id).second) throw std::runtime_error("Duplicate expanded case ID");
+        const auto text=row.at("text").get<std::string>();const auto source=parse_scenario(row.at("source").dump());
+        const auto mode=row.at("mode")=="create"?language::Mode::Create:language::Mode::Modify;
+        const auto p=language::interpret(text,mode,source,{1,1});
+        total_us+=p.timings().total_us;worst_us=std::max(worst_us,p.timings().total_us);
+        Json actual=Json::array();std::size_t previous_end=0;
+        for(const auto& op:p.operations()) {
+            if(op.origin!=language::Origin::Rule || op.source.begin<previous_end ||
+                op.source.begin>text.size() || op.source.size>text.size()-op.source.begin || !op.source.size)
+                throw std::runtime_error("Invalid/overlapping operation provenance");
+            previous_end=op.source.begin+op.source.size;
+            auto j=operation(op,text);j.erase("pattern");j.erase("source_text");actual.push_back(j);
+        }
+        if(row.at("classification")=="valid") {
+            ++positives;const bool ops=p.valid()&&actual==row.at("expected_operations");op_matches+=ops;
+            auto expected=fields(mode==language::Mode::Create?language::default_source():source);
+            if(mode==language::Mode::Create) expected["name"]="Described warehouse";
+            for(const auto& [key,value]:row.at("expected_fields").items()) expected[key]=value;
+            const bool values=p.valid()&&fields(p.proposed())==expected;value_matches+=values;
+            if(p.valid()&&(!ops||!values)) {
+                ++unsafe;
+                if(actual.size()<row.at("expected_operations").size()) ++omissions;
+            }
+            if(!ops||!values) std::cout<<id<<": "<<(p.valid()?"unsafe semantic mismatch":"safe coverage miss")
+                <<" | "<<text<<" | actual="<<actual.dump()<<'\n';
+        } else {
+            ++negatives;rejections+=!p.valid();
+            if(p.valid()) {++unsafe;if(row.value("partial",false)) ++omissions;std::cout<<id<<": unsafe acceptance | "<<text<<'\n';}
+        }
+    }
+    std::cout<<(holdout?"Holdout":"Development")<<" examples: "<<positives+negatives<<" | Supported exact operations: "<<op_matches<<'/'<<positives
+        <<" | Exact final scenarios: "<<value_matches<<'/'<<positives<<" | Correct rejections: "<<rejections<<'/'<<negatives
+        <<" | Unsafe false acceptances: "<<unsafe<<" | Accepted silent omissions: "<<omissions
+        <<" | Mean/worst interpretation us: "<<total_us/(positives+negatives)<<'/'<<worst_us<<'\n';
+    // The holdout coverage gate was declared before evaluation; safe misses are
+    // measured, never turned into expected rejections or used to tune grammar.
+    return unsafe||omissions||rejections!=negatives|| (holdout ? op_matches*2<positives||value_matches*2<positives : op_matches!=positives||value_matches!=positives);
+}
 int main(int argc,char** argv)
 {
     try {
         const std::filesystem::path directory=argc>1?argv[1]:SIMFORGE_LANGUAGE_CORPUS;
+        if(std::filesystem::is_regular_file(directory)) return expanded(directory,argc>2&&std::string_view(argv[2])=="--holdout");
         std::size_t examples=0,operation_matches=0,value_matches=0,unsupported=0,ambiguous=0,unsafe=0,failures=0;
         double total_us=0,worst_us=0;
         std::set<std::string> identities;

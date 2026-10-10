@@ -332,7 +332,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         require(workspace.view().speed()==saved_clock.time_scale && workspace.view().runtime().clock().paused()==saved_clock.paused,"Fresh process lost playback state");
         if(std::getenv("SIMFORGE_LANGUAGE_TEST_PATH")) {
             require(workspace.runs().size()==4 && workspace.candidates().size()==2 && workspace.report().has_value(),"Language project lost runs/candidates/report");
-            require(workspace.draft().values[1]=="4"&&workspace.draft().values[2]=="12"&&workspace.draft().values[3]=="3"&&workspace.draft().values[5]=="900","Approved language configuration did not persist");
+            require(workspace.draft().values[1]=="6"&&workspace.draft().values[2]=="20"&&workspace.draft().values[3]=="3"&&workspace.draft().values[5]=="900","Approved language configuration did not persist");
             require(!workspace_ui.language.proposal && !workspace_ui.language.visible,"Reopen restored or reapplied an old proposal");
         } else require(workspace.runs().size()==3 && workspace.candidates().size()==1 && workspace.report().has_value(),"Fresh process lost workspace analyses or runs");
         require(workspace.view().scene().resources().size()>0 && workspace.view().observation().capacity.forklifts==3,"Restored geometry mismatch");
@@ -730,7 +730,18 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
                 enter_text(language.description_input,text);click(language.interpret);submit();require(language.proposal.has_value(),"Interpret returned no proposal");
             };
             const auto approve=[&] {require(language.proposal&&language.proposal->valid(),"Cannot approve invalid proposal");click(language.approve);require(language.approved,"Explicit approval checkbox failed");click(language.apply);submit();require(!language.visible&&workspace_ui.error.empty(),"Approved proposal failed to apply");};
-            const char* creation="Create a warehouse with 4 loading bays, 12 workers, 3 forklifts, arrivals every 5 minutes, processing time of 15 minutes, and an 8-hour shift.";
+            // Exercise the reported conversational failures through native text input,
+            // proposal review and explicit approval before creating a retained run.
+            open_language();describe("Get 3 more bays.",false);capture("conversation-addition");
+            require(language.proposal->operations().size()==1&&language.proposal->operations()[0].action==nl::Action::Add,"Native addition action incorrect");
+            approve();require(workspace.draft().values[1]=="6","Native addition result incorrect");
+            open_language();describe("Get twice as many workers.",false);capture("conversation-multiplication");
+            require(language.proposal->operations().size()==1&&language.proposal->operations()[0].action==nl::Action::Multiply,"Native multiplier action incorrect");
+            approve();require(workspace.draft().values[2]=="20","Native multiplier result incorrect");
+            open_language();describe("Put in one extra forklift and cut processing time in half.",false);capture("conversation-compound");
+            approve();require(workspace.draft().values[1]=="6"&&workspace.draft().values[2]=="20"&&workspace.draft().values[3]=="3"&&workspace.draft().values[5]=="450","Native compound association incorrect");
+            workspace.revert(true);submit();
+            const char* creation="We need 6 loading bays, 20 workers, and 3 forklifts. Make deliveries arrive every 5 minutes. Processing takes 15 minutes. Run for eight hours.";
             const auto original_draft=workspace.draft();const auto original_runtime=workspace.view().runtime().capture_snapshot();const auto original_report=workspace.json();
             open_language();language.input_open=true;submit();enter_text(language.description_input,creation);click(language.create);submit();capture("language-input");
             click(language.interpret);submit();require(language.proposal&&language.proposal->valid()&&language.proposal->operations().size()==6,"Create interpretation missed fields");
@@ -738,11 +749,14 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
             capture("language-review");
             window.resize(640,480);diagnostic_scale=2.0f;submit();submit();
             require(language.visible&&language.proposal->valid()&&!language.approved,"Compact high-DPI review lost proposal state");
+            require(language.modal_min.x>=0&&language.modal_min.y>=0&&language.modal_max.x<=640&&language.modal_max.y<=480,"Resized language dialog is outside viewport");
+            require(language.footer_bottom<language.modal_max.y&&language.approve.y<480&&language.apply.y<480,"Compact approval controls are clipped");capture("conversation-compact");
+            require(language.review_height>=100,"Compact proposal review has insufficient readable space");
             window.resize(1600,900);diagnostic_scale=1.0f;submit();submit();click(language.apply);require(workspace.draft()==original_draft,"Apply bypassed explicit approval");approve();
-            require(workspace.draft().values[1]=="4"&&workspace.draft().values[2]=="12"&&workspace.draft().values[3]=="3"&&workspace.draft().values[4]=="300"&&workspace.draft().values[5]=="900"&&workspace.draft().values[6]=="28800","Create values incorrect");
+            require(workspace.draft().values[1]=="6"&&workspace.draft().values[2]=="20"&&workspace.draft().values[3]=="3"&&workspace.draft().values[4]=="300"&&workspace.draft().values[5]=="900"&&workspace.draft().values[6]=="28800","Create values incorrect");
             workspace_ui.scroll_target=0;submit();submit();enter_text(workspace_ui.name_field,"Language warehouse");capture("language-applied");
             const auto approved_definition=workspace.draft_definition();workspace_ui.scroll_target=17;submit();submit();click(workspace_ui.run_simulation);submit();
-            const auto language_run=workspace.active_run_id();require(language_run && workspace.view().observation().capacity==warehouse::ResourceCounts{4,12,3},"Approved layout not initialized");
+            const auto language_run=workspace.active_run_id();require(language_run && workspace.view().observation().capacity==warehouse::ResourceCounts{6,20,3},"Approved layout not initialized");
             click(dashboard.play);frame(std::chrono::seconds(1));click(dashboard.play);require(workspace.view().observation().tick>0&&workspace.view().observation().metrics.arrived>0,"Language run did not advance");
             warehouse::WarehouseSimulation exact(approved_definition);exact.advance_to(workspace.view().observation().tick);
             require(exact.capture_snapshot()==workspace.view().runtime().capture_snapshot(),"Language playback differs from authoritative simulation");capture("language-playback");
@@ -760,6 +774,8 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
             check_rejected("Make twenty autonomous robots navigate around shelves.",nl::Code::UnsupportedInstruction,"language-error");
             check_rejected("Use three forklifts and five forklifts.",nl::Code::Conflict,nullptr);
             check_rejected("Make processing faster.",nl::Code::AmbiguousInstruction,nullptr);
+            check_rejected("Get more forklifts.",nl::Code::AmbiguousInstruction,"conversation-ambiguous");
+            check_rejected("Don't add 3 forklifts.",nl::Code::AmbiguousInstruction,"conversation-negated");
             check_rejected("Run for zero hours.",nl::Code::Range,nullptr);
             open_language();describe("Increase forklifts by 20%",false);require(!language.proposal->valid(),"Fractional proposal accepted");
             const auto before_review=workspace.draft();language.scroll_action=1;submit();submit();click(language.edit);submit();
@@ -778,7 +794,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
             workspace_ui.pending.push_back({WorkspaceAction::SelectRun,{},{},language_run});submit();require(workspace.view().runtime().capture_snapshot()==language_snapshot,"Inactive language run advanced");
             project_ui.test_path=std::filesystem::u8path(language_path);click(dashboard.file_menu);submit();click(project_ui.save_button);submit();
             require(project_ui.error.empty()&&std::filesystem::exists(project_ui.test_path),"Language project save failed");
-            std::cout<<"Language graphics: native Create/Modify, review/approval, errors/conflicts/staleness/discard, manual edit, measured playback/comparison and project save verified. Interpretation UI time "<<language.interpretation_us<<" us.\n";
+            std::cout<<"Language graphics: native Create/Modify, review/approval, errors/conflicts/staleness/discard, manual edit, measured playback/comparison and project save verified. Conversational addition/multiplication/compound and negation verified. Interpretation UI time "<<language.interpretation_us<<" us.\n";
         }
         std::cout<<"Custom graphics: draft/candidate/file launches, real shipments/metrics, picking, playback/seek/reset, retained switching, async isolation and resize verified.\n";
         std::cout << "Workspace smoke: injected draft edit/invalid feedback/candidate creation/comparison, actual candidate result camera, preserved baseline, checkpoint and export replay verified.\n";

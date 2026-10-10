@@ -1,5 +1,21 @@
 # Scenario-language regression corpus, version 1
 
+Commit 23 preserves both original files unchanged. It adds version-2
+`development/corpus.json` (119 positive, 55 rejected) and frozen
+`holdout/corpus.json` (28 positive, 20 rejected). These compare ordered typed
+field/action/rational/unit semantics and complete accepted scenario state, with
+rule provenance and bounded nonoverlapping source spans. Rejection cases require
+invalid proposals. Unsupported material may still have visible partial operations;
+those never authorize applying it. `partial` tags identify mixed requests when
+measuring accepted silent omissions. Both unsafe accepted negatives and accepted
+positives with wrong semantics fail evaluation.
+
+Pass a version-2 JSON file to the evaluator. `--holdout` uses the coverage gate
+declared in `holdout/FREEZE.md` before evaluation; safe misses lower reported
+accuracy. Development requires all exact matches. The original corpus retains
+its stricter exact source-text/pattern/error-code comparator. First holdout results
+are preserved in `holdout/INITIAL-RESULTS.md`; do not tune rules from those misses.
+
 `supported.json` has 74 accepted cases; `rejected.json` has 60 rejected cases.
 These are authored regression examples for the documented bounded grammar, not
 a general-language accuracy benchmark.

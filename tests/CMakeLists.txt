@@ -301,6 +301,17 @@ target_link_libraries(simforge_scenario_language_eval PRIVATE simforge_scenario_
 target_compile_definitions(simforge_scenario_language_eval PRIVATE SIMFORGE_LANGUAGE_CORPUS="${PROJECT_SOURCE_DIR}/tests/fixtures/scenario-language")
 add_test(NAME simforge_language_corpus COMMAND simforge_scenario_language_eval)
 
+add_executable(simforge_scenario_language_conversation_test scenario_language_conversation_test.cpp)
+target_link_libraries(simforge_scenario_language_conversation_test PRIVATE simforge_workspace)
+foreach(case RANGE 0 5)
+    add_test(NAME simforge_language_reported_${case} COMMAND simforge_scenario_language_conversation_test ${case})
+endforeach()
+foreach(case equivalence contrast association safety workflow)
+    add_test(NAME simforge_language_conversation_${case} COMMAND simforge_scenario_language_conversation_test ${case})
+endforeach()
+add_test(NAME simforge_language_development COMMAND simforge_scenario_language_eval ${PROJECT_SOURCE_DIR}/tests/fixtures/scenario-language/development/corpus.json)
+add_test(NAME simforge_language_holdout COMMAND simforge_scenario_language_eval ${PROJECT_SOURCE_DIR}/tests/fixtures/scenario-language/holdout/corpus.json --holdout)
+
 # Tool executables retain full Debug symbols, but do not need incremental-link databases.
 if(MSVC)
     get_property(tool_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)

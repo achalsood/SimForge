@@ -39,21 +39,26 @@ int main()
     const std::array inputs{
         std::pair{"create",std::string{"Create a warehouse with 4 loading bays, 12 workers and 3 forklifts. Shipments arrive every 5 minutes and take 15 minutes to process. Run the simulation for 8 hours."}},
         std::pair{"modify",std::string{"Add two forklifts and reduce processing duration by 20%."}},
+        std::pair{"assignment",std::string{"Get twelve workers."}},
+        std::pair{"conversational_addition",std::string{"Could we put in 3 more bays?"}},
+        std::pair{"conversational_multiplication",std::string{"Get twice as many workers."}},
+        std::pair{"compound",std::string{"Get 3 more bays and twice as many workers. Put in one extra forklift and cut processing time in half. Run for ten hours."}},
         std::pair{"unsupported",std::string{"Use four forklifts and add autonomous robot navigation."}},
         std::pair{"maximum_input",maximum}};
     const auto source=nl::default_source();
-    std::cout<<"case,bytes,iterations,tokenize_us,recognize_us,apply_us,validate_us,total_mean_us,total_worst_us,allocations_mean,allocated_bytes_mean,process_peak_working_set_bytes\n";
+    std::cout<<"case,bytes,iterations,tokenize_us,recognize_us,apply_us,validate_us,total_mean_us,total_median_us,total_worst_us,allocations_mean,allocated_bytes_mean,process_peak_working_set_bytes\n";
     for(const auto& [name,text]:inputs) {
         nl::Timings sums;double worst=0;std::uint64_t allocation_sum=0,bytes_sum=0;
-        constexpr int iterations=1000;
+        constexpr int iterations=1000;std::vector<double> samples;samples.reserve(iterations);
         for(int i=0;i<iterations;++i) {
             allocations=allocated_bytes=0;measuring=true;
             const auto p=nl::interpret(text,std::string_view(name)=="create"?nl::Mode::Create:nl::Mode::Modify,source,{1,1});
             measuring=false;allocation_sum+=allocations;bytes_sum+=allocated_bytes;
             sums.tokenize_us+=p.timings().tokenize_us;sums.recognize_us+=p.timings().recognize_us;sums.apply_us+=p.timings().apply_us;
-            sums.validate_us+=p.timings().validate_us;sums.total_us+=p.timings().total_us;worst=std::max(worst,p.timings().total_us);
+            sums.validate_us+=p.timings().validate_us;sums.total_us+=p.timings().total_us;samples.push_back(p.timings().total_us);worst=std::max(worst,p.timings().total_us);
         }
+        std::sort(samples.begin(),samples.end());const auto median=(samples[iterations/2-1]+samples[iterations/2])/2;
         std::cout<<std::fixed<<std::setprecision(3)<<name<<','<<text.size()<<','<<iterations<<','<<sums.tokenize_us/iterations<<','<<sums.recognize_us/iterations<<','<<sums.apply_us/iterations
-            <<','<<sums.validate_us/iterations<<','<<sums.total_us/iterations<<','<<worst<<','<<allocation_sum/iterations<<','<<bytes_sum/iterations<<','<<peak()<<'\n';
+            <<','<<sums.validate_us/iterations<<','<<sums.total_us/iterations<<','<<median<<','<<worst<<','<<allocation_sum/iterations<<','<<bytes_sum/iterations<<','<<peak()<<'\n';
     }
 }
