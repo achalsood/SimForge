@@ -1,6 +1,7 @@
 #pragma once
 #include <simforge/analysis/scenario_comparison.hpp>
 #include <simforge/viewer/viewer.hpp>
+#include <simforge/scenario/scenario_language.hpp>
 #include <array>
 
 namespace simforge::workspace
@@ -63,6 +64,9 @@ public:
     void open(const std::filesystem::path& path, bool discard_draft = false);
     void load(const scenario::ScenarioDefinition& definition, bool discard_draft = false);
     void edit(Field field, std::string value);
+    [[nodiscard]] scenario::ScenarioDefinition draft_definition() const;
+    [[nodiscard]] scenario::language::Stamp language_stamp() const noexcept {return {language_epoch_,draft_revision_};}
+    void apply_language_proposal(const scenario::language::Proposal& proposal,bool approved);
     [[nodiscard]] bool validate_draft();
     [[nodiscard]] bool dirty() const;
     void revert(bool discard_draft = false);
@@ -111,6 +115,7 @@ private:
     friend class Project;
     friend struct ProjectCodec;
     std::uint64_t persistent_generation_{0};
+    std::uint64_t language_epoch_{0}, draft_revision_{0}; // Runtime source context; no project-schema change.
     std::uint64_t report_generation_{0}, preview_report_generation_{0};
     static Draft make_draft(const scenario::ScenarioDefinition& definition);
     scenario::ScenarioDefinition checked_draft();

@@ -175,6 +175,20 @@ remain outside this milestone.
 
 ## Graphical warehouse experiment
 
+The Scenario Editor includes **Describe Your Warehouse**, an entirely offline
+English scenario builder. Choose Create or Modify, enter a description, Interpret,
+review or correct the values, then explicitly approve and Apply to Editor:
+
+> Create a warehouse with 4 loading bays, 12 workers and 3 forklifts. Shipments
+> arrive every 5 minutes and take 15 minutes to process. Run the simulation for
+> 8 hours.
+
+Modify supports `Add two forklifts and reduce processing time by 20 percent. Keep
+everything else unchanged.` Unsupported clauses, ambiguity, conflicts, and
+fractional final values block approval. Approved drafts use the existing Run
+Simulation, comparison, and project-save workflows. No model or external API is
+required. See the [tutorial, grammar, evaluation, benchmarks, and native captures](docs/natural-language-scenarios.md).
+
 Custom warehouses are playable from **Scenario Editor → Run Simulation**. New
 runs start paused at tick zero; press Play. The Operations run dropdown preserves
 the baseline and up to eight custom runs with independent clocks, metrics, speeds

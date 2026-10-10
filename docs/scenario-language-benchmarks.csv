@@ -1,0 +1,5 @@
+case,bytes,iterations,tokenize_us,recognize_us,apply_us,validate_us,total_mean_us,total_worst_us,allocations_mean,allocated_bytes_mean,process_peak_working_set_bytes
+create,164,1000,1.159,2.401,0.464,0.221,8.183,43.500,122,16046,4882432
+modify,56,1000,0.460,0.958,0.407,0.193,5.673,29.700,114,9806,4890624
+unsupported,55,1000,0.303,0.917,0.234,0.189,5.195,55.300,118,9534,4902912
+maximum_input,8192,1000,41.542,46.088,4.212,0.223,107.204,321.000,501,313399,5505024

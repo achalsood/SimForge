@@ -2,6 +2,7 @@
 #include <simforge/workspace/experiment_execution.hpp>
 #include "../analysis/comparison_json.hpp"
 #include <algorithm>
+#include <atomic>
 #include <charconv>
 #include <chrono>
 #include <cmath>
@@ -13,6 +14,14 @@ namespace
 {
 using Timer = std::chrono::steady_clock;
 using scenario::ScenarioDefinition;
+std::uint64_t source_epoch()
+{
+    static std::atomic<std::uint64_t> next{1};
+    auto id=next.load();
+    do {if(id==std::numeric_limits<std::uint64_t>::max()) throw std::overflow_error("Workspace source identities exhausted");}
+    while(!next.compare_exchange_weak(id,id+1));
+    return id;
+}
 warehouse::ResourceCounts counts(const ScenarioDefinition& d)
 { const auto& c = std::get<scenario::WarehouseConfig>(d.domain); return {c.loading_bays,c.workers,c.forklifts}; }
 void warehouse_only(const ScenarioDefinition& d)
@@ -80,11 +89,11 @@ Draft ScenarioWorkspace::make_draft(const ScenarioDefinition& d)
         std::to_string(c.shipment_interval_seconds),std::to_string(c.processing_duration_seconds),std::to_string(d.simulation.duration_seconds),
         std::to_string(d.simulation.tick_rate),std::to_string(d.simulation.random_seed)}}};
 }
-ScenarioWorkspace::ScenarioWorkspace() : execution_{std::make_unique<ExperimentExecution>()} {}
+ScenarioWorkspace::ScenarioWorkspace() : execution_{std::make_unique<ExperimentExecution>()} {language_epoch_=source_epoch();}
 ScenarioWorkspace::~ScenarioWorkspace() = default;
 ScenarioWorkspace::ScenarioWorkspace(ScenarioWorkspace&&) noexcept = default;
 ScenarioWorkspace& ScenarioWorkspace::operator=(ScenarioWorkspace&&) noexcept = default;
-ScenarioWorkspace::ScenarioWorkspace(const ScenarioDefinition& d, double speed) : speed_{speed}, execution_{std::make_unique<ExperimentExecution>()} { load(d); }
+ScenarioWorkspace::ScenarioWorkspace(const ScenarioDefinition& d, double speed) : speed_{speed}, execution_{std::make_unique<ExperimentExecution>()} {language_epoch_=source_epoch(); load(d); }
 const ScenarioDefinition& ScenarioWorkspace::baseline() const
 { if (!baseline_) throw std::logic_error("No scenario loaded"); return *baseline_; }
 viewer::ViewerController& ScenarioWorkspace::view()
@@ -99,7 +108,7 @@ void ScenarioWorkspace::load(const ScenarioDefinition& d, bool discard)
     // A completion from the prior baseline must not publish after a scenario replacement.
     (void)execution_->take_result(execution_->progress().request_id);
     auto draft = make_draft(d); baseline_ = d; baseline_view_ = std::move(prepared); preview_view_.reset(); runs_.clear(); active_run_ = 0;
-    ++persistent_generation_; draft_ = draft_origin_ = std::move(draft); errors_.clear(); candidates_.clear(); report_.reset();
+    ++persistent_generation_; ++draft_revision_; draft_ = draft_origin_ = std::move(draft); errors_.clear(); candidates_.clear(); report_.reset();
     // IDs are never reused within the workspace, including after scenario replacement.
     viewed_identity_ = "LIVE SIMULATION - Original Baseline: "+d.name; status_ = Status::Ready; message_ = "Scenario loaded. Edit initial configuration; the running warehouse is unchanged by typing.";
 }
@@ -109,7 +118,36 @@ void ScenarioWorkspace::edit(Field field, std::string value)
 {
     (void)baseline(); const auto index = static_cast<std::size_t>(field);
     if (index >= draft_.values.size()) throw std::invalid_argument("Unknown draft field");
-    if (draft_.values[index] != value) ++persistent_generation_; draft_.values[index] = std::move(value); errors_.clear(); status_ = dirty() ? Status::Modified : Status::Ready;
+    if (draft_.values[index] != value) {++persistent_generation_;++draft_revision_;}
+    draft_.values[index] = std::move(value); errors_.clear(); status_ = dirty() ? Status::Modified : Status::Ready;
+}
+ScenarioDefinition ScenarioWorkspace::draft_definition() const
+{
+    auto d=baseline();d.name=draft_.values[0];std::array<std::uint64_t,9> n{};
+    constexpr std::array<std::uint64_t,9> maxima{0,100000,100000,100000,604800,604800,604800,1000,std::numeric_limits<std::uint64_t>::max()};
+    for(std::size_t i=1;i<n.size();++i) {
+        const auto& text=draft_.values[i];const auto parsed=std::from_chars(text.data(),text.data()+text.size(),n[i]);
+        if(parsed.ec!=std::errc{}||parsed.ptr!=text.data()+text.size()||n[i]>maxima[i])
+            throw std::invalid_argument(std::string(field_names[i])+": invalid source draft value");
+    }
+    d.simulation={static_cast<std::uint32_t>(n[7]),static_cast<std::uint32_t>(n[6]),n[8]};
+    d.domain=scenario::WarehouseConfig{static_cast<std::uint32_t>(n[1]),static_cast<std::uint32_t>(n[2]),static_cast<std::uint32_t>(n[3]),static_cast<std::uint32_t>(n[4]),static_cast<std::uint32_t>(n[5])};
+    warehouse_only(d);return d;
+}
+void ScenarioWorkspace::apply_language_proposal(const scenario::language::Proposal& proposal,bool approved)
+{
+    if(!approved) throw std::logic_error("Explicit proposal approval is required");
+    if(proposal.stamp()!=language_stamp()) throw std::logic_error("Proposal is stale. Interpret again against the current editor draft");
+    if(!proposal.valid()) throw std::invalid_argument("Resolve proposal diagnostics before applying");
+    if(proposal.mode()==scenario::language::Mode::Modify && scenario::serialize_scenario(draft_definition())!=proposal.source_identity())
+        throw std::logic_error("Proposal source does not match the current draft");
+    warehouse_only(proposal.proposed());auto prepared=make_draft(proposal.proposed());
+    if(proposal.mode()==scenario::language::Mode::Modify) {
+        const auto source=make_draft(proposal.source());
+        for(std::size_t i=0;i<prepared.values.size();++i) if(source.values[i]==prepared.values[i]) prepared.values[i]=draft_.values[i];
+    }
+    if(prepared!=draft_) {draft_=std::move(prepared);++draft_revision_;++persistent_generation_;}
+    (void)validate_draft();message_="Approved proposal applied. Run Simulation or Add Candidate when ready.";
 }
 bool ScenarioWorkspace::validate_draft()
 {
@@ -145,6 +183,7 @@ void ScenarioWorkspace::revert(bool discard)
     if (dirty() && !discard) throw std::logic_error("Confirm discarding unsaved changes to revert");
     auto prepared=make_draft(baseline());
     if(draft_!=prepared || draft_origin_!=prepared) ++persistent_generation_;
+    if(draft_!=prepared) ++draft_revision_;
     draft_ = draft_origin_ = std::move(prepared); errors_.clear(); status_ = Status::Ready; message_ = "Draft restored to loaded baseline.";
 }
 void ScenarioWorkspace::save_draft(const std::filesystem::path& path)
@@ -238,6 +277,7 @@ void ScenarioWorkspace::edit_candidate(std::uint64_t id, bool discard)
     if (dirty() && !discard) throw std::logic_error("Confirm discarding unsaved draft edits before editing a candidate");
     auto prepared=make_draft(candidate(id).definition);
     if(draft_!=prepared || draft_origin_!=prepared) ++persistent_generation_;
+    if(draft_!=prepared) ++draft_revision_;
     draft_ = draft_origin_ = std::move(prepared); errors_.clear(); status_ = Status::Ready;
 }
 void ScenarioWorkspace::update_candidate(std::uint64_t id, std::string notes)

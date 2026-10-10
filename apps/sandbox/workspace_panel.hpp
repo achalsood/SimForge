@@ -1,7 +1,8 @@
 #pragma once
 #include "dashboard.hpp"
+#include "scenario_language_panel.hpp"
 #include <simforge/workspace/scenario_workspace.hpp>
-enum class WorkspaceAction { Validate, Revert, Open, Save, Run, Add, Edit, Update, Rename, Duplicate, Remove, Restore, Compare, Cancel, View, Baseline, Json, Csv, SelectRun, RemoveRun, Live, SimulateCandidate, SimulateResult, LoadRun };
+enum class WorkspaceAction { Validate, Revert, Open, Save, Run, Add, Edit, Update, Rename, Duplicate, Remove, Restore, Compare, Cancel, View, Baseline, Json, Csv, SelectRun, RemoveRun, Live, SimulateCandidate, SimulateResult, LoadRun, ApplyLanguage };
 struct WorkspaceCommand
 {
     WorkspaceAction action;
@@ -11,6 +12,8 @@ struct WorkspaceCommand
     simforge::analysis::Objective objective{simforge::analysis::Objective::MaximizeCompleted};
     std::optional<std::uint64_t> tick;
     bool discard{false};
+    std::optional<simforge::scenario::language::Proposal> proposal;
+    bool approved{false};
 };
 struct WorkspaceUI
 {
@@ -30,6 +33,8 @@ struct WorkspaceUI
     glm::vec2 export_field{}, export_json{}, export_csv{};
     double results_ui_us{0}; std::uint64_t results_frames{0};
     bool analysis_page{false};
+    LanguageUI language;
+    glm::vec2 describe{};
     bool dialog_used{false};
     int requested_tab{-1};
     int current_tab{0};

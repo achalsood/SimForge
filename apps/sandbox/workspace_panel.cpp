@@ -23,6 +23,9 @@ void apply_workspace(workspace::ScenarioWorkspace& w, const WorkspaceCommand& c)
     case WorkspaceAction::SimulateCandidate: w.simulate_candidate(c.id); break;
     case WorkspaceAction::SimulateResult: w.simulate_result(c.text); break;
     case WorkspaceAction::LoadRun: (void)w.create_run(scenario::load_scenario(std::filesystem::u8path(c.text))); break;
+    case WorkspaceAction::ApplyLanguage:
+        if(!c.proposal) throw std::invalid_argument("Missing reviewed proposal");
+        w.apply_language_proposal(*c.proposal,c.approved);break;
     case WorkspaceAction::Add: w.add_candidate(c.notes); break;
     case WorkspaceAction::Edit: w.edit_candidate(c.id,c.discard); break;
     case WorkspaceAction::Update: w.update_candidate(c.id,c.notes); break;
@@ -196,6 +199,8 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
         };
         if(tab("Edit",0))
         {
+            if(ImGui::Button("Describe Your Warehouse",{-1,36*s})) ui.language.open_requested=true;
+            ui.describe=center();scroll(19);
             ImGui::TextWrapped("Draft inputs are separate from the active warehouse. Add an alternative, then compare it against the loaded baseline.");
             if(w.dirty()) ImGui::TextColored({viewer::design::waiting.x,viewer::design::waiting.y,viewer::design::waiting.z,1},"UNSAVED CHANGES");
             const auto field=[&](std::size_t i)

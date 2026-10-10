@@ -207,6 +207,10 @@ if(SIMFORGE_BUILD_RENDERER)
                 -File ${PROJECT_SOURCE_DIR}/scripts/run-graphics-test.ps1 -Executable $<TARGET_FILE:simforge_sandbox>
                 -Scenario ${PROJECT_SOURCE_DIR}/examples/warehouse-baseline.json -Live -ProjectRoundTrip -ArtifactRoot ${SIMFORGE_ARTIFACT_ROOT})
             set_tests_properties(simforge_project_graphics PROPERTIES LABELS graphics TIMEOUT 80 RUN_SERIAL TRUE)
+            add_test(NAME simforge_language_graphics COMMAND ${SIMFORGE_POWERSHELL} -NoProfile -ExecutionPolicy Bypass
+                -File ${PROJECT_SOURCE_DIR}/scripts/run-graphics-test.ps1 -Executable $<TARGET_FILE:simforge_sandbox>
+                -Scenario ${PROJECT_SOURCE_DIR}/examples/warehouse-baseline.json -Live -Language -ArtifactRoot ${SIMFORGE_ARTIFACT_ROOT})
+            set_tests_properties(simforge_language_graphics PROPERTIES LABELS graphics TIMEOUT 100 RUN_SERIAL TRUE)
         endif()
         add_graphics_case(simforge_live_graphics ${PROJECT_SOURCE_DIR}/examples/warehouse-baseline.json live)
         add_graphics_case(simforge_custom_live_graphics ${PROJECT_SOURCE_DIR}/examples/warehouse-higher-capacity.json live)
@@ -285,6 +289,17 @@ target_link_libraries(simforge_project_test PRIVATE simforge_workspace nlohmann_
 foreach(case subtick failure_worker recovery_failure report_values report_definitions future_commands duplicate_runs run_count strings nested camera_invalid roundtrip identity new save_as draft invalid_draft candidates settings dirty runs equivalence clock seek_reset completed commands camera limit report checkpoint historical preview async failure_write recovery paths version truncated corrupt oversized types missing duplicate snapshot inconsistent_clock enum provenance engine isolation)
     add_test(NAME simforge_project_${case} COMMAND simforge_project_test ${case})
 endforeach()
+
+add_executable(simforge_scenario_language_test scenario_language_test.cpp)
+target_link_libraries(simforge_scenario_language_test PRIVATE simforge_workspace)
+target_compile_definitions(simforge_scenario_language_test PRIVATE SIMFORGE_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+foreach(case defaults diagnostic_limits compatibility tokens numbers actions rates precision review typed invalid_ir units conflicts unsupported ambiguous bounds ranges source_invalid create modify approval isolation dirty stale epoch determinism pipeline persistence)
+    add_test(NAME simforge_language_${case} COMMAND simforge_scenario_language_test ${case})
+endforeach()
+add_executable(simforge_scenario_language_eval scenario_language_eval.cpp)
+target_link_libraries(simforge_scenario_language_eval PRIVATE simforge_scenario_language nlohmann_json::nlohmann_json)
+target_compile_definitions(simforge_scenario_language_eval PRIVATE SIMFORGE_LANGUAGE_CORPUS="${PROJECT_SOURCE_DIR}/tests/fixtures/scenario-language")
+add_test(NAME simforge_language_corpus COMMAND simforge_scenario_language_eval)
 
 # Tool executables retain full Debug symbols, but do not need incremental-link databases.
 if(MSVC)

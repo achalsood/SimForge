@@ -34,6 +34,15 @@ target_include_directories(simforge_engine
         ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
+add_library(simforge_scenario_language STATIC src/scenario/language_numeric.cpp src/scenario/language_recognition.cpp src/scenario/language_application.cpp)
+target_link_libraries(simforge_scenario_language PUBLIC simforge_engine)
+target_compile_features(simforge_scenario_language PUBLIC cxx_std_23)
+if(MSVC)
+    target_compile_options(simforge_scenario_language PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(simforge_scenario_language PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
 add_library(simforge_analysis STATIC src/analysis/comparison.cpp src/analysis/experiment_json.cpp src/analysis/report_export.cpp)
 target_link_libraries(simforge_analysis PUBLIC simforge_engine PRIVATE nlohmann_json::nlohmann_json)
 target_compile_features(simforge_analysis PUBLIC cxx_std_23)
@@ -59,7 +68,7 @@ add_library(simforge_viewer STATIC src/viewer/viewer.cpp src/viewer/presentation
 target_link_libraries(simforge_viewer PUBLIC simforge_visualization)
 target_compile_features(simforge_viewer PUBLIC cxx_std_23)
 add_library(simforge_workspace STATIC src/workspace/scenario_workspace.cpp src/workspace/experiment_execution.cpp src/workspace/presentation.cpp src/workspace/project.cpp)
-target_link_libraries(simforge_workspace PUBLIC simforge_viewer simforge_analysis PRIVATE nlohmann_json::nlohmann_json)
+target_link_libraries(simforge_workspace PUBLIC simforge_viewer simforge_analysis simforge_scenario_language PRIVATE nlohmann_json::nlohmann_json)
 target_compile_features(simforge_workspace PUBLIC cxx_std_23)
 if(MSVC)
     target_compile_options(simforge_workspace PRIVATE /W4 /permissive-)

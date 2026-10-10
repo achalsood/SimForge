@@ -41,6 +41,7 @@ void restore_ui(const workspace::ProjectPreferences& p,DashboardState& d,Workspa
     e.editing=p.selected_candidate;e.mode=static_cast<int>(p.comparison_mode);e.objective=static_cast<int>(p.objective);
     e.current_checkpoint=p.current_checkpoint;e.checkpoint_seconds=p.checkpoint_seconds;e.notes=p.notes;e.result_name=p.result_name;
     e.current_tab=p.editor_tab;e.requested_tab=p.application_mode==1?p.editor_tab:-1; e.pending.clear();e.confirmation.reset();e.error.clear();e.result_order.clear();
+    e.language={}; // Review state is temporary; reopened projects never reapply a proposal.
 }
 }
 void capture_project_preferences(workspace::Project& p,const DashboardState& d,const WorkspaceUI& e)

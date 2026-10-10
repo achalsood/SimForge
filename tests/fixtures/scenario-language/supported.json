@@ -1,0 +1,3212 @@
+{
+  "corpus_version": 1,
+  "scope": "Bounded documented English grammar; not broad-English accuracy",
+  "default_source": {
+    "schema_version": 1,
+    "name": "Warehouse Baseline",
+    "domain": "warehouse",
+    "simulation": {
+      "tick_rate": 60,
+      "duration_seconds": 28800,
+      "random_seed": 12345
+    },
+    "warehouse": {
+      "loading_bays": 3,
+      "workers": 10,
+      "forklifts": 2,
+      "shipment_interval_seconds": 300,
+      "processing_duration_seconds": 900
+    }
+  },
+  "examples": [
+    {
+      "id": "create_example",
+      "text": "Create a warehouse with 4 loading bays, 12 workers and 3 forklifts. Shipments arrive every 5 minutes and take 15 minutes to process. Run the simulation for 8 hours.",
+      "mode": "create",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "loading_bays",
+          "action": "set",
+          "value": [
+            4,
+            1
+          ],
+          "unit": "count",
+          "source_text": "4 loading bays",
+          "pattern": "capacity_phrase"
+        },
+        {
+          "field": "workers",
+          "action": "set",
+          "value": [
+            12,
+            1
+          ],
+          "unit": "count",
+          "source_text": "12 workers",
+          "pattern": "capacity_phrase"
+        },
+        {
+          "field": "forklifts",
+          "action": "set",
+          "value": [
+            3,
+            1
+          ],
+          "unit": "count",
+          "source_text": "3 forklifts",
+          "pattern": "capacity_phrase"
+        },
+        {
+          "field": "arrival_interval",
+          "action": "set",
+          "value": [
+            5,
+            1
+          ],
+          "unit": "minutes",
+          "source_text": "Shipments arrive every 5 minutes",
+          "pattern": "arrival_interval_phrase"
+        },
+        {
+          "field": "processing_duration",
+          "action": "set",
+          "value": [
+            15,
+            1
+          ],
+          "unit": "minutes",
+          "source_text": "take 15 minutes to process",
+          "pattern": "processing_phrase"
+        },
+        {
+          "field": "simulation_duration",
+          "action": "set",
+          "value": [
+            8,
+            1
+          ],
+          "unit": "hours",
+          "source_text": "Run the simulation for 8 hours",
+          "pattern": "horizon_phrase"
+        }
+      ],
+      "expected_fields": {
+        "loading_bays": 4,
+        "workers": 12,
+        "forklifts": 3
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "create_explicit",
+      "text": "Create a warehouse with 4 loading bays, 12 workers and 3 forklifts. Shipments arrive every 5 minutes. Processing takes 15 minutes. Run the simulation for 8 hours.",
+      "mode": "create",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "loading_bays",
+          "action": "set",
+          "value": [
+            4,
+            1
+          ],
+          "unit": "count",
+          "source_text": "4 loading bays",
+          "pattern": "capacity_phrase"
+        },
+        {
+          "field": "workers",
+          "action": "set",
+          "value": [
+            12,
+            1
+          ],
+          "unit": "count",
+          "source_text": "12 workers",
+          "pattern": "capacity_phrase"
+        },
+        {
+          "field": "forklifts",
+          "action": "set",
+          "value": [
+            3,
+            1
+          ],
+          "unit": "count",
+          "source_text": "3 forklifts",
+          "pattern": "capacity_phrase"
+        },
+        {
+          "field": "arrival_interval",
+          "action": "set",
+          "value": [
+            5,
+            1
+          ],
+          "unit": "minutes",
+          "source_text": "Shipments arrive every 5 minutes",
+          "pattern": "arrival_interval_phrase"
+        },
+        {
+          "field": "processing_duration",
+          "action": "set",
+          "value": [
+            15,
+            1
+          ],
+          "unit": "minutes",
+          "source_text": "Processing takes 15 minutes",
+          "pattern": "processing_phrase"
+        },
+        {
+          "field": "simulation_duration",
+          "action": "set",
+          "value": [
+            8,
+            1
+          ],
+          "unit": "hours",
+          "source_text": "Run the simulation for 8 hours",
+          "pattern": "horizon_phrase"
+        }
+      ],
+      "expected_fields": {
+        "loading_bays": 4,
+        "workers": 12,
+        "forklifts": 3
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "walkthrough_a",
+      "text": "Create a warehouse with 4 loading bays, 12 workers, 3 forklifts, arrivals every 5 minutes, processing time of 15 minutes, and an 8-hour shift.",
+      "mode": "create",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "loading_bays",
+          "action": "set",
+          "value": [
+            4,
+            1
+          ],
+          "unit": "count",
+          "source_text": "4 loading bays",
+          "pattern": "capacity_phrase"
+        },
+        {
+          "field": "workers",
+          "action": "set",
+          "value": [
+            12,
+            1
+          ],
+          "unit": "count",
+          "source_text": "12 workers",
+          "pattern": "capacity_phrase"
+        },
+        {
+          "field": "forklifts",
+          "action": "set",
+          "value": [
+            3,
+            1
+          ],
+          "unit": "count",
+          "source_text": "3 forklifts",
+          "pattern": "capacity_phrase"
+        },
+        {
+          "field": "arrival_interval",
+          "action": "set",
+          "value": [
+            5,
+            1
+          ],
+          "unit": "minutes",
+          "source_text": "arrivals every 5 minutes",
+          "pattern": "arrival_interval_phrase"
+        },
+        {
+          "field": "processing_duration",
+          "action": "set",
+          "value": [
+            15,
+            1
+          ],
+          "unit": "minutes",
+          "source_text": "processing time of 15 minutes",
+          "pattern": "processing_phrase"
+        },
+        {
+          "field": "simulation_duration",
+          "action": "set",
+          "value": [
+            8,
+            1
+          ],
+          "unit": "hours",
+          "source_text": "an 8-hour shift",
+          "pattern": "horizon_phrase"
+        }
+      ],
+      "expected_fields": {
+        "loading_bays": 4,
+        "workers": 12,
+        "forklifts": 3
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "walkthrough_b",
+      "text": "Add two forklifts and reduce processing duration by 20%.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "forklifts",
+          "action": "add",
+          "value": [
+            2,
+            1
+          ],
+          "unit": "count",
+          "source_text": "Add two forklifts",
+          "pattern": "relative_change"
+        },
+        {
+          "field": "processing_duration",
+          "action": "decrease_percent",
+          "value": [
+            20,
+            1
+          ],
+          "unit": "percent",
+          "source_text": "reduce processing duration by 20%",
+          "pattern": "relative_change"
+        }
+      ],
+      "expected_fields": {
+        "forklifts": 4,
+        "processing_duration": 720
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "retain_rest",
+      "text": "Add two forklifts, reduce processing time by 20%, and keep everything else unchanged.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "forklifts",
+          "action": "add",
+          "value": [
+            2,
+            1
+          ],
+          "unit": "count",
+          "source_text": "Add two forklifts",
+          "pattern": "relative_change"
+        },
+        {
+          "field": "processing_duration",
+          "action": "decrease_percent",
+          "value": [
+            20,
+            1
+          ],
+          "unit": "percent",
+          "source_text": "reduce processing time by 20%",
+          "pattern": "relative_change"
+        }
+      ],
+      "expected_fields": {
+        "forklifts": 4,
+        "processing_duration": 720
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "bays",
+      "text": "4 loading bays",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "loading_bays",
+          "action": "set",
+          "value": [
+            4,
+            1
+          ],
+          "unit": "count",
+          "source_text": "4 loading bays",
+          "pattern": "capacity_phrase"
+        }
+      ],
+      "expected_fields": {
+        "loading_bays": 4
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "workers",
+      "text": "set workers to 12",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "workers",
+          "action": "set",
+          "value": [
+            12,
+            1
+          ],
+          "unit": "count",
+          "source_text": "set workers to 12",
+          "pattern": "capacity_phrase"
+        }
+      ],
+      "expected_fields": {
+        "workers": 12
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "forklifts",
+      "text": "use three forklifts",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "forklifts",
+          "action": "set",
+          "value": [
+            3,
+            1
+          ],
+          "unit": "count",
+          "source_text": "use three forklifts",
+          "pattern": "capacity_phrase"
+        }
+      ],
+      "expected_fields": {
+        "forklifts": 3
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "docks",
+      "text": "Please use four docks.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "loading_bays",
+          "action": "set",
+          "value": [
+            4,
+            1
+          ],
+          "unit": "count",
+          "source_text": "use four docks",
+          "pattern": "capacity_phrase"
+        }
+      ],
+      "expected_fields": {
+        "loading_bays": 4
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "staff",
+      "text": "I need twenty staff.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "workers",
+          "action": "set",
+          "value": [
+            20,
+            1
+          ],
+          "unit": "count",
+          "source_text": "twenty staff",
+          "pattern": "capacity_phrase"
+        }
+      ],
+      "expected_fields": {
+        "workers": 20
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "lift_trucks",
+      "text": "We need five lift trucks.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "forklifts",
+          "action": "set",
+          "value": [
+            5,
+            1
+          ],
+          "unit": "count",
+          "source_text": "five lift trucks",
+          "pattern": "capacity_phrase"
+        }
+      ],
+      "expected_fields": {
+        "forklifts": 5
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "singular",
+      "text": "Use one loading bay",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "loading_bays",
+          "action": "set",
+          "value": [
+            1,
+            1
+          ],
+          "unit": "count",
+          "source_text": "Use one loading bay",
+          "pattern": "capacity_phrase"
+        }
+      ],
+      "expected_fields": {
+        "loading_bays": 1
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "compound_word",
+      "text": "Use twenty-five workers",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "workers",
+          "action": "set",
+          "value": [
+            25,
+            1
+          ],
+          "unit": "count",
+          "source_text": "Use twenty-five workers",
+          "pattern": "capacity_phrase"
+        }
+      ],
+      "expected_fields": {
+        "workers": 25
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "compound_space",
+      "text": "Use thirty two workers",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "workers",
+          "action": "set",
+          "value": [
+            32,
+            1
+          ],
+          "unit": "count",
+          "source_text": "Use thirty two workers",
+          "pattern": "capacity_phrase"
+        }
+      ],
+      "expected_fields": {
+        "workers": 32
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "hundred",
+      "text": "Set staff to one hundred twenty five",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "workers",
+          "action": "set",
+          "value": [
+            125,
+            1
+          ],
+          "unit": "count",
+          "source_text": "Set staff to one hundred twenty five",
+          "pattern": "capacity_phrase"
+        }
+      ],
+      "expected_fields": {
+        "workers": 125
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "zero",
+      "text": "Use zero workers",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "workers",
+          "action": "set",
+          "value": [
+            0,
+            1
+          ],
+          "unit": "count",
+          "source_text": "Use zero workers",
+          "pattern": "capacity_phrase"
+        }
+      ],
+      "expected_fields": {
+        "workers": 0
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "decimal_integer",
+      "text": "Use 3.0 forklifts",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "forklifts",
+          "action": "set",
+          "value": [
+            3,
+            1
+          ],
+          "unit": "count",
+          "source_text": "Use 3.0 forklifts",
+          "pattern": "capacity_phrase"
+        }
+      ],
+      "expected_fields": {
+        "forklifts": 3
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "absolute_not_add",
+      "text": "Use five forklifts",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "forklifts",
+          "action": "set",
+          "value": [
+            5,
+            1
+          ],
+          "unit": "count",
+          "source_text": "Use five forklifts",
+          "pattern": "capacity_phrase"
+        }
+      ],
+      "expected_fields": {
+        "forklifts": 5
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "add",
+      "text": "add two forklifts",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "forklifts",
+          "action": "add",
+          "value": [
+            2,
+            1
+          ],
+          "unit": "count",
+          "source_text": "add two forklifts",
+          "pattern": "relative_change"
+        }
+      ],
+      "expected_fields": {
+        "forklifts": 4
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "add_not_set",
+      "text": "Add five forklifts",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "forklifts",
+          "action": "add",
+          "value": [
+            5,
+            1
+          ],
+          "unit": "count",
+          "source_text": "Add five forklifts",
+          "pattern": "relative_change"
+        }
+      ],
+      "expected_fields": {
+        "forklifts": 7
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "remove",
+      "text": "remove one worker",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "workers",
+          "action": "subtract",
+          "value": [
+            1,
+            1
+          ],
+          "unit": "count",
+          "source_text": "remove one worker",
+          "pattern": "relative_change"
+        }
+      ],
+      "expected_fields": {
+        "workers": 9
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "increase",
+      "text": "increase loading bays by 3",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "loading_bays",
+          "action": "add",
+          "value": [
+            3,
+            1
+          ],
+          "unit": "count",
+          "source_text": "increase loading bays by 3",
+          "pattern": "relative_change"
+        }
+      ],
+      "expected_fields": {
+        "loading_bays": 6
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "decrease",
+      "text": "decrease forklifts by one",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "forklifts",
+          "action": "subtract",
+          "value": [
+            1,
+            1
+          ],
+          "unit": "count",
+          "source_text": "decrease forklifts by one",
+          "pattern": "relative_change"
+        }
+      ],
+      "expected_fields": {
+        "forklifts": 1
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "double_workers",
+      "text": "double the number of workers",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "workers",
+          "action": "multiply",
+          "value": [
+            2,
+            1
+          ],
+          "unit": "factor",
+          "source_text": "double the number of workers",
+          "pattern": "relative_change"
+        }
+      ],
+      "expected_fields": {
+        "workers": 20
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "halve_forklifts",
+      "text": "halve the forklift capacity",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "forklifts",
+          "action": "divide",
+          "value": [
+            2,
+            1
+          ],
+          "unit": "factor",
+          "source_text": "halve the forklift capacity",
+          "pattern": "relative_change"
+        }
+      ],
+      "expected_fields": {
+        "forklifts": 1
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "percent_workers",
+      "text": "increase workers by 25%",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 12,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "workers",
+          "action": "increase_percent",
+          "value": [
+            25,
+            1
+          ],
+          "unit": "percent",
+          "source_text": "increase workers by 25%",
+          "pattern": "relative_change"
+        }
+      ],
+      "expected_fields": {
+        "workers": 15
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "percent_forklifts",
+      "text": "reduce forklift count by 20%",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 5,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "forklifts",
+          "action": "decrease_percent",
+          "value": [
+            20,
+            1
+          ],
+          "unit": "percent",
+          "source_text": "reduce forklift count by 20%",
+          "pattern": "relative_change"
+        }
+      ],
+      "expected_fields": {
+        "forklifts": 4
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "percent_word",
+      "text": "increase workers by 50 percent",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "workers",
+          "action": "increase_percent",
+          "value": [
+            50,
+            1
+          ],
+          "unit": "percent",
+          "source_text": "increase workers by 50 percent",
+          "pattern": "relative_change"
+        }
+      ],
+      "expected_fields": {
+        "workers": 15
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "zero_percent",
+      "text": "increase workers by 0%",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "workers",
+          "action": "increase_percent",
+          "value": [
+            0,
+            1
+          ],
+          "unit": "percent",
+          "source_text": "increase workers by 0%",
+          "pattern": "relative_change"
+        }
+      ],
+      "expected_fields": {
+        "workers": 10
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "remove_all",
+      "text": "reduce workers by 100%",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "workers",
+          "action": "decrease_percent",
+          "value": [
+            100,
+            1
+          ],
+          "unit": "percent",
+          "source_text": "reduce workers by 100%",
+          "pattern": "relative_change"
+        }
+      ],
+      "expected_fields": {
+        "workers": 0
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "multiply_factor",
+      "text": "multiply workers by 1.5",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "workers",
+          "action": "multiply",
+          "value": [
+            3,
+            2
+          ],
+          "unit": "factor",
+          "source_text": "multiply workers by 1.5",
+          "pattern": "relative_change"
+        }
+      ],
+      "expected_fields": {
+        "workers": 15
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "divide_factor",
+      "text": "divide forklifts by 2",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "forklifts",
+          "action": "divide",
+          "value": [
+            2,
+            1
+          ],
+          "unit": "factor",
+          "source_text": "divide forklifts by 2",
+          "pattern": "relative_change"
+        }
+      ],
+      "expected_fields": {
+        "forklifts": 1
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "every5",
+      "text": "Shipments arrive every 5 minutes.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "arrival_interval",
+          "action": "set",
+          "value": [
+            5,
+            1
+          ],
+          "unit": "minutes",
+          "source_text": "Shipments arrive every 5 minutes",
+          "pattern": "arrival_interval_phrase"
+        }
+      ],
+      "expected_fields": {
+        "arrival_interval": 300
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "every10",
+      "text": "A shipment arrives every 10 minutes.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "arrival_interval",
+          "action": "set",
+          "value": [
+            10,
+            1
+          ],
+          "unit": "minutes",
+          "source_text": "A shipment arrives every 10 minutes",
+          "pattern": "arrival_interval_phrase"
+        }
+      ],
+      "expected_fields": {
+        "arrival_interval": 600
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "every30",
+      "text": "One shipment every 30 seconds.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "arrival_interval",
+          "action": "set",
+          "value": [
+            30,
+            1
+          ],
+          "unit": "seconds",
+          "source_text": "One shipment every 30 seconds",
+          "pattern": "arrival_interval_phrase"
+        }
+      ],
+      "expected_fields": {
+        "arrival_interval": 30
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "per12",
+      "text": "12 shipments per hour.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "arrival_rate",
+          "action": "set",
+          "value": [
+            12,
+            1
+          ],
+          "unit": "per_hour",
+          "source_text": "12 shipments per hour",
+          "pattern": "arrival_rate_phrase"
+        }
+      ],
+      "expected_fields": {
+        "arrival_interval": 300
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "per3",
+      "text": "Three shipments an hour.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "arrival_rate",
+          "action": "set",
+          "value": [
+            3,
+            1
+          ],
+          "unit": "per_hour",
+          "source_text": "Three shipments an hour",
+          "pattern": "arrival_rate_phrase"
+        }
+      ],
+      "expected_fields": {
+        "arrival_interval": 1200
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "per_decimal",
+      "text": "1.5 shipments per minute",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "arrival_rate",
+          "action": "set",
+          "value": [
+            3,
+            2
+          ],
+          "unit": "per_minute",
+          "source_text": "1.5 shipments per minute",
+          "pattern": "arrival_rate_phrase"
+        }
+      ],
+      "expected_fields": {
+        "arrival_interval": 40
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "per_seconds",
+      "text": "0.5 shipments per second",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "arrival_rate",
+          "action": "set",
+          "value": [
+            1,
+            2
+          ],
+          "unit": "per_second",
+          "source_text": "0.5 shipments per second",
+          "pattern": "arrival_rate_phrase"
+        }
+      ],
+      "expected_fields": {
+        "arrival_interval": 2
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "double_rate",
+      "text": "Double the arrival rate.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "arrival_rate",
+          "action": "multiply",
+          "value": [
+            2,
+            1
+          ],
+          "unit": "factor",
+          "source_text": "Double the arrival rate",
+          "pattern": "relative_change"
+        }
+      ],
+      "expected_fields": {
+        "arrival_interval": 150
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "reduce_rate",
+      "text": "Reduce the arrival rate by 50%.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "arrival_rate",
+          "action": "decrease_percent",
+          "value": [
+            50,
+            1
+          ],
+          "unit": "percent",
+          "source_text": "Reduce the arrival rate by 50%",
+          "pattern": "relative_change"
+        }
+      ],
+      "expected_fields": {
+        "arrival_interval": 600
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "frequently",
+      "text": "Make shipments arrive twice as frequently.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "arrival_rate",
+          "action": "multiply",
+          "value": [
+            2,
+            1
+          ],
+          "unit": "factor",
+          "source_text": "Make shipments arrive twice as frequently",
+          "pattern": "relative_change"
+        }
+      ],
+      "expected_fields": {
+        "arrival_interval": 150
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "often",
+      "text": "Make shipments arrive twice as often",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "arrival_rate",
+          "action": "multiply",
+          "value": [
+            2,
+            1
+          ],
+          "unit": "factor",
+          "source_text": "Make shipments arrive twice as often",
+          "pattern": "relative_change"
+        }
+      ],
+      "expected_fields": {
+        "arrival_interval": 150
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "halve_rate",
+      "text": "Halve the arrival rate",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "arrival_rate",
+          "action": "divide",
+          "value": [
+            2,
+            1
+          ],
+          "unit": "factor",
+          "source_text": "Halve the arrival rate",
+          "pattern": "relative_change"
+        }
+      ],
+      "expected_fields": {
+        "arrival_interval": 600
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "double_interval",
+      "text": "Double the arrival interval",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "arrival_interval",
+          "action": "multiply",
+          "value": [
+            2,
+            1
+          ],
+          "unit": "factor",
+          "source_text": "Double the arrival interval",
+          "pattern": "relative_change"
+        }
+      ],
+      "expected_fields": {
+        "arrival_interval": 600
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "halve_interval",
+      "text": "Halve the interval between shipments",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "arrival_interval",
+          "action": "divide",
+          "value": [
+            2,
+            1
+          ],
+          "unit": "factor",
+          "source_text": "Halve the interval between shipments",
+          "pattern": "relative_change"
+        }
+      ],
+      "expected_fields": {
+        "arrival_interval": 150
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "rate_percent25",
+      "text": "Increase arrival rate by 25%",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "arrival_rate",
+          "action": "increase_percent",
+          "value": [
+            25,
+            1
+          ],
+          "unit": "percent",
+          "source_text": "Increase arrival rate by 25%",
+          "pattern": "relative_change"
+        }
+      ],
+      "expected_fields": {
+        "arrival_interval": 240
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "rate_minus25",
+      "text": "Reduce arrival rate by 25%",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "arrival_rate",
+          "action": "decrease_percent",
+          "value": [
+            25,
+            1
+          ],
+          "unit": "percent",
+          "source_text": "Reduce arrival rate by 25%",
+          "pattern": "relative_change"
+        }
+      ],
+      "expected_fields": {
+        "arrival_interval": 400
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "rate_add",
+      "text": "Increase arrival rate by 12 shipments per hour",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "arrival_rate",
+          "action": "add",
+          "value": [
+            12,
+            1
+          ],
+          "unit": "per_hour",
+          "source_text": "Increase arrival rate by 12 shipments per hour",
+          "pattern": "relative_change"
+        }
+      ],
+      "expected_fields": {
+        "arrival_interval": 150
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "arrival_interval_explicit",
+      "text": "Set arrival interval to 2 min",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "arrival_interval",
+          "action": "set",
+          "value": [
+            2,
+            1
+          ],
+          "unit": "minutes",
+          "source_text": "Set arrival interval to 2 min",
+          "pattern": "arrival_interval_phrase"
+        }
+      ],
+      "expected_fields": {
+        "arrival_interval": 120
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "processing15",
+      "text": "Processing takes 15 minutes.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "processing_duration",
+          "action": "set",
+          "value": [
+            15,
+            1
+          ],
+          "unit": "minutes",
+          "source_text": "Processing takes 15 minutes",
+          "pattern": "processing_phrase"
+        }
+      ],
+      "expected_fields": {
+        "processing_duration": 900
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "processing_requires",
+      "text": "Each shipment requires 20 minutes to process.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "processing_duration",
+          "action": "set",
+          "value": [
+            20,
+            1
+          ],
+          "unit": "minutes",
+          "source_text": "Each shipment requires 20 minutes to process",
+          "pattern": "processing_phrase"
+        }
+      ],
+      "expected_fields": {
+        "processing_duration": 1200
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "processing_set",
+      "text": "Set processing duration to 10 minutes.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "processing_duration",
+          "action": "set",
+          "value": [
+            10,
+            1
+          ],
+          "unit": "minutes",
+          "source_text": "Set processing duration to 10 minutes",
+          "pattern": "processing_phrase"
+        }
+      ],
+      "expected_fields": {
+        "processing_duration": 600
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "processing_add",
+      "text": "Increase processing time by five minutes.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "processing_duration",
+          "action": "add",
+          "value": [
+            5,
+            1
+          ],
+          "unit": "minutes",
+          "source_text": "Increase processing time by five minutes",
+          "pattern": "relative_change"
+        }
+      ],
+      "expected_fields": {
+        "processing_duration": 1200
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "processing_reduce",
+      "text": "Reduce processing duration by 20%.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "processing_duration",
+          "action": "decrease_percent",
+          "value": [
+            20,
+            1
+          ],
+          "unit": "percent",
+          "source_text": "Reduce processing duration by 20%",
+          "pattern": "relative_change"
+        }
+      ],
+      "expected_fields": {
+        "processing_duration": 720
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "processing_double",
+      "text": "Double the processing time.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "processing_duration",
+          "action": "multiply",
+          "value": [
+            2,
+            1
+          ],
+          "unit": "factor",
+          "source_text": "Double the processing time",
+          "pattern": "relative_change"
+        }
+      ],
+      "expected_fields": {
+        "processing_duration": 1800
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "processing_halve",
+      "text": "Halve the processing duration.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "processing_duration",
+          "action": "divide",
+          "value": [
+            2,
+            1
+          ],
+          "unit": "factor",
+          "source_text": "Halve the processing duration",
+          "pattern": "relative_change"
+        }
+      ],
+      "expected_fields": {
+        "processing_duration": 450
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "run8",
+      "text": "Run for 8 hours.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "simulation_duration",
+          "action": "set",
+          "value": [
+            8,
+            1
+          ],
+          "unit": "hours",
+          "source_text": "Run for 8 hours",
+          "pattern": "horizon_phrase"
+        }
+      ],
+      "expected_fields": {
+        "simulation_duration": 28800
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "simulate12",
+      "text": "Simulate 12 hours.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "simulation_duration",
+          "action": "set",
+          "value": [
+            12,
+            1
+          ],
+          "unit": "hours",
+          "source_text": "Simulate 12 hours",
+          "pattern": "horizon_phrase"
+        }
+      ],
+      "expected_fields": {
+        "simulation_duration": 43200
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "horizon30",
+      "text": "Use a 30-minute simulation horizon.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "simulation_duration",
+          "action": "set",
+          "value": [
+            30,
+            1
+          ],
+          "unit": "minutes",
+          "source_text": "Use a 30-minute simulation horizon",
+          "pattern": "horizon_phrase"
+        }
+      ],
+      "expected_fields": {
+        "simulation_duration": 1800
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "extend",
+      "text": "Extend the simulation by two hours.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "simulation_duration",
+          "action": "add",
+          "value": [
+            2,
+            1
+          ],
+          "unit": "hours",
+          "source_text": "Extend the simulation by two hours",
+          "pattern": "relative_change"
+        }
+      ],
+      "expected_fields": {
+        "simulation_duration": 36000
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "reduce_duration",
+      "text": "Reduce the duration by one hour.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "simulation_duration",
+          "action": "subtract",
+          "value": [
+            1,
+            1
+          ],
+          "unit": "hours",
+          "source_text": "Reduce the duration by one hour",
+          "pattern": "relative_change"
+        }
+      ],
+      "expected_fields": {
+        "simulation_duration": 25200
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "decimal_hours",
+      "text": "Run for 1.5 hours",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "simulation_duration",
+          "action": "set",
+          "value": [
+            3,
+            2
+          ],
+          "unit": "hours",
+          "source_text": "Run for 1.5 hours",
+          "pattern": "horizon_phrase"
+        }
+      ],
+      "expected_fields": {
+        "simulation_duration": 5400
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "ninety_minutes",
+      "text": "Simulate 90 minutes",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "simulation_duration",
+          "action": "set",
+          "value": [
+            90,
+            1
+          ],
+          "unit": "minutes",
+          "source_text": "Simulate 90 minutes",
+          "pattern": "horizon_phrase"
+        }
+      ],
+      "expected_fields": {
+        "simulation_duration": 5400
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "abbreviation",
+      "text": "Processing takes 2 hrs",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "processing_duration",
+          "action": "set",
+          "value": [
+            2,
+            1
+          ],
+          "unit": "hours",
+          "source_text": "Processing takes 2 hrs",
+          "pattern": "processing_phrase"
+        }
+      ],
+      "expected_fields": {
+        "processing_duration": 7200
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "seconds_abbrev",
+      "text": "Set arrival interval to 10 secs",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "arrival_interval",
+          "action": "set",
+          "value": [
+            10,
+            1
+          ],
+          "unit": "seconds",
+          "source_text": "Set arrival interval to 10 secs",
+          "pattern": "arrival_interval_phrase"
+        }
+      ],
+      "expected_fields": {
+        "arrival_interval": 10
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "compound_minutes",
+      "text": "Processing takes twenty-one minutes",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "processing_duration",
+          "action": "set",
+          "value": [
+            21,
+            1
+          ],
+          "unit": "minutes",
+          "source_text": "Processing takes twenty-one minutes",
+          "pattern": "processing_phrase"
+        }
+      ],
+      "expected_fields": {
+        "processing_duration": 1260
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "tick_rate",
+      "text": "Set tick rate to 10 Hz",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "tick_rate",
+          "action": "set",
+          "value": [
+            10,
+            1
+          ],
+          "unit": "hz",
+          "source_text": "Set tick rate to 10 Hz",
+          "pattern": "tick_rate_phrase"
+        }
+      ],
+      "expected_fields": {
+        "tick_rate": 10
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "hz_short",
+      "text": "Use 60Hz",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "tick_rate",
+          "action": "set",
+          "value": [
+            60,
+            1
+          ],
+          "unit": "hz",
+          "source_text": "Use 60Hz",
+          "pattern": "tick_rate_phrase"
+        }
+      ],
+      "expected_fields": {},
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "seed_max",
+      "text": "Set random seed to 18446744073709551615",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "random_seed",
+          "action": "set",
+          "value": [
+            18446744073709551615,
+            1
+          ],
+          "unit": "integer",
+          "source_text": "Set random seed to 18446744073709551615",
+          "pattern": "seed_phrase"
+        }
+      ],
+      "expected_fields": {
+        "random_seed": 18446744073709551615
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "compound_settings",
+      "text": "Use four loading bays; add three workers; processing takes ten minutes.",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "loading_bays",
+          "action": "set",
+          "value": [
+            4,
+            1
+          ],
+          "unit": "count",
+          "source_text": "Use four loading bays",
+          "pattern": "capacity_phrase"
+        },
+        {
+          "field": "workers",
+          "action": "add",
+          "value": [
+            3,
+            1
+          ],
+          "unit": "count",
+          "source_text": "add three workers",
+          "pattern": "relative_change"
+        },
+        {
+          "field": "processing_duration",
+          "action": "set",
+          "value": [
+            10,
+            1
+          ],
+          "unit": "minutes",
+          "source_text": "processing takes ten minutes",
+          "pattern": "processing_phrase"
+        }
+      ],
+      "expected_fields": {
+        "loading_bays": 4,
+        "workers": 13,
+        "processing_duration": 600
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "capital_space",
+      "text": "  USE   THREE FORKLIFTS!\nSet workers to twenty. ",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 10,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "forklifts",
+          "action": "set",
+          "value": [
+            3,
+            1
+          ],
+          "unit": "count",
+          "source_text": "USE   THREE FORKLIFTS",
+          "pattern": "capacity_phrase"
+        },
+        {
+          "field": "workers",
+          "action": "set",
+          "value": [
+            20,
+            1
+          ],
+          "unit": "count",
+          "source_text": "Set workers to twenty",
+          "pattern": "capacity_phrase"
+        }
+      ],
+      "expected_fields": {
+        "forklifts": 3,
+        "workers": 20
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "create_inherits",
+      "text": "Use five forklifts",
+      "mode": "create",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 99,
+          "forklifts": 2,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 900
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "forklifts",
+          "action": "set",
+          "value": [
+            5,
+            1
+          ],
+          "unit": "count",
+          "source_text": "Use five forklifts",
+          "pattern": "capacity_phrase"
+        }
+      ],
+      "expected_fields": {
+        "forklifts": 5
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    },
+    {
+      "id": "source_relative",
+      "text": "Add two forklifts",
+      "mode": "modify",
+      "source": {
+        "schema_version": 1,
+        "name": "Warehouse Baseline",
+        "domain": "warehouse",
+        "simulation": {
+          "tick_rate": 60,
+          "duration_seconds": 28800,
+          "random_seed": 12345
+        },
+        "warehouse": {
+          "loading_bays": 3,
+          "workers": 16,
+          "forklifts": 7,
+          "shipment_interval_seconds": 300,
+          "processing_duration_seconds": 1200
+        }
+      },
+      "expected_operations": [
+        {
+          "field": "forklifts",
+          "action": "add",
+          "value": [
+            2,
+            1
+          ],
+          "unit": "count",
+          "source_text": "Add two forklifts",
+          "pattern": "relative_change"
+        }
+      ],
+      "expected_fields": {
+        "forklifts": 9
+      },
+      "expected_diagnostics": [],
+      "classification": "valid"
+    }
+  ]
+}
