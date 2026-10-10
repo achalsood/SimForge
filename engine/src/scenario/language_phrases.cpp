@@ -129,7 +129,7 @@ std::optional<Request> request(std::span<const Token> t,std::size_t at)
 {
     auto end=at;
     if(eat(t,end,{"get","rid","of"})||eat(t,end,{"take","away"})) return Request{Verb::Subtraction,end};
-    if(eat(t,end,{"put","in"})||eat(t,end,{"bring","in"})||eat(t,end,{"give","us"})) return Request{Verb::Assignment,end};
+    if(eat(t,end,{"put","in"})||eat(t,end,{"bring","in"})||eat(t,end,{"give","us"})||eat(t,end,{"give","me"})) return Request{Verb::Assignment,end};
     if(is(t,at,"get")||is(t,at,"hire")||is(t,at,"install")) return Request{Verb::Assignment,at+1};
     if(is(t,at,"add")||is(t,at,"increase")||is(t,at,"raise")) return Request{Verb::Addition,at+1};
     if(is(t,at,"remove")||is(t,at,"reduce")||is(t,at,"decrease")||is(t,at,"drop")||is(t,at,"cut")) return Request{Verb::Subtraction,at+1};

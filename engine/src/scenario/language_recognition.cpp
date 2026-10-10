@@ -112,12 +112,19 @@ std::size_t prefix(std::span<const Token> t)
 {
     std::size_t at=0;
     if(is(t,at,"please")) ++at;
-    if((is(t,at,"could")||is(t,at,"can")) && (is(t,at+1,"you")||is(t,at+1,"we"))) at+=2;
-    if(is(t,at,"i'd")&&is(t,at+1,"like")&&is(t,at+2,"to")) at+=3;
+    if((is(t,at,"could")||is(t,at,"can")) && (is(t,at+1,"you")||is(t,at+1,"we")||is(t,at+1,"i"))) at+=2;
+    bool desire=false;
+    if((is(t,at,"i'd")||is(t,at,"we'd"))&&is(t,at+1,"like")) {at+=2;desire=true;}
+    if((is(t,at,"i")||is(t,at,"we"))&&is(t,at+1,"would")&&is(t,at+2,"like")) {at+=3;desire=true;}
     if(is(t,at,"let's")) ++at;
     if(is(t,at,"we")&&is(t,at+1,"could")&&is(t,at+2,"use")) at+=3;
-    if((is(t,at,"i")&&(is(t,at+1,"need")||is(t,at+1,"want")))||(is(t,at,"we")&&is(t,at+1,"need"))) {
-        at+=2;if(is(t,at,"to")) ++at;
+    if((is(t,at,"i")||is(t,at,"we"))&&(is(t,at+1,"need")||is(t,at+1,"want"))) {
+        at+=2;desire=true;
+    }
+    if(desire) {
+        if(is(t,at,"you")&&is(t,at+1,"to")) at+=2;
+        else if(is(t,at,"to")) ++at;
+        if(is(t,at,"see")) ++at;
     }
     if(is(t,at,"please")) ++at;
     if(is(t,at,"create")||is(t,at,"build")) {
@@ -133,9 +140,14 @@ bool unchanged(std::span<const Token> t)
 bool uncertain(std::span<const Token> t)
 {
     constexpr std::array words{"not","no","never","without","except","if","unless","or","maybe","approximately","about","roughly","optimal","faster","less","pm","am","considered","discussed","decided","against","would","might"};
-    for(const auto& token:t) {
+    for(std::size_t i=0;i<t.size();++i) {
+        const auto& token=t[i];
         if(token.text.ends_with("n't")) return true;
-        for(const auto* word:words) if(token.text==word) return true;
+        // "I/we would like" is an explicit request wrapper, not a hypothetical.
+        // No other use of "would", nor any condition/negation, is exempted.
+        const auto first=is(t,0,"please")?std::size_t{1}:std::size_t{0};
+        const bool request_would=i==first+1&&(is(t,first,"i")||is(t,first,"we"))&&is(t,i+1,"like");
+        for(const auto* word:words) if(token.text==word && !(token.text=="would"&&request_would)) return true;
     }
     for(std::size_t i=0;i<t.size();++i) if(is(t,i,"more")) {
         bool quantified=false;
@@ -153,7 +165,13 @@ bool uncertain(std::span<const Token> t)
 void clause(std::string_view text,std::span<const Token> t,Recognition& result)
 {
     if(t.empty()||unchanged(t)||(t.size()==1&&is(t,0,"please"))) return;
-    if(is(t,t.size()-1,"please")) t=t.first(t.size()-1);
+    // Consume only complete courtesy suffixes. Meaningful trailing text still blocks.
+    for(bool shortened=true;shortened&&!t.empty();) {
+        const auto n=t.size();shortened=false;
+        if(is(t,n-1,"please")||is(t,n-1,"thanks")) {t=t.first(n-1);shortened=true;}
+        else if(n>=2&&((is(t,n-2,"thank")&&is(t,n-1,"you"))||
+            (is(t,n-2,"for")&&(is(t,n-1,"me")||is(t,n-1,"us"))))) {t=t.first(n-2);shortened=true;}
+    }
     if(t.empty()) return;
     const auto whole=span(t,0,t.size());
     if(uncertain(t)) {

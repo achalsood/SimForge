@@ -4,6 +4,55 @@ SimForge interprets a bounded English grammar on the CPU. It produces a reviewab
 configuration; simulation results come from the existing warehouse engine. There
 is no model, hosted inference, network request, Python runtime, or new dependency.
 
+## Expanded everyday-request coverage (2026-10-10)
+
+The additional CPU-only coverage suite tests **3,609 prompts** through the real
+interpreter: **3,417 exact positive cases and 192 required rejections**. It combines
+22 request wrappers, nine resource aliases, numeric/word/hyphenated quantities,
+addition versus absolute counts, removal, multipliers, percentages, duration and
+frequency changes, punctuation, compound clauses, and edited Modify sources.
+These are deterministic development regression combinations, not a claim of
+accuracy on arbitrary English or independently sampled human prompts.
+
+`I want to see 10 more bays` now emits **Add 10 loading bays**. On the bundled
+three-bay baseline it proposes **13 bays**, preserving all other values; on an
+edited seven-bay Modify source it proposes **17 bays**. `I want to see 10 bays`
+sets an absolute capacity. Interpretation still requires review and approval before
+Apply and never directly changes an active warehouse.
+
+New request forms include `I'd like ten extra docks`, `We'd like to see ten more
+bays`, `I would like you to add ten bays`, `Can I have ten more bays`, and
+`Can you give me another two loading bays`. Optional `to` and `you to` are scoped
+to explicit desire wrappers; `see` is consumed only inside such a wrapper. Bare
+inspection requests such as `Show me ten bays` remain unsupported. Only anchored
+`I/we would like` exempts `would` from the hypothetical guard. Negation, conditions,
+other uses of `would`, vague quantities, conflicts and unsupported trailing material
+continue to block the complete proposal. Exact courtesy endings (`for me`, `for us`,
+`please`, `thanks`, `thank you`) may be consumed without dropping meaningful text.
+
+| New test group | Cases | Result |
+| --- | ---: | --- |
+| Request wrappers, aliases and quantities | 3,171 | Exact operations and complete scenarios match |
+| Arithmetic, contrasts and edited sources | 199 | Exact operations and complete scenarios match |
+| Durations and arrival frequency | 35 | Exact operations and complete scenarios match |
+| Compound clauses and source ownership | 12 | Exact operations, scenarios and nonoverlapping spans match |
+| Ambiguous, negated, unsupported or invalid requests | 192 | All rejected; zero unsafe acceptances |
+
+All **47 CPU language CTest cases** pass in Windows Debug, Release and the
+renderer-disabled configuration. The original 134-case strict corpus remains
+134/134 exact matches; development remains 119/119 positives and 55/55 rejections.
+The unchanged frozen holdout scores **24/28 exact positives, 20/20 rejections**,
+with zero unsafe acceptances or accepted silent omissions. Its four safe misses
+remain measured misses; neither its text nor expectations were changed to improve
+results, and new rules were developed from the user's example and the new suite.
+
+Run `ctest --test-dir build/windows-release -R simforge_language -LE graphics
+--output-on-failure`. The five `simforge_language_coverage_*` cases run the new
+suite. Individual groups can also be run with
+`build/windows-release/tests/simforge_scenario_language_coverage_test.exe requests`
+(or `operations`, `timing`, `compound`, `rejections`). The existing frozen datasets
+and approval, correction, stale-source and unchanged-runtime tests remain intact.
+
 ## Commit 23: conversational interpretation
 
 All six user-reported failures were reproduced through the real interpreter API

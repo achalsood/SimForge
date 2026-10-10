@@ -312,6 +312,11 @@ endforeach()
 add_test(NAME simforge_language_development COMMAND simforge_scenario_language_eval ${PROJECT_SOURCE_DIR}/tests/fixtures/scenario-language/development/corpus.json)
 add_test(NAME simforge_language_holdout COMMAND simforge_scenario_language_eval ${PROJECT_SOURCE_DIR}/tests/fixtures/scenario-language/holdout/corpus.json --holdout)
 
+add_executable(simforge_scenario_language_coverage_test scenario_language_coverage_test.cpp)
+target_link_libraries(simforge_scenario_language_coverage_test PRIVATE simforge_scenario_language)
+foreach(case requests operations timing compound rejections)
+    add_test(NAME simforge_language_coverage_${case} COMMAND simforge_scenario_language_coverage_test ${case})
+endforeach()
 # Tool executables retain full Debug symbols, but do not need incremental-link databases.
 if(MSVC)
     get_property(tool_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
