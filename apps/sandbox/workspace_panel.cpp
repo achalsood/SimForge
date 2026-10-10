@@ -179,6 +179,13 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
         ImGui::TextColored({viewer::design::error.x,viewer::design::error.y,viewer::design::error.z,1},"Action failed: %s",ui.error.c_str());
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s",ui.error.c_str());
     }
+    if(!ui.analysis_page && (w.draft().workload.arrivals!=scenario::ArrivalMode::Constant || w.draft().workload.processing!=scenario::ProcessingMode::Constant)) {
+        ImGui::BeginDisabled(w.runs().size()>=workspace::max_custom_runs);
+        if(ImGui::Button("Run workload simulation")) queue({WorkspaceAction::Run});
+        ui.run_workload=center();
+        ImGui::EndDisabled();
+        ImGui::SameLine();ImGui::TextDisabled("Validate before launch; active runs keep their submitted workload.");
+    }
     if(ImGui::BeginPopupModal("Discard edits?",nullptr,ImGuiWindowFlags_AlwaysAutoResize))
     {
         ImGui::TextWrapped("This action discards unsaved draft edits. Opening replaces the original baseline and removes retained runs, candidates and results. Load file as playable run preserves them.");
@@ -209,7 +216,11 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
                 ImGui::PushID(static_cast<int>(i)); ImGui::TextUnformatted(info.label);
                 if(*info.unit) { ImGui::SameLine(); ImGui::TextDisabled("(%s)",info.unit); }
                 if(ImGui::IsItemHovered()) ImGui::SetTooltip("%s",info.description);
+                const bool workload_timing=(i==4 && w.draft().workload.arrivals!=scenario::ArrivalMode::Constant) ||
+                    (i==5 && w.draft().workload.processing!=scenario::ProcessingMode::Constant);
+                ImGui::BeginDisabled(workload_timing);
                 auto value=w.draft().values[i]; if(text("##Value",value)) w.edit(static_cast<workspace::Field>(i),std::move(value));
+                ImGui::EndDisabled();
                 if(i==0) ui.name_field=center(); if(i==3) ui.forklift_field=center(); scroll(static_cast<int>(i));
                 if(ImGui::IsItemHovered()) ImGui::SetTooltip("%s",info.description);
                 for(const auto& error:w.errors()) if(error.field==workspace::field_names[i]) ImGui::TextColored({viewer::design::error.x,viewer::design::error.y,viewer::design::error.z,1},"%s",error.message.c_str());
@@ -229,6 +240,62 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
                 group("Scenario details",0,0,1);
                 const int columns=ImGui::GetContentRegionAvail().x/s>=450?3:ImGui::GetContentRegionAvail().x/s>=300?2:1;
                 group("Warehouse resources",1,3,columns); group("Operations",4,5,columns>1?2:1); group("Simulation",6,8,columns);
+                ImGui::SetNextItemOpen(w.draft().workload.arrivals!=scenario::ArrivalMode::Constant || w.draft().workload.processing!=scenario::ProcessingMode::Constant,ImGuiCond_Once);
+                if(ImGui::CollapsingHeader("Workload patterns"))
+                {
+                    auto workload=w.draft().workload;bool changed=false;
+                    const auto workload_text=[&](const char* label,std::string& value) {
+                        ImGui::PushID(label);ImGui::TextUnformatted(label);const bool edit=text("##WorkloadValue",value);ImGui::PopID();return edit;
+                    };
+                    int arrivals=static_cast<int>(workload.arrivals),processing=static_cast<int>(workload.processing);
+                    ImGui::TextUnformatted("Arrival pattern");scroll(22);
+                    ImGui::SetNextItemWidth(-1);
+                    constexpr std::array arrival_labels{"Fixed interval","Time-varying profile","Seeded uniform intervals"};
+                    const bool arrivals_open=ImGui::BeginCombo("##ArrivalPattern",arrival_labels[static_cast<std::size_t>(arrivals)]);
+                    ui.workload_arrival_mode=center();
+                    if(arrivals_open) {
+                        for(int i=0;i<3;++i) {if(ImGui::Selectable(arrival_labels[static_cast<std::size_t>(i)],i==arrivals)) {workload.arrivals=static_cast<scenario::ArrivalMode>(i);changed=true;}ui.workload_arrival_options[static_cast<std::size_t>(i)]=center();}
+                        ImGui::EndCombo();
+                    }
+                    ImGui::TextWrapped("All window times are simulated seconds from the start. The seed above controls repeatable random samples.");
+                    if(workload.arrivals==scenario::ArrivalMode::Uniform) {
+                        changed|=workload_text("Minimum arrival interval (s)",workload.bounds[0]);ui.workload_bounds[0]=center();
+                        changed|=workload_text("Maximum arrival interval (s)",workload.bounds[1]);ui.workload_bounds[1]=center();
+                        ImGui::TextWrapped("Each delay is chosen uniformly on the tick grid inside these bounds. Arrivals start at tick zero.");
+                    } else if(workload.arrivals==scenario::ArrivalMode::Profile) {
+                        ImGui::TextWrapped("Each [start, end) window starts with an arrival, then repeats its interval. Gaps are idle; no windows means no arrivals.");
+                        if(!workload.segments.empty()) {
+                            ImGui::BeginChild("Demand windows",{-1,200*s},ImGuiChildFlags_Borders);
+                            for(std::size_t i=0;i<workload.segments.size();++i) {
+                                ImGui::PushID(static_cast<int>(i));
+                                ImGui::Text("Window %zu",i+1);
+                                changed|=workload_text("Start (s)",workload.segments[i][0]);changed|=workload_text("End (s)",workload.segments[i][1]);changed|=workload_text("Interval (s)",workload.segments[i][2]);
+                                if(ImGui::Button("Remove window")) {workload.segments.erase(workload.segments.begin()+static_cast<std::ptrdiff_t>(i));changed=true;ImGui::PopID();break;}
+                                ImGui::Separator();ImGui::PopID();
+                            }
+                            ImGui::EndChild();
+                        }
+                        ImGui::BeginDisabled(workload.segments.size()>=scenario::max_demand_segments);
+                        if(ImGui::Button("Add demand window")) {workload.segments.push_back({workload.segments.empty()?"0":workload.segments.back()[1],w.draft().values[6],"300"});changed=true;}
+                        ImGui::EndDisabled();
+                    } else ImGui::TextWrapped("Uses the fixed Arrival interval above; existing scenarios retain their original timing.");
+                    ImGui::TextUnformatted("Processing duration");scroll(23);ImGui::SetNextItemWidth(-1);
+                    constexpr std::array processing_labels{"Fixed duration","Seeded uniform duration"};
+                    const bool processing_open=ImGui::BeginCombo("##ProcessingDuration",processing_labels[static_cast<std::size_t>(processing)]);
+                    ui.workload_processing_mode=center();
+                    if(processing_open) {
+                        for(int i=0;i<2;++i) {if(ImGui::Selectable(processing_labels[static_cast<std::size_t>(i)],i==processing)) {workload.processing=static_cast<scenario::ProcessingMode>(i);changed=true;}ui.workload_processing_options[static_cast<std::size_t>(i)]=center();}
+                        ImGui::EndCombo();
+                    }
+                    if(workload.processing==scenario::ProcessingMode::Uniform) {
+                        changed|=workload_text("Minimum processing duration (s)",workload.bounds[2]);ui.workload_bounds[2]=center();
+                        changed|=workload_text("Maximum processing duration (s)",workload.bounds[3]);ui.workload_bounds[3]=center();
+                        ImGui::TextWrapped("Each shipment gets one sampled requirement at arrival. Waiting or changing capacity does not resample it.");
+                    }
+                    if(changed) w.edit_workload(std::move(workload));
+                    for(const auto& error:w.errors()) if(error.field=="Workload" || error.field=="Scenario")
+                        ImGui::TextColored({viewer::design::error.x,viewer::design::error.y,viewer::design::error.z,1},"%s",error.message.c_str());
+                }
                 ImGui::TableNextColumn();
                 ImGui::PushFont(nullptr,viewer::design::heading); ImGui::TextUnformatted("Experiment setup"); ImGui::PopFont(); ImGui::Separator();
                 ImGui::TextWrapped("Loaded baseline: %s",w.baseline().name.c_str());
@@ -236,7 +303,7 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
                 ImGui::TextWrapped("%u bays / %u workers / %u forklifts",c.loading_bays,c.workers,c.forklifts);
                 ImGui::TextDisabled("%zu validated alternatives",w.candidates().size());
                 ImGui::Spacing();
-                if(ImGui::CollapsingHeader("Input ranges and model limits")) ImGui::TextWrapped("Resources: 0..100000, sum <=100000; zero blocks service. 3D views support at most 256 of each resource. Seconds: 1..604800; Hz: 1..1000; <=10M ticks and 100K arrivals. Seed is retained; this warehouse has no random behavior.");
+                if(ImGui::CollapsingHeader("Input ranges and model limits")) ImGui::TextWrapped("Resources: 0..100000, sum <=100000; zero blocks service. 3D views support at most 256 of each resource. Seconds: 1..604800; Hz: 1..1000; <=10M ticks and 100K worst-case arrivals. Random workloads use the explicit seed; results are one realization.");
 
                 for(const auto& e:w.errors()) if(e.field=="Scenario") ImGui::TextColored({viewer::design::error.x,viewer::design::error.y,viewer::design::error.z,1},"%s",e.message.c_str());
                 if(ImGui::Button("Validate",{-1,36*s})) queue({WorkspaceAction::Validate}); ui.validate=center();

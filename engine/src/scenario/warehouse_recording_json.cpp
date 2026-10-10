@@ -60,7 +60,7 @@ WarehouseRecording parse_recording(std::string_view text)
     fields(json, {"schema_version", "domain", "scenario_identity", "initial_tick", "end_tick", "initial_snapshot", "expected_final", "commands"}, {}, "recording");
     if (string(json.at("domain"), "domain") != "warehouse") invalid("domain", "warehouse recording required");
     WarehouseRecording result;
-    result.schema_version = static_cast<std::uint32_t>(integer(json.at("schema_version"), 2, "schema_version"));
+    result.schema_version = static_cast<std::uint32_t>(integer(json.at("schema_version"), 3, "schema_version"));
     if (result.schema_version == 0) invalid("schema_version", "unsupported version");
     result.scenario_identity = string(json.at("scenario_identity"), "scenario_identity");
     result.initial_tick = integer(json.at("initial_tick"), scenario::max_execution_ticks, "initial_tick");
@@ -83,7 +83,7 @@ WarehouseRecording parse_recording(std::string_view text)
             fields(command, {"tick", "sequence", "type", "forklifts"}, {}, path);
             item.capacity = static_cast<std::uint32_t>(integer(command.at("forklifts"), 100000, path + ".forklifts"));
         }
-        else if (type == "set_resource_capacity" && result.schema_version == 2)
+        else if (type == "set_resource_capacity" && result.schema_version >= 2)
         {
             fields(command, {"tick", "sequence", "type", "resource", "capacity"}, {}, path);
             item.type = WarehouseCommandType::SetResourceCapacity;

@@ -10,6 +10,7 @@
 #include <imgui.h>
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <condition_variable>
 #include <fstream>
 #include <iostream>
@@ -330,18 +331,94 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         require(workspace.active_run_id()==active && workspace.view().runtime().capture_snapshot()==saved,"Fresh process changed restored run/time");
         require(workspace.view().orbit_camera().pose()==saved_camera,"Fresh process changed restored camera");
         require(workspace.view().speed()==saved_clock.time_scale && workspace.view().runtime().clock().paused()==saved_clock.paused,"Fresh process lost playback state");
-        if(std::getenv("SIMFORGE_LANGUAGE_TEST_PATH")) {
+        if(std::getenv("SIMFORGE_WORKLOAD_TEST_PATH")) {
+            require(workspace.runs().size()==1 && workspace.candidates().size()==1 && workspace.report().has_value(),"Workload project lost independent run or report");
+            const auto& workload=std::get<scenario::WarehouseConfig>(workspace.view().definition().domain).workload;
+            require(workload.arrivals==scenario::ArrivalMode::Uniform && workload.processing==scenario::ProcessingMode::Uniform,"Workload project lost its random configuration");
+        } else if(std::getenv("SIMFORGE_LANGUAGE_TEST_PATH")) {
             require(workspace.runs().size()==4 && workspace.candidates().size()==2 && workspace.report().has_value(),"Language project lost runs/candidates/report");
             require(workspace.draft().values[1]=="6"&&workspace.draft().values[2]=="20"&&workspace.draft().values[3]=="3"&&workspace.draft().values[5]=="900","Approved language configuration did not persist");
             require(!workspace_ui.language.proposal && !workspace_ui.language.visible,"Reopen restored or reapplied an old proposal");
         } else require(workspace.runs().size()==3 && workspace.candidates().size()==1 && workspace.report().has_value(),"Fresh process lost workspace analyses or runs");
         require(workspace.view().scene().resources().size()>0 && workspace.view().observation().capacity.forklifts==3,"Restored geometry mismatch");
         auto uninterrupted=warehouse::WarehouseSimulation::create_from(saved);uninterrupted.run();
-        workspace.view().seek(workspace.view().observation().horizon);submit();
+        if(std::getenv("SIMFORGE_WORKLOAD_TEST_PATH")) {
+            if(workspace.view().runtime().clock().paused()) workspace.view().toggle_playback();
+            const auto remaining=static_cast<double>(saved.horizon_ticks-saved.current_tick)/saved.tick_rate/workspace.view().speed();
+            workspace.view().advance(std::chrono::seconds{static_cast<std::int64_t>(std::ceil(remaining))+1});
+        } else workspace.view().seek(workspace.view().observation().horizon);
+        submit();
         require(workspace.view().runtime().capture_snapshot()==uninterrupted.capture_snapshot(),"Fresh process deterministic continuation diverged");
         capture("project-continued");std::cout<<"Project fresh process: exact run/time/camera/report restoration and deterministic continuation verified.\n";
     }
-    if (smoke_frames && !project_path)
+    if(smoke_frames && !project_path && std::getenv("SIMFORGE_WORKLOAD_TEST_PATH"))
+    {
+        submit();submit();diagnostic_failure_probe();
+        const auto rate=definition.simulation.tick_rate;
+        const auto compare_headless=[&](const scenario::ScenarioDefinition& d) {
+            warehouse::WarehouseSimulation reference{d};reference.advance_to(workspace.view().observation().tick);
+            require(reference.capture_snapshot()==workspace.view().runtime().capture_snapshot(),"Workload graphical state disagrees with headless events");
+        };
+        const auto& baseline_config=std::get<scenario::WarehouseConfig>(definition.domain);
+        if(baseline_config.workload.arrivals==scenario::ArrivalMode::Profile) {
+            controller.seek(7199ULL*rate);submit();compare_headless(definition);const auto quiet=controller.observation().metrics.waiting;
+            controller.seek(7200ULL*rate);submit();compare_headless(definition);capture("workload-boundary");
+            controller.seek(18000ULL*rate);submit();compare_headless(definition);
+            require(controller.observation().metrics.waiting>quiet,"Demand peak did not produce real queue growth");capture("workload-peak");
+            std::cout<<"Profile quiet/peak queue: "<<quiet<<'/'<<controller.observation().metrics.waiting<<'\n';
+        } else {controller.seek(7200ULL*rate);submit();compare_headless(definition);capture("workload-baseline");}
+        const auto baseline_snapshot=controller.runtime().capture_snapshot();
+        if(capture_output) {window.resize(1600,1100);submit();submit();}
+        click(dashboard.workspace_toggle);submit();workspace_ui.requested_tab=0;workspace_ui.scroll_target=22;submit();submit();
+        const auto enter_workload_text=[&](glm::vec2 target,const char* value) {
+            click(target);
+            const auto key=[&](SDL_Keycode code,SDL_Scancode scan,bool down,SDL_Keymod mods) {
+                SDL_Event e{};e.type=down?SDL_EVENT_KEY_DOWN:SDL_EVENT_KEY_UP;e.key.windowID=id;e.key.key=code;e.key.scancode=scan;e.key.down=down;e.key.mod=mods;push(e);submit();
+            };
+            key(SDLK_LCTRL,SDL_SCANCODE_LCTRL,true,SDL_KMOD_LCTRL);key(SDLK_A,SDL_SCANCODE_A,true,SDL_KMOD_LCTRL);
+            key(SDLK_A,SDL_SCANCODE_A,false,SDL_KMOD_LCTRL);key(SDLK_LCTRL,SDL_SCANCODE_LCTRL,false,SDL_KMOD_NONE);
+            SDL_Event event{};event.type=SDL_EVENT_TEXT_INPUT;event.text.windowID=id;event.text.text=value;push(event);submit();
+        };
+        // Opened advanced scenarios show their workload editor. Select both random modes with real SDL clicks.
+        click(workspace_ui.workload_arrival_mode);submit();click(workspace_ui.workload_arrival_options[2]);submit();
+        require(workspace.draft().workload.arrivals==scenario::ArrivalMode::Uniform,"Arrival mode selector failed");
+        workspace_ui.scroll_target=22;submit();submit();enter_workload_text(workspace_ui.workload_bounds[0],"240");enter_workload_text(workspace_ui.workload_bounds[1],"480");
+        workspace_ui.scroll_target=23;submit();submit();click(workspace_ui.workload_processing_mode);submit();click(workspace_ui.workload_processing_options[1]);submit();
+        require(workspace.draft().workload.processing==scenario::ProcessingMode::Uniform,"Processing mode selector failed");
+        workspace_ui.scroll_target=23;submit();submit();enter_workload_text(workspace_ui.workload_bounds[2],"600");enter_workload_text(workspace_ui.workload_bounds[3],"1200");
+        workspace.edit(workspace::Field::Name,"Seeded workload study");workspace.edit(workspace::Field::Forklifts,"3");
+        require(workspace.validate_draft(),"Workload editor generated invalid parameters");
+        workspace_ui.scroll_target=22;submit();submit();capture("workload-editor");
+        if(capture_output) {workspace_ui.scroll_target=23;submit();submit();capture("workload-editor-processing");}
+        const auto submitted=workspace.draft_definition();click(workspace_ui.run_workload);submit();
+        const auto custom_id=workspace.active_run_id();require(custom_id!=0 && workspace.runs().size()==1,"Workload Run action did not create independent playback");
+        click(dashboard.play);frame(std::chrono::milliseconds{100});click(dashboard.play);submit();
+        require(workspace.view().runtime().clock().paused() && workspace.view().observation().tick>0,"Random workload playback controls failed");
+        workspace.view().seek(14400ULL*rate);submit();compare_headless(submitted);
+        const auto mid=workspace.view().runtime().capture_snapshot();
+        const auto& observation=workspace.view().observation();require(!observation.processing.empty(),"Random workload has no inspectable service work");
+        workspace.view().select(viewer::VisualKey{viewer::VisualCategory::Shipment,observation.processing.front().id});submit();
+        require(workspace.view().inspect()->shipment->required_processing_ticks>0,"Inspector lost the sampled processing requirement");capture("workload-random");
+        const auto camera=workspace.view().orbit_camera().pose();workspace.select_run(0);submit();
+        require(workspace.view().runtime().capture_snapshot()==baseline_snapshot,"Switching random run advanced original workload");
+        workspace.select_run(custom_id);submit();require(workspace.view().runtime().capture_snapshot()==mid && workspace.view().orbit_camera().pose()==camera,"Run switch changed random state or camera");
+        click(dashboard.reset);submit();require(workspace.view().runtime().capture_snapshot()==warehouse::WarehouseSimulation{submitted}.capture_snapshot(),"Seeded reset did not restore untouched workload");
+        workspace.view().seek(workspace.view().observation().horizon);submit();compare_headless(submitted);capture("workload-final");
+        workspace.view().seek(14400ULL*rate);submit();
+        workspace.add_candidate();workspace_ui.pending.push_back({WorkspaceAction::Compare});submit();
+        const auto deadline=Clock::now()+std::chrono::seconds{15};
+        while(workspace.execution().progress().active()) {require(Clock::now()<deadline,"Workload comparison timed out");submit();}
+        submit();require(workspace.report().has_value() && workspace.execution().progress().state==workspace::ExecutionState::Completed,"Workload async comparison failed");
+        require(workspace.view().runtime().capture_snapshot()==mid,"Async workload comparison changed active random playback");
+        workspace::ScenarioWorkspace::verify_export(workspace.json());capture("workload-analysis");
+        window.resize(640,480);submit();window.resize(1600,900);submit();SDL_MinimizeWindow(window.native_handle());frame(std::chrono::nanoseconds{0});SDL_RestoreWindow(window.native_handle());submit();
+        click(dashboard.simulation_mode);submit();
+        project_ui.test_path=std::filesystem::u8path(std::getenv("SIMFORGE_WORKLOAD_TEST_PATH"));
+        click(dashboard.file_menu);submit();click(project_ui.save_button);submit();
+        require(std::filesystem::exists(project_ui.test_path) && project_ui.error.empty(),"Workload project save failed");capture("workload-project");
+        std::cout<<"Workload graphics: profile boundaries/queue, native distribution controls, sampled inspection, restart, independent runs, async isolation, exports and project save verified.\n";
+    }
+    if (smoke_frames && !project_path && !std::getenv("SIMFORGE_WORKLOAD_TEST_PATH"))
     {
         submit(); submit(); diagnostic_failure_probe(); const auto overview = capture("overview");
         require(graphics.info().ui_vertices > 1000 && graphics.info().ui_draw_calls >= 3,"Dashboard emitted no meaningful UI draw data");

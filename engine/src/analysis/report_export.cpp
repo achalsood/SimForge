@@ -57,7 +57,7 @@ void validate_summary(const AnalysisReport& report)
     validate_request(report.request);
     const auto definition = scenario::parse_scenario(report.request.scenario_identity);
     const auto& config = std::get<scenario::WarehouseConfig>(definition.domain);
-    const auto expected_arrivals = 1 + (definition.simulation.duration_seconds - 1) / config.shipment_interval_seconds;
+    const auto expected_arrivals = scenario::workload::arrival_count(definition);
     if (report.candidates.size() != report.request.candidates.size() || report.bottlenecks.size() != 3 ||
         report.ranking.size() > max_candidates || report.warnings.size() > 100 || report.limitations.size() > 100 ||
         report.baseline.candidate != ScenarioCandidate{"Baseline", report.request.checkpoint.capacity})
@@ -77,7 +77,11 @@ void validate_summary(const AnalysisReport& report)
         if (m.arrived != expected_arrivals || m.started < checkpoint.totals.started || m.completed < checkpoint.totals.completed ||
             m.total_wait_ticks < checkpoint.totals.total_wait_ticks || m.max_wait_ticks < checkpoint.totals.max_wait_ticks ||
             m.occupied_resource_ticks < checkpoint.totals.occupied_resource_ticks ||
-            m.completed_processing_ticks != m.completed * checkpoint.processing_ticks)
+            m.completed_processing_ticks < checkpoint.totals.completed_processing_ticks ||
+            (config.workload.processing==scenario::ProcessingMode::Constant && m.completed_processing_ticks != m.completed * checkpoint.processing_ticks) ||
+            (config.workload.processing==scenario::ProcessingMode::Uniform &&
+                (m.completed_processing_ticks < m.completed*config.workload.processing_min_seconds*checkpoint.tick_rate ||
+                 m.completed_processing_ticks > m.completed*config.workload.processing_max_seconds*checkpoint.tick_rate)))
             throw std::invalid_argument("Analysis metrics conflict with shared history");
         const double rate = checkpoint.tick_rate;
         const auto expected_average = m.started ? std::optional<double>{static_cast<double>(m.total_wait_ticks) / static_cast<double>(m.started) / rate} : std::nullopt;

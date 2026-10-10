@@ -269,6 +269,11 @@ AnalysisReport run_comparison(const ComparisonRequest& request, const simulation
         "Single-resource probes cannot prove or exclude joint constraints.",
         "Started queue-wait averages exclude still-waiting censored shipments; lower averages can hide unfinished work.",
         "Rankings identify the best tested candidates, not a global or financial optimum."};
+    const auto definition=scenario::parse_scenario(request.scenario_identity);
+    if(scenario::workload::advanced(std::get<scenario::WarehouseConfig>(definition.domain)))
+        report.limitations.front()="Fixed-horizon FIFO model; no calibration or financial costs.";
+    if(scenario::workload::stochastic(std::get<scenario::WarehouseConfig>(definition.domain)))
+        report.limitations.push_back("Single-seed realization, not an estimate of expected performance. Capacity candidates and probes share identical arrival timing and per-shipment processing requirements.");
     return report;
 }
 } // namespace simforge::analysis

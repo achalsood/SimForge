@@ -15,6 +15,7 @@ struct ShipmentRecord
     ShipmentStatus status;
     std::uint64_t arrival_tick;
     std::optional<std::uint64_t> start_tick, completion_tick;
+    std::uint64_t required_processing_ticks{0}; // v3: sampled once at arrival; v1/v2 retain implicit fixed duration.
     bool operator==(const ShipmentRecord&) const = default;
 };
 
@@ -37,6 +38,7 @@ struct WarehouseTotals
 struct WarehouseSnapshot
 {
     std::uint32_t version{1};
+    std::uint32_t workload_generator_version{0}; // Required for v3, never inferred on restore.
     std::string scenario_identity;
     std::uint32_t tick_rate{60};
     std::uint64_t horizon_ticks{0}, processing_ticks{0}, current_tick{0};

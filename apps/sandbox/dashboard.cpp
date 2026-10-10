@@ -225,6 +225,7 @@ DashboardFrame draw_dashboard(const simforge::viewer::ViewerController& v, Dashb
             property("Arrival",format_time(record.arrival_tick,state.tick_rate));
             property("Service start",timestamp(record.start_tick)); property("Completion",timestamp(record.completion_tick));
             section("Elapsed durations"); property("Queue wait",timestamp(i.waiting_ticks)); property("Processing",timestamp(i.processing_ticks));
+            if(i.shipment->required_processing_ticks) property("Required processing",std::to_string(i.shipment->required_processing_ticks)+" ticks ("+viewer::format_time(i.shipment->required_processing_ticks,state.tick_rate)+")");
             ImGui::Spacing(); { Font font{design::label}; ImGui::TextWrapped("N/A means not yet recorded. Processing time is elapsed, not a predicted completion."); }
         }
         else if (i.key.category != VisualCategory::Rack)
@@ -271,6 +272,24 @@ DashboardFrame draw_dashboard(const simforge::viewer::ViewerController& v, Dashb
         utilization("Workers",m.worker_utilization,state.usage.workers,state.capacity.workers);
         utilization("Forklifts",m.forklift_utilization,state.usage.forklifts,state.capacity.forklifts);
         { Font font{design::label}; ImGui::TextWrapped("Utilization = cumulative busy time / available capacity time."); }
+        const auto& config=std::get<scenario::WarehouseConfig>(v.definition().domain);
+        if(scenario::workload::advanced(config)) {
+            section("Workload");
+            property("Arrivals",scenario::workload::arrival_name(config.workload.arrivals));
+            property("Processing",scenario::workload::processing_name(config.workload.processing));
+            if(scenario::workload::stochastic(config)) property("Seed",std::to_string(v.definition().simulation.random_seed));
+            if(config.workload.arrivals==scenario::ArrivalMode::Uniform)
+                property("Delay bounds (s)",std::to_string(config.workload.arrival_min_seconds)+" - "+std::to_string(config.workload.arrival_max_seconds));
+            else if(config.workload.arrivals==scenario::ArrivalMode::Profile) {
+                std::string active="Idle gap";for(std::size_t i=0;i<config.workload.segments.size();++i) {
+                    const auto& segment=config.workload.segments[i];
+                    if(state.tick>=std::uint64_t{segment.start_seconds}*state.tick_rate && state.tick<std::uint64_t{segment.end_seconds}*state.tick_rate)
+                        active="Window "+std::to_string(i+1)+" / "+std::to_string(segment.interval_seconds)+" s";
+                }
+                property("Current demand",active);
+            }
+            if(scenario::workload::stochastic(config)) ImGui::TextWrapped("One seeded realization. Bounds describe the configured model, not guaranteed future delivery times.");
+        }
     };
     if (layout.metrics.size.x > 0 && !draft.panels.workspace)
     {

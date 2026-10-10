@@ -43,6 +43,36 @@ std::string bounded(const Json& j, std::size_t maximum, const char* label)
     return value;
 }
 bool boolean(const Json& j) { if(!j.is_boolean()) invalid("project","expected boolean"); return j.get<bool>(); }
+Json workload_draft_json(const WorkloadDraft& d)
+{
+    (void)scenario::workload::arrival_name(d.arrivals);(void)scenario::workload::processing_name(d.processing);
+    if(d.segments.size()>scenario::max_demand_segments) invalid("draft workload","too many segments");
+    for(const auto& value:d.bounds) (void)bounded(Json(value),4096,"workload bound");
+    for(const auto& segment:d.segments) for(const auto& value:segment) (void)bounded(Json(value),4096,"workload segment");
+    return {{"arrivals",static_cast<unsigned>(d.arrivals)},{"processing",static_cast<unsigned>(d.processing)},{"bounds",d.bounds},{"segments",d.segments}};
+}
+WorkloadDraft workload_draft_value(const Json& j)
+{
+    fields(j,{"arrivals","processing","bounds","segments"},{},"draft workload");WorkloadDraft d;
+    d.arrivals=static_cast<scenario::ArrivalMode>(integer(j.at("arrivals"),2,"draft arrival mode"));
+    d.processing=static_cast<scenario::ProcessingMode>(integer(j.at("processing"),1,"draft processing mode"));
+    const auto& b=j.at("bounds");const auto& segments=j.at("segments");
+    if(!b.is_array() || b.size()!=4 || !segments.is_array() || segments.size()>scenario::max_demand_segments) invalid("draft workload","invalid array bounds");
+    for(std::size_t i=0;i<4;++i) d.bounds[i]=bounded(b[i],4096,"workload bound");
+    for(const auto& s:segments) {
+        if(!s.is_array() || s.size()!=3) invalid("draft workload","invalid segment");
+        d.segments.push_back({bounded(s[0],4096,"start seconds"),bounded(s[1],4096,"end seconds"),bounded(s[2],4096,"interval seconds")});
+    }
+    return d;
+}
+bool has_workload(const Json& j)
+{
+    if(j.is_object()) {
+        if(j.contains("workload") || j.contains("draft_workload") || j.contains("draft_origin_workload")) return true;
+        for(const auto& child:j) if(has_workload(child)) return true;
+    } else if(j.is_array()) for(const auto& child:j) if(has_workload(child)) return true;
+    return false;
+}
 double number(const Json& j,double minimum,double maximum,const char* label)
 {
     if(!j.is_number()) invalid(label,"expected numeric value");
@@ -321,6 +351,8 @@ struct ProjectCodec
             {"baseline",run(*w.baseline_view_,0)},{"draft",w.draft_.values},{"draft_origin",w.draft_origin_.values},
             {"candidates",Json::array()},{"runs",Json::array()},{"active_run",w.active_run_},{"next_run_id",w.next_run_id_},
             {"next_candidate_id",w.next_id_},{"default_speed",w.speed_},{"preferences",preferences_json(prefs)},{"report",report(w)},{"preview",nullptr}};
+        if(w.draft_.workload!=WorkloadDraft{}) j["draft_workload"]=workload_draft_json(w.draft_.workload);
+        if(w.draft_origin_.workload!=WorkloadDraft{}) j["draft_origin_workload"]=workload_draft_json(w.draft_origin_.workload);
         for(const auto& c:w.candidates_) j["candidates"].push_back({{"id",c.id},{"definition",definition(c.definition)},{"notes",c.notes},{"changed_inputs",c.changed_inputs}});
         for(const auto& r:w.runs_) j["runs"].push_back(run(*r.controller,r.id));
         if(w.preview_view_ && w.report_) {
@@ -331,7 +363,7 @@ struct ProjectCodec
     }
     static ScenarioWorkspace payload(const Json& j,ProjectInfo& info,ProjectPreferences& prefs,ProjectTimings& timings)
     {
-        fields(j,{"identity","baseline","draft","draft_origin","candidates","runs","active_run","next_run_id","next_candidate_id","default_speed","preferences","report","preview"},{},"payload");
+        fields(j,{"identity","baseline","draft","draft_origin","candidates","runs","active_run","next_run_id","next_candidate_id","default_speed","preferences","report","preview"},{"draft_workload","draft_origin_workload"},"payload");
         const auto& identity=j.at("identity"); fields(identity,{"id","name","created","saved"},{},"project identity");
         info.id=bounded(identity.at("id"),32,"project ID");
         if(info.id.size()!=32 || info.id.find_first_not_of("0123456789abcdef")!=std::string::npos) invalid("project ID","invalid identity");
@@ -345,6 +377,8 @@ struct ProjectCodec
             for(std::size_t i=0;i<9;++i) d.values[i]=bounded(values[i],4096,"draft field"); return d;
         };
         w.draft_=draft(j.at("draft")); w.draft_origin_=draft(j.at("draft_origin"));
+        if(j.contains("draft_workload")) w.draft_.workload=workload_draft_value(j.at("draft_workload"));
+        if(j.contains("draft_origin_workload")) w.draft_origin_.workload=workload_draft_value(j.at("draft_origin_workload"));
         w.next_id_=id(j.at("next_candidate_id")); w.next_run_id_=id(j.at("next_run_id"));
         if(!w.next_id_ || !w.next_run_id_) invalid("identity","invalid next identity");
         const auto& candidates=j.at("candidates"); const auto& runs=j.at("runs");
@@ -417,6 +451,7 @@ std::string Project::serialize() const
     Json envelope{{"format","SimForge"},{"version",project_format_version},{"engine",project_engine_version},{"scenario_schema",1},
         {"features",Json::array({"warehouse_snapshots","clock_phase","historical_reports","independent_runs"})},
         {"payload_size",text.size()},{"crc32",checksum(text)},{"payload",std::move(payload)}};
+    if(has_workload(envelope.at("payload"))) envelope["features"].push_back("workload_v1");
     auto bytes=envelope.dump();
     if(bytes.size()>project_max_bytes) throw std::length_error("Project exceeds 256 MiB limit");
     timings_.serialization_ms=ms(began); timings_.bytes=bytes.size(); return bytes;
@@ -444,7 +479,9 @@ void Project::load(const std::filesystem::path& path,bool recovery)
     if(bounded(j.at("format"),16,"format")!="SimForge") invalid("format","not a SimForge project");
     if(integer(j.at("version"),std::numeric_limits<std::uint32_t>::max(),"version")!=project_format_version) invalid("version","unsupported project version");
     if(bounded(j.at("engine"),64,"engine")!=project_engine_version || integer(j.at("scenario_schema"),1,"scenario schema")!=1) invalid("engine","incompatible simulation/schema version");
-    if(j.at("features")!=Json::array({"warehouse_snapshots","clock_phase","historical_reports","independent_runs"})) invalid("features","unsupported persistence features");
+    const auto legacy_features=Json::array({"warehouse_snapshots","clock_phase","historical_reports","independent_runs"});
+    auto workload_features=legacy_features;workload_features.push_back("workload_v1");
+    if(j.at("features")!=(has_workload(j.at("payload")) ? workload_features : legacy_features)) invalid("features","unsupported or missing persistence features");
     const auto payload=j.at("payload").dump();
     if(integer(j.at("payload_size"),project_max_bytes,"payload size")!=payload.size() ||
         integer(j.at("crc32"),std::numeric_limits<std::uint32_t>::max(),"crc32")!=checksum(payload)) invalid("project","corrupt project payload");

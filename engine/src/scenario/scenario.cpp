@@ -1,6 +1,7 @@
 #include <simforge/scenario/scenario.hpp>
 #include <simforge/world/world.hpp>
 #include "json_io.hpp"
+#include "workload_json.hpp"
 
 #include <algorithm>
 #include <limits>
@@ -27,13 +28,11 @@ void validate(const ScenarioDefinition& definition)
     {
         if (static_cast<std::uint64_t>(warehouse->loading_bays) + warehouse->workers + warehouse->forklifts > 100000)
             invalid("warehouse", "total resources must not exceed 100000");
-        if (warehouse->shipment_interval_seconds == 0 || warehouse->shipment_interval_seconds > 604800)
+        if (warehouse->workload.arrivals==ArrivalMode::Constant && (warehouse->shipment_interval_seconds == 0 || warehouse->shipment_interval_seconds > 604800))
             invalid("warehouse.shipment_interval_seconds", "must be 1..604800 integer seconds");
-        if (warehouse->processing_duration_seconds == 0 || warehouse->processing_duration_seconds > 604800)
+        if (warehouse->workload.processing==ProcessingMode::Constant && (warehouse->processing_duration_seconds == 0 || warehouse->processing_duration_seconds > 604800))
             invalid("warehouse.processing_duration_seconds", "must be 1..604800 integer seconds");
-        const auto arrivals = 1 + (config.duration_seconds - 1) / warehouse->shipment_interval_seconds;
-        if (arrivals > max_warehouse_shipments)
-            invalid("warehouse.shipment_interval_seconds", "scenario exceeds 100000 arrivals before horizon");
+        workload::validate(*warehouse,config.duration_seconds,config.tick_rate);
     }
     else
     {
@@ -73,15 +72,19 @@ ScenarioDefinition parse_scenario(std::string_view text)
     {
         if (!json.contains("warehouse") || json.contains("initial_world")) invalid("warehouse", "required; initial_world is unsupported in warehouse v1");
         const auto& warehouse = json.at("warehouse");
-        fields(warehouse, {"loading_bays", "workers", "forklifts", "shipment_interval_seconds"},
-               {"processing_duration_seconds"}, "warehouse");
+        fields(warehouse, {"loading_bays", "workers", "forklifts"},
+               {"shipment_interval_seconds","processing_duration_seconds","workload"}, "warehouse");
+        if(warehouse.contains("workload") && (warehouse.contains("shipment_interval_seconds") || warehouse.contains("processing_duration_seconds")))
+            invalid("warehouse.workload","cannot coexist with legacy timing fields");
+        if(!warehouse.contains("workload") && !warehouse.contains("shipment_interval_seconds")) invalid("warehouse.shipment_interval_seconds","required field missing");
         definition.domain = WarehouseConfig{
             static_cast<std::uint32_t>(integer(warehouse.at("loading_bays"), 100000, "warehouse.loading_bays")),
             static_cast<std::uint32_t>(integer(warehouse.at("workers"), 100000, "warehouse.workers")),
             static_cast<std::uint32_t>(integer(warehouse.at("forklifts"), 100000, "warehouse.forklifts")),
-            static_cast<std::uint32_t>(integer(warehouse.at("shipment_interval_seconds"), 604800, "warehouse.shipment_interval_seconds")),
+            warehouse.contains("shipment_interval_seconds") ? static_cast<std::uint32_t>(integer(warehouse.at("shipment_interval_seconds"), 604800, "warehouse.shipment_interval_seconds")) : 0,
             warehouse.contains("processing_duration_seconds")
                 ? static_cast<std::uint32_t>(integer(warehouse.at("processing_duration_seconds"), 604800, "warehouse.processing_duration_seconds")) : 600};
+        if(warehouse.contains("workload")) parse_workload(warehouse.at("workload"),std::get<WarehouseConfig>(definition.domain));
     }
     else if (domain == "movement")
     {
@@ -132,6 +135,10 @@ std::string serialize_scenario(const ScenarioDefinition& definition)
         json["warehouse"] = {{"loading_bays", warehouse->loading_bays}, {"workers", warehouse->workers},
             {"forklifts", warehouse->forklifts}, {"shipment_interval_seconds", warehouse->shipment_interval_seconds},
             {"processing_duration_seconds", warehouse->processing_duration_seconds}};
+        if(workload::advanced(*warehouse)) {
+            json["warehouse"].erase("shipment_interval_seconds");json["warehouse"].erase("processing_duration_seconds");
+            json["warehouse"]["workload"]=workload_json(*warehouse);
+        }
     }
     else
     {

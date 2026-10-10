@@ -1,6 +1,7 @@
 #pragma once
 
 #include <simforge/simulation/simulation_snapshot.hpp>
+#include <simforge/scenario/workload.hpp>
 
 #include <filesystem>
 #include <optional>
@@ -25,6 +26,7 @@ struct WarehouseConfig
 {
     std::uint32_t loading_bays{0}, workers{0}, forklifts{0}, shipment_interval_seconds{1};
     std::uint32_t processing_duration_seconds{600};
+    WorkloadConfig workload;
 };
 struct InitialEntity
 {

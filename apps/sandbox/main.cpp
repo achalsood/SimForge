@@ -292,9 +292,12 @@ int scenario_workflow(const Options& options)
                   << "Duration: " << definition.simulation.duration_seconds << " seconds ("
                   << static_cast<double>(definition.simulation.duration_seconds) / 3600 << " simulated hours)\n"
                   << "Loading bays: " << config.loading_bays << " | Workers: " << config.workers << " | Forklifts: " << config.forklifts << '\n'
-                  << "Arrival interval: " << config.shipment_interval_seconds << " seconds | Processing: " << config.processing_duration_seconds << " seconds\n"
+                  << (scenario::workload::advanced(config) ? std::string{} : "Arrival interval: "+std::to_string(config.shipment_interval_seconds)+" seconds | Processing: "+std::to_string(config.processing_duration_seconds)+" seconds\n")
                   << "Arrivals: " << metrics.arrived << " | Started: " << metrics.started << " | Completed: " << metrics.completed
                   << " | Waiting: " << metrics.waiting << " | In progress: " << metrics.in_progress << '\n';
+        if(scenario::workload::advanced(config)) std::cout<<"Workload: arrivals="<<scenario::workload::arrival_name(config.workload.arrivals)
+            <<" | processing="<<scenario::workload::processing_name(config.workload.processing)<<" | seed="<<definition.simulation.random_seed
+            <<" | generator="<<scenario::workload_generator_version<<(scenario::workload::stochastic(config)?" | single-seed realization":"")<<'\n';
         const auto print_metric = [](const char* label, std::optional<double> value, double factor, const char* unit)
         {
             std::cout << label << ": ";

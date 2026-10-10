@@ -37,7 +37,7 @@ struct Transition
 }
 void validate_snapshot(const WarehouseSnapshot& state)
 {
-    require(state.version == 1 || state.version == 2, "version");
+    require(state.version == 1 || state.version == 2 || state.version == 3, "version");
     // Check externally supplied container bounds before parsing or allocating.
     require(state.scenario_identity.size() <= scenario::max_scenario_bytes, "scenario_identity.size");
     const auto limit = scenario::max_warehouse_shipments;
@@ -52,13 +52,18 @@ void validate_snapshot(const WarehouseSnapshot& state)
     const auto horizon = static_cast<std::uint64_t>(rate) * definition.simulation.duration_seconds;
     const auto interval = static_cast<std::uint64_t>(rate) * config->shipment_interval_seconds;
     const auto processing = static_cast<std::uint64_t>(rate) * config->processing_duration_seconds;
-    const auto arrivals = 1 + (definition.simulation.duration_seconds - 1) / config->shipment_interval_seconds;
+    const bool advanced=scenario::workload::advanced(*config);
+    require(advanced ? state.version==3 && state.workload_generator_version==scenario::workload_generator_version :
+        state.version!=3 && state.workload_generator_version==0,"workload generator/version compatibility");
+    const auto arrivals=scenario::workload::arrival_bound(*config,definition.simulation.duration_seconds,rate);
+    auto next_arrival=scenario::workload::first_arrival(*config,rate);
     require(state.tick_rate == rate && state.horizon_ticks == horizon && state.processing_ticks == processing,
         "scenario timing compatibility");
     require(state.current_tick <= horizon, "current_tick");
     const auto tick = state.current_tick;
     const auto arrived = state.shipments.size();
-    require(arrived == (state.settled ? std::min<std::uint64_t>(arrivals, 1 + tick / interval) : 0), "arrivals at boundary");
+    if(!advanced) require(arrived == (state.settled ? std::min<std::uint64_t>(arrivals, 1 + tick / interval) : 0), "arrivals at boundary");
+    else require(state.settled || arrived==0,"unsettled arrivals");
     require(state.next_shipment == arrived, "next_shipment");
     require(state.settled || (tick == 0 && state.capacity_changes.empty()), "unsettled boundary");
 
@@ -72,8 +77,11 @@ void validate_snapshot(const WarehouseSnapshot& state)
     {
         const auto& shipment = state.shipments[i];
         require(shipment.id == i, "shipments.id (unique contiguous arrival order)");
-        require(shipment.arrival_tick == i * interval && shipment.arrival_tick <= tick && shipment.arrival_tick < horizon,
+        require((advanced ? next_arrival && shipment.arrival_tick==*next_arrival : shipment.arrival_tick==i*interval) && shipment.arrival_tick <= tick && shipment.arrival_tick < horizon,
             "shipments.arrival_tick");
+        if(advanced) next_arrival=scenario::workload::next_arrival(*config,rate,horizon,definition.simulation.random_seed,i,shipment.arrival_tick);
+        const auto requirement=advanced ? scenario::workload::processing_ticks(*config,rate,definition.simulation.random_seed,i) : processing;
+        require(shipment.required_processing_ticks==(advanced ? requirement : 0),"shipment sampled processing requirement");
         require(shipment.status == ShipmentStatus::Waiting || shipment.status == ShipmentStatus::InProgress ||
             shipment.status == ShipmentStatus::Completed, "shipments.status");
         if (shipment.status == ShipmentStatus::Waiting)
@@ -91,11 +99,11 @@ void validate_snapshot(const WarehouseSnapshot& state)
         const auto wait = start - shipment.arrival_tick;
         totals.total_wait_ticks += wait; totals.max_wait_ticks = std::max(totals.max_wait_ticks, wait);
         // start < validated H and processing <=604800000; addition cannot overflow.
-        const auto completion = start + processing;
+        const auto completion = start + requirement;
         if (shipment.status == ShipmentStatus::Completed)
         {
             require(shipment.completion_tick == completion && completion <= tick, "completed lifecycle");
-            ++totals.completed; totals.completed_processing_ticks += processing;
+            ++totals.completed; totals.completed_processing_ticks += requirement;
         }
         else
         {
@@ -174,7 +182,8 @@ void validate_snapshot(const WarehouseSnapshot& state)
         require(active == std::min({state.capacity.loading_bays, state.capacity.workers, state.capacity.forklifts}),
             "unstarted eligible waiting work at settled boundary");
 
-    const bool has_arrival = arrived < arrivals;
+    if(advanced && state.settled) require(!next_arrival || *next_arrival>tick,"arrivals at settled boundary");
+    const bool has_arrival = advanced ? next_arrival.has_value() : arrived < arrivals;
     require(state.events.size() == reservations.size() + static_cast<std::size_t>(has_arrival), "pending event membership");
     require(state.next_event_sequence == arrived + totals.started + static_cast<std::uint64_t>(has_arrival),
         "next_event_sequence");
@@ -191,7 +200,7 @@ void validate_snapshot(const WarehouseSnapshot& state)
         sequences[static_cast<std::size_t>(event.sequence)] = true;
         if (event.type == EventType::ShipmentArrival)
         {
-            require(has_arrival && !arrival_seen && event.shipment == arrived && event.tick == arrived * interval &&
+            require(has_arrival && !arrival_seen && event.shipment == arrived && event.tick == (advanced ? *next_arrival : arrived * interval) &&
                 event.tick < horizon, "pending arrival schedule");
             arrival_seen = true;
         }
@@ -200,17 +209,20 @@ void validate_snapshot(const WarehouseSnapshot& state)
             require(event.type == EventType::ShipmentCompletion && event.shipment < arrived, "event type/reference");
             const auto& shipment = state.shipments[event.shipment];
             require(shipment.status == ShipmentStatus::InProgress && !completions[event.shipment] &&
-                event.tick == *shipment.start_tick + processing, "pending completion");
+                event.tick == *shipment.start_tick + (advanced ? shipment.required_processing_ticks : processing), "pending completion");
             completions[event.shipment] = true;
         }
     }
     require(arrival_seen == has_arrival, "missing arrival");
-    require(state.peak_pending_events >= state.events.size() && state.peak_pending_events >= 1 &&
+    require(state.peak_pending_events >= state.events.size() && state.peak_pending_events >= (scenario::workload::first_arrival(*config,rate) ? 1 : 0) &&
         state.peak_pending_events <= std::min<std::uint64_t>(state.next_event_sequence, max_active + 1ULL), "peak_pending_events");
     totals.processed_events = arrived + totals.completed;
     require(state.totals == totals, "metric accumulators");
     if (!state.settled)
-        require(state.events == std::vector<ShipmentEvent>{{0, EventType::ShipmentArrival, 0, 0}}, "initial event");
+    {
+        const auto first=scenario::workload::first_arrival(*config,rate);
+        require(state.events == (first ? std::vector<ShipmentEvent>{{*first,EventType::ShipmentArrival,0,0}} : std::vector<ShipmentEvent>{}),"initial event");
+    }
 }
 
 std::optional<std::string> first_difference(const WarehouseSnapshot& expected, const WarehouseSnapshot& actual)
@@ -219,6 +231,7 @@ std::optional<std::string> first_difference(const WarehouseSnapshot& expected, c
     { return std::optional<std::string>{"Warehouse divergence at tick " + std::to_string(actual.current_tick) + ": " + field}; };
 #define CHECK(field) if (expected.field != actual.field) return mismatch(#field)
     CHECK(version); CHECK(scenario_identity); CHECK(tick_rate); CHECK(horizon_ticks); CHECK(processing_ticks);
+    CHECK(workload_generator_version);
     CHECK(current_tick); CHECK(settled); CHECK(next_shipment);
     CHECK(capacity.loading_bays); CHECK(capacity.workers); CHECK(capacity.forklifts);
     CHECK(usage.loading_bays); CHECK(usage.workers); CHECK(usage.forklifts);
@@ -238,6 +251,7 @@ std::optional<std::string> first_difference(const WarehouseSnapshot& expected, c
         if (a.arrival_tick != b.arrival_tick) return mismatch(path + "arrival_tick");
         if (a.start_tick != b.start_tick) return mismatch(path + "start_tick");
         if (a.completion_tick != b.completion_tick) return mismatch(path + "completion_tick");
+        if (a.required_processing_ticks != b.required_processing_ticks) return mismatch(path + "required_processing_ticks");
     }
     CHECK(waiting_queue.size()); CHECK(reservations.size()); CHECK(events.size()); CHECK(capacity_changes.size());
     for (std::size_t i = 0; i < expected.waiting_queue.size(); ++i)

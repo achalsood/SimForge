@@ -16,11 +16,14 @@ void validate_command(const WarehouseCommand& command)
 }
 void validate_recording(const WarehouseRecording& recording)
 {
-    if ((recording.schema_version != 1 && recording.schema_version != 2) || recording.commands.size() > max_capacity_changes)
+    if ((recording.schema_version != 1 && recording.schema_version != 2 && recording.schema_version != 3) || recording.commands.size() > max_capacity_changes)
         throw std::invalid_argument("Invalid warehouse recording version/command count");
     validate_snapshot(recording.initial_snapshot); validate_snapshot(recording.expected_final);
     if (recording.schema_version == 1 && (recording.initial_snapshot.version != 1 || recording.expected_final.version != 1))
         throw std::invalid_argument("v1 recording requires v1 warehouse snapshots");
+    if((recording.initial_snapshot.version==3 || recording.expected_final.version==3) != (recording.schema_version==3) ||
+        (recording.schema_version==3 && (recording.initial_snapshot.version!=3 || recording.expected_final.version!=3)))
+        throw std::invalid_argument("Workload recordings require v3 snapshots and recording schema");
     if (recording.scenario_identity != recording.initial_snapshot.scenario_identity ||
         recording.scenario_identity != recording.expected_final.scenario_identity ||
         recording.initial_tick != recording.initial_snapshot.current_tick ||
@@ -59,7 +62,7 @@ void WarehouseInputRecorder::submit(const WarehouseCommand& command)
     recording_.commands.push_back(command);
     try { runtime_.set_resource_capacity(command.resource, command.capacity); }
     catch (...) { recording_.commands.pop_back(); throw; }
-    if (command.type == WarehouseCommandType::SetResourceCapacity) recording_.schema_version = 2;
+    if (command.type == WarehouseCommandType::SetResourceCapacity && recording_.schema_version!=3) recording_.schema_version = 2;
 }
 void WarehouseInputRecorder::set_resource_capacity(ResourceType resource, std::uint32_t capacity)
 {

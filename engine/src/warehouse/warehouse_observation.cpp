@@ -33,7 +33,10 @@ WarehouseObservation WarehouseSimulation::capture_observation(std::size_t waitin
     const auto active_count = static_cast<std::size_t>(started_-completed_);
     const auto processing_count = std::min(processing_limit,active_count);
     result.processing.reserve(processing_count);
-    for (std::size_t i = 0; i < processing_count; ++i)
+    if(config_.workload.processing==scenario::ProcessingMode::Uniform) {
+        auto id=active_shipments_.begin();
+        for(std::size_t i=0;i<processing_count;++i,++id) result.processing.push_back(shipments_.at(*id));
+    } else for (std::size_t i = 0; i < processing_count; ++i)
     {
         const auto& record = shipments_[static_cast<std::size_t>(completed_)+i];
         if (record.status != ShipmentStatus::InProgress) throw std::logic_error("Warehouse active prefix invariant violated");

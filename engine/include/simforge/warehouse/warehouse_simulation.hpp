@@ -7,6 +7,7 @@
 #include <simforge/simulation/execution_control.hpp>
 #include <span>
 #include <chrono>
+#include <set>
 
 namespace simforge::warehouse
 {
@@ -58,7 +59,8 @@ public:
     [[nodiscard]] std::size_t pending_events() const noexcept { return scheduler_.pending_count(); }
     [[nodiscard]] std::size_t peak_pending_events() const noexcept { return scheduler_.peak_pending(); }
     [[nodiscard]] ResourceCounts resource_usage() const noexcept { return resources_.usage(); }
-    // Owned payload capacities only; excludes allocator/container-object overhead.
+    // Owned payload capacities plus an estimated 40 bytes per active-index node;
+    // excludes allocator/container-object overhead. Not a process memory measurement.
     [[nodiscard]] std::size_t approximate_storage_bytes() const noexcept;
 private:
     struct Parameters
@@ -67,6 +69,7 @@ private:
         std::uint32_t rate, arrivals;
         std::uint64_t horizon;
         std::string identity;
+        std::uint64_t seed;
     };
     static Parameters parameters(const scenario::ScenarioDefinition& definition);
     explicit WarehouseSimulation(Parameters parameters);
@@ -92,5 +95,7 @@ private:
     std::vector<CapacityChange> capacity_changes_;
     bool settled_{false};
     std::uint32_t snapshot_version_{1};
+    std::uint64_t workload_seed_{0};
+    std::set<ShipmentId> active_shipments_; // Variable durations invalidate the legacy completed-prefix shortcut.
 };
 } // namespace simforge::warehouse

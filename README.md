@@ -64,6 +64,12 @@ restoration, portable persistence, ordered capacity-command replay and independe
 branches. See [warehouse snapshots and measured branch outcomes](docs/warehouse-snapshots.md).
 Existing movement snapshots and recordings remain supported.
 
+Warehouse workloads now support deterministic demand windows and seeded discrete
+uniform arrival intervals and processing requirements. The editor, headless runner,
+snapshots, recorded interventions, paired capacity comparisons and projects share
+one validated workload model. See [workload schema, reproducibility, examples and
+measurements](docs/workload-modeling.md).
+
 Structured batch experiments compare complete resource configurations from one
 shared checkpoint, rank actual outcomes, and test add-one bay/worker/forklift
 interventions for bottleneck evidence. Results export to reproducible JSON and CSV.

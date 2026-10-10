@@ -31,7 +31,7 @@ bool compatible(const ScenarioDefinition& a, const ScenarioDefinition& b, bool c
     const auto& x = std::get<scenario::WarehouseConfig>(a.domain); const auto& y = std::get<scenario::WarehouseConfig>(b.domain);
     return a.simulation.tick_rate == b.simulation.tick_rate && a.simulation.duration_seconds == b.simulation.duration_seconds &&
         (!checkpoint || (a.simulation.random_seed == b.simulation.random_seed && x.shipment_interval_seconds == y.shipment_interval_seconds &&
-            x.processing_duration_seconds == y.processing_duration_seconds));
+            x.processing_duration_seconds == y.processing_duration_seconds && x.workload==y.workload));
 }
 warehouse::WarehouseSnapshot final_branch(const warehouse::WarehouseSnapshot& checkpoint, warehouse::ResourceCounts desired)
 {
@@ -86,8 +86,8 @@ Draft ScenarioWorkspace::make_draft(const ScenarioDefinition& d)
 {
     const auto& c = std::get<scenario::WarehouseConfig>(d.domain);
     return {{{d.name,std::to_string(c.loading_bays),std::to_string(c.workers),std::to_string(c.forklifts),
-        std::to_string(c.shipment_interval_seconds),std::to_string(c.processing_duration_seconds),std::to_string(d.simulation.duration_seconds),
-        std::to_string(d.simulation.tick_rate),std::to_string(d.simulation.random_seed)}}};
+        std::to_string(c.shipment_interval_seconds ? c.shipment_interval_seconds : 300),std::to_string(c.processing_duration_seconds ? c.processing_duration_seconds : 900),std::to_string(d.simulation.duration_seconds),
+        std::to_string(d.simulation.tick_rate),std::to_string(d.simulation.random_seed)}},workload_draft(c)};
 }
 ScenarioWorkspace::ScenarioWorkspace() : execution_{std::make_unique<ExperimentExecution>()} {language_epoch_=source_epoch();}
 ScenarioWorkspace::~ScenarioWorkspace() = default;
@@ -126,12 +126,14 @@ ScenarioDefinition ScenarioWorkspace::draft_definition() const
     auto d=baseline();d.name=draft_.values[0];std::array<std::uint64_t,9> n{};
     constexpr std::array<std::uint64_t,9> maxima{0,100000,100000,100000,604800,604800,604800,1000,std::numeric_limits<std::uint64_t>::max()};
     for(std::size_t i=1;i<n.size();++i) {
+        if((i==4 && draft_.workload.arrivals!=scenario::ArrivalMode::Constant) || (i==5 && draft_.workload.processing!=scenario::ProcessingMode::Constant)) continue;
         const auto& text=draft_.values[i];const auto parsed=std::from_chars(text.data(),text.data()+text.size(),n[i]);
         if(parsed.ec!=std::errc{}||parsed.ptr!=text.data()+text.size()||n[i]>maxima[i])
             throw std::invalid_argument(std::string(field_names[i])+": invalid source draft value");
     }
     d.simulation={static_cast<std::uint32_t>(n[7]),static_cast<std::uint32_t>(n[6]),n[8]};
     d.domain=scenario::WarehouseConfig{static_cast<std::uint32_t>(n[1]),static_cast<std::uint32_t>(n[2]),static_cast<std::uint32_t>(n[3]),static_cast<std::uint32_t>(n[4]),static_cast<std::uint32_t>(n[5])};
+    apply_workload_draft(std::get<scenario::WarehouseConfig>(d.domain),draft_.workload);
     warehouse_only(d);return d;
 }
 void ScenarioWorkspace::apply_language_proposal(const scenario::language::Proposal& proposal,bool approved)
@@ -145,6 +147,7 @@ void ScenarioWorkspace::apply_language_proposal(const scenario::language::Propos
     if(proposal.mode()==scenario::language::Mode::Modify) {
         const auto source=make_draft(proposal.source());
         for(std::size_t i=0;i<prepared.values.size();++i) if(source.values[i]==prepared.values[i]) prepared.values[i]=draft_.values[i];
+        if(source.workload==prepared.workload) prepared.workload=draft_.workload;
     }
     if(prepared!=draft_) {draft_=std::move(prepared);++draft_revision_;++persistent_generation_;}
     (void)validate_draft();message_="Approved proposal applied. Run Simulation or Add Candidate when ready.";
@@ -157,6 +160,7 @@ bool ScenarioWorkspace::validate_draft()
     constexpr std::array<std::uint64_t,9> maxima{0,100000,100000,100000,604800,604800,604800,1000,std::numeric_limits<std::uint64_t>::max()};
     for (std::size_t i = 1; i < 9; ++i)
     {
+        if((i==4 && draft_.workload.arrivals!=scenario::ArrivalMode::Constant) || (i==5 && draft_.workload.processing!=scenario::ProcessingMode::Constant)) continue;
         const auto& text = draft_.values[i]; const auto parsed = std::from_chars(text.data(),text.data()+text.size(),numbers[i]);
         if (parsed.ec != std::errc{} || parsed.ptr != text.data()+text.size() || numbers[i] > maxima[i] || (i >= 4 && i <= 7 && numbers[i] == 0))
             errors_.push_back({field_names[i],"Enter an integer in "+std::string{i >= 4 && i <= 7 ? "1" : "0"}+".."+std::to_string(maxima[i])});
@@ -165,6 +169,8 @@ bool ScenarioWorkspace::validate_draft()
     d.simulation = {static_cast<std::uint32_t>(numbers[7]),static_cast<std::uint32_t>(numbers[6]),numbers[8]};
     d.domain = scenario::WarehouseConfig{static_cast<std::uint32_t>(numbers[1]),static_cast<std::uint32_t>(numbers[2]),
         static_cast<std::uint32_t>(numbers[3]),static_cast<std::uint32_t>(numbers[4]),static_cast<std::uint32_t>(numbers[5])};
+    try {apply_workload_draft(std::get<scenario::WarehouseConfig>(d.domain),draft_.workload);}
+    catch(const std::exception& e) {errors_.push_back({"Workload",e.what()});}
     if (errors_.empty()) try { warehouse_only(d); } catch (const std::exception& e) { errors_.push_back({"Scenario",e.what()}); }
     status_ = errors_.empty() ? (dirty() ? Status::Modified : Status::Ready) : Status::Invalid;
     message_ = errors_.empty() ? "Draft valid. Execute explicitly to create a new run." : "Draft validation failed; the running warehouse is unchanged.";
@@ -176,7 +182,17 @@ ScenarioDefinition ScenarioWorkspace::checked_draft()
     auto d = *baseline_; d.name = draft_.values[0];
     const auto n = [&](std::size_t i){ std::uint64_t v{}; const auto& s = draft_.values[i]; std::from_chars(s.data(),s.data()+s.size(),v); return v; };
     d.simulation = {static_cast<std::uint32_t>(n(7)),static_cast<std::uint32_t>(n(6)),n(8)};
-    d.domain = scenario::WarehouseConfig{static_cast<std::uint32_t>(n(1)),static_cast<std::uint32_t>(n(2)),static_cast<std::uint32_t>(n(3)),static_cast<std::uint32_t>(n(4)),static_cast<std::uint32_t>(n(5))}; return d;
+    d.domain = scenario::WarehouseConfig{static_cast<std::uint32_t>(n(1)),static_cast<std::uint32_t>(n(2)),static_cast<std::uint32_t>(n(3)),static_cast<std::uint32_t>(n(4)),static_cast<std::uint32_t>(n(5))};
+    apply_workload_draft(std::get<scenario::WarehouseConfig>(d.domain),draft_.workload);return d;
+}
+void ScenarioWorkspace::edit_workload(WorkloadDraft draft)
+{
+    (void)baseline();
+    (void)scenario::workload::arrival_name(draft.arrivals);(void)scenario::workload::processing_name(draft.processing);
+    if(draft.segments.size()>scenario::max_demand_segments) throw std::length_error("At most 64 demand segments");
+    if(draft_.workload==draft) return;
+    draft_.workload=std::move(draft);++persistent_generation_;++draft_revision_;errors_.clear();
+    status_=dirty() ? Status::Modified : Status::Ready;message_="Workload edits apply only to future runs and experiments.";
 }
 void ScenarioWorkspace::revert(bool discard)
 {
@@ -414,6 +430,8 @@ Comparison execute_experiment(const ExperimentRequest& request, const simulation
         }
         prepared.limitations = prepared.executions.front().limitations;
         prepared.limitations.push_back("Independent initial scenarios; multiple changed variables do not establish single-resource causation. Equal horizon and tick rate required.");
+        if(std::any_of(ordered.begin(),ordered.end(),[](const auto& c){return scenario::workload::stochastic(std::get<scenario::WarehouseConfig>(c.definition.domain));}))
+            prepared.limitations.push_back("Each stochastic candidate is one seeded realization, not a statistical estimate. Paired workload guarantees require unchanged external workload parameters and seed.");
         prepared.report_ms = std::chrono::duration<double,std::milli>{Timer::now()-derived}.count();
     }
     if (mode == ComparisonMode::Checkpoint) prepared.execution_ms = std::chrono::duration<double,std::milli>{Timer::now()-started}.count();
@@ -497,7 +515,9 @@ std::string differences(const ScenarioDefinition& a, const ScenarioDefinition& b
     const auto field = [&](const char* name, std::uint64_t before, std::uint64_t after)
     { if(before != after) { if(!result.empty()) result += "; "; result += std::string{name}+" "+std::to_string(before)+" -> "+std::to_string(after); } };
     field("Bays",x.loading_bays,y.loading_bays); field("Workers",x.workers,y.workers); field("Forklifts",x.forklifts,y.forklifts);
-    field("Arrival (s)",x.shipment_interval_seconds,y.shipment_interval_seconds); field("Processing (s)",x.processing_duration_seconds,y.processing_duration_seconds);
+    if(x.workload.arrivals==scenario::ArrivalMode::Constant && y.workload.arrivals==scenario::ArrivalMode::Constant) field("Arrival (s)",x.shipment_interval_seconds,y.shipment_interval_seconds);
+    if(x.workload.processing==scenario::ProcessingMode::Constant && y.workload.processing==scenario::ProcessingMode::Constant) field("Processing (s)",x.processing_duration_seconds,y.processing_duration_seconds);
+    if(x.workload!=y.workload) {if(!result.empty()) result+="; ";result+="Workload specification changed (arrivals: "+std::string{scenario::workload::arrival_name(y.workload.arrivals)}+", processing: "+scenario::workload::processing_name(y.workload.processing)+")";}
     field("Duration (s)",a.simulation.duration_seconds,b.simulation.duration_seconds); field("Tick rate",a.simulation.tick_rate,b.simulation.tick_rate); field("Seed",a.simulation.random_seed,b.simulation.random_seed);
     return result.empty() ? "Same operational configuration" : result;
 }

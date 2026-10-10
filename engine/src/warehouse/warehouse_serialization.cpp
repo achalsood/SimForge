@@ -74,6 +74,7 @@ std::vector<std::byte> serialize_snapshot(const WarehouseSnapshot& snapshot)
     writer.bytes.reserve(256 + snapshot.scenario_identity.size() + snapshot.shipments.size() * 31 + snapshot.events.size() * 21);
     for (auto c : magic) writer.integer(static_cast<std::uint8_t>(c));
     writer.integer(snapshot.version);
+    if(snapshot.version==3) writer.integer(snapshot.workload_generator_version);
     writer.count(snapshot.scenario_identity.size());
     for (auto c : snapshot.scenario_identity) writer.integer(static_cast<std::uint8_t>(c));
     writer.integer(snapshot.tick_rate); writer.integer(snapshot.horizon_ticks); writer.integer(snapshot.processing_ticks);
@@ -83,6 +84,7 @@ std::vector<std::byte> serialize_snapshot(const WarehouseSnapshot& snapshot)
     {
         writer.integer(record.id); writer.integer(static_cast<std::uint8_t>(record.status)); writer.integer(record.arrival_tick);
         writer.optional(record.start_tick); writer.optional(record.completion_tick);
+        if(snapshot.version==3) writer.integer(record.required_processing_ticks);
     }
     writer.count(snapshot.waiting_queue.size()); for (auto id : snapshot.waiting_queue) writer.integer(id);
     writer.count(snapshot.reservations.size()); for (auto id : snapshot.reservations) writer.integer(id);
@@ -98,7 +100,7 @@ std::vector<std::byte> serialize_snapshot(const WarehouseSnapshot& snapshot)
     for (const auto& change : snapshot.capacity_changes)
     {
         writer.integer(change.tick); writer.integer(change.started_before);
-        if (snapshot.version == 2) writer.integer(static_cast<std::uint8_t>(change.resource));
+        if (snapshot.version >= 2) writer.integer(static_cast<std::uint8_t>(change.resource));
         writer.integer(change.capacity);
     }
     const auto& t = snapshot.totals;
@@ -120,7 +122,8 @@ WarehouseSnapshot deserialize_snapshot(std::span<const std::byte> bytes)
         if (reader.integer<std::uint8_t>() != static_cast<std::uint8_t>(c)) throw std::invalid_argument("Warehouse binary magic mismatch");
     WarehouseSnapshot result;
     result.version = reader.integer<std::uint32_t>();
-    if (result.version != 1 && result.version != 2) throw std::invalid_argument("Unsupported warehouse binary version");
+    if (result.version != 1 && result.version != 2 && result.version != 3) throw std::invalid_argument("Unsupported warehouse binary version");
+    if(result.version==3) result.workload_generator_version=reader.integer<std::uint32_t>();
     const auto identity_bytes = reader.count(scenario::max_scenario_bytes, 1);
     result.scenario_identity.reserve(identity_bytes);
     for (std::size_t i = 0; i < identity_bytes; ++i) result.scenario_identity.push_back(static_cast<char>(reader.integer<std::uint8_t>()));
@@ -134,6 +137,7 @@ WarehouseSnapshot deserialize_snapshot(std::span<const std::byte> bytes)
         ShipmentRecord record;
         record.id = reader.integer<std::uint32_t>(); record.status = static_cast<ShipmentStatus>(reader.integer<std::uint8_t>());
         record.arrival_tick = reader.integer<std::uint64_t>(); record.start_tick = reader.optional(); record.completion_tick = reader.optional();
+        if(result.version==3) record.required_processing_ticks=reader.integer<std::uint64_t>();
         result.shipments.push_back(record);
     }
     const auto queue = reader.count(scenario::max_warehouse_shipments, 4);
@@ -154,7 +158,7 @@ WarehouseSnapshot deserialize_snapshot(std::span<const std::byte> bytes)
     for (std::size_t i = 0; i < changes; ++i)
     {
         CapacityChange change{reader.integer<std::uint64_t>(), reader.integer<std::uint64_t>(), 0};
-        if (result.version == 2) change.resource = static_cast<ResourceType>(reader.integer<std::uint8_t>());
+        if (result.version >= 2) change.resource = static_cast<ResourceType>(reader.integer<std::uint8_t>());
         change.capacity = reader.integer<std::uint32_t>(); result.capacity_changes.push_back(change);
     }
     auto& t = result.totals;

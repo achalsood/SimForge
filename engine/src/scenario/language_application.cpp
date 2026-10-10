@@ -117,6 +117,10 @@ Application apply_operations(const ScenarioDefinition& source,std::span<const Op
         const auto index=field_index(op.field);
         if(counts[index]>1) {detail::diagnose(result.diagnostics,Code::Conflict,Stage::Application,op.source,"Multiple instructions target the same field. Choose one explicit instruction; order is not inferred");continue;}
         try {
+            const auto& workload=std::get<WarehouseConfig>(source.domain).workload;
+            if((physical_field(op.field)==Field::ArrivalInterval && workload.arrivals!=ArrivalMode::Constant) ||
+                (op.field==Field::Processing && workload.processing!=ProcessingMode::Constant))
+                detail::fail(Code::UnsupportedInstruction,"Advanced workload timing must be edited in the Scenario Editor; fixed timing commands require constant mode");
             if((op.field==Field::TickRate||op.field==Field::Seed)&&op.action!=Action::Set)
                 detail::fail(Code::UnsupportedInstruction,"Tick rate and seed allow absolute assignment only");
             auto current=Rational{value(source,op.field),1};

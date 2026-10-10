@@ -13,6 +13,7 @@ add_library(simforge_engine STATIC
     src/simulation/state_comparison.cpp
     src/scenario/json_io.cpp
     src/scenario/scenario.cpp
+    src/scenario/workload.cpp
     src/simulation/input_recording.cpp
     src/scenario/recording_json.cpp
     src/warehouse/event_scheduler.cpp
@@ -67,7 +68,7 @@ add_library(simforge_visualization STATIC src/visualization/warehouse_layout.cpp
 add_library(simforge_viewer STATIC src/viewer/viewer.cpp src/viewer/presentation.cpp)
 target_link_libraries(simforge_viewer PUBLIC simforge_visualization)
 target_compile_features(simforge_viewer PUBLIC cxx_std_23)
-add_library(simforge_workspace STATIC src/workspace/scenario_workspace.cpp src/workspace/experiment_execution.cpp src/workspace/presentation.cpp src/workspace/project.cpp)
+add_library(simforge_workspace STATIC src/workspace/scenario_workspace.cpp src/workspace/workload_draft.cpp src/workspace/experiment_execution.cpp src/workspace/presentation.cpp src/workspace/project.cpp)
 target_link_libraries(simforge_workspace PUBLIC simforge_viewer simforge_analysis simforge_scenario_language PRIVATE nlohmann_json::nlohmann_json)
 target_compile_features(simforge_workspace PUBLIC cxx_std_23)
 if(MSVC)

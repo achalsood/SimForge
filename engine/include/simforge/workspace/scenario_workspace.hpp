@@ -10,7 +10,17 @@ class ExperimentExecution;
 enum class Field : std::size_t { Name, Bays, Workers, Forklifts, Arrival, Processing, Duration, TickRate, Seed, Count };
 inline constexpr std::array<const char*,9> field_names{"Name","Loading bays","Workers","Forklifts","Arrival interval (s)",
     "Processing duration (s)","Simulation duration (s)","Tick rate (Hz)","Random seed"};
-struct Draft { std::array<std::string,9> values; bool operator==(const Draft&) const = default; };
+struct WorkloadDraft
+{
+    scenario::ArrivalMode arrivals{scenario::ArrivalMode::Constant};
+    scenario::ProcessingMode processing{scenario::ProcessingMode::Constant};
+    std::array<std::string,4> bounds{"240","480","600","1200"};
+    std::vector<std::array<std::string,3>> segments; // Raw simulated start/end/interval seconds; invalid edits are retained.
+    bool operator==(const WorkloadDraft&) const = default;
+};
+struct Draft { std::array<std::string,9> values; WorkloadDraft workload; bool operator==(const Draft&) const = default; };
+[[nodiscard]] WorkloadDraft workload_draft(const scenario::WarehouseConfig& config);
+void apply_workload_draft(scenario::WarehouseConfig& config,const WorkloadDraft& draft);
 struct ValidationError { std::string field, message; };
 struct Candidate { std::uint64_t id; scenario::ScenarioDefinition definition; std::string notes, changed_inputs; };
 struct PlayableRun
@@ -64,6 +74,7 @@ public:
     void open(const std::filesystem::path& path, bool discard_draft = false);
     void load(const scenario::ScenarioDefinition& definition, bool discard_draft = false);
     void edit(Field field, std::string value);
+    void edit_workload(WorkloadDraft draft);
     [[nodiscard]] scenario::ScenarioDefinition draft_definition() const;
     [[nodiscard]] scenario::language::Stamp language_stamp() const noexcept {return {language_epoch_,draft_revision_};}
     void apply_language_proposal(const scenario::language::Proposal& proposal,bool approved);

@@ -26,6 +26,7 @@ WarehouseSnapshot WarehouseSimulation::capture_snapshot() const
 {
     WarehouseSnapshot result;
     result.version = snapshot_version_;
+    if(snapshot_version_==3) result.workload_generator_version=scenario::workload_generator_version;
     result.scenario_identity = scenario_identity_;
     result.tick_rate = clock_.ticks_per_second();
     result.horizon_ticks = horizon_ticks_; result.processing_ticks = processing_ticks_;
@@ -53,6 +54,8 @@ WarehouseSimulation::WarehouseSimulation(const WarehouseSnapshot& snapshot)
     resources_.concurrency_ = std::min({snapshot.capacity.loading_bays, snapshot.capacity.workers, snapshot.capacity.forklifts});
     resources_.active_ = snapshot.usage.forklifts;
     for (auto id : snapshot.reservations) resources_.held_[id] = true;
+    if(config_.workload.processing==scenario::ProcessingMode::Uniform)
+        active_shipments_.insert(snapshot.reservations.begin(),snapshot.reservations.end());
     scheduler_.pending_limit_ = static_cast<std::size_t>(std::min(resources_.concurrency_, arrival_limit_)) + 1;
     scheduler_.heap_ = snapshot.events;
     scheduler_.heap_.reserve(scheduler_.pending_limit_);
@@ -103,6 +106,7 @@ void WarehouseSimulation::swap_state(WarehouseSimulation& other) noexcept
     swap(available_forklift_ticks_, other.available_forklift_ticks_); swap(capacity_changes_, other.capacity_changes_);
     swap(settled_, other.settled_);
     swap(snapshot_version_, other.snapshot_version_);
+    swap(workload_seed_,other.workload_seed_);swap(active_shipments_,other.active_shipments_);
 }
 void WarehouseSimulation::restore_snapshot(const WarehouseSnapshot& snapshot)
 {
@@ -133,7 +137,7 @@ void WarehouseSimulation::set_resource_capacity(ResourceType resource, std::uint
     capacity_changes_.push_back({clock_.tick_count(), started_, count, resource});
     scheduler_.pending_limit_ = limit;
     resources_.capacity_ = capacity; resources_.concurrency_ = concurrency;
-    if (resource != ResourceType::Forklift) snapshot_version_ = 2;
+    if (resource != ResourceType::Forklift && snapshot_version_!=3) snapshot_version_ = 2;
     start_waiting();
 }
 } // namespace simforge::warehouse

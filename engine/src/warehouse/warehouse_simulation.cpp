@@ -26,9 +26,9 @@ WarehouseSimulation::Parameters WarehouseSimulation::parameters(const scenario::
     const auto* config = std::get_if<scenario::WarehouseConfig>(&definition.domain);
     if (!config) throw std::invalid_argument("WarehouseSimulation requires a warehouse scenario");
     return {*config, definition.simulation.tick_rate,
-            1 + (definition.simulation.duration_seconds - 1) / config->shipment_interval_seconds,
+            scenario::workload::arrival_bound(*config,definition.simulation.duration_seconds,definition.simulation.tick_rate),
             static_cast<std::uint64_t>(definition.simulation.duration_seconds) * definition.simulation.tick_rate,
-            std::move(identity)};
+            std::move(identity), definition.simulation.random_seed};
 }
 WarehouseSimulation::WarehouseSimulation(const scenario::ScenarioDefinition& definition)
     : WarehouseSimulation{parameters(definition)} {}
@@ -42,7 +42,10 @@ WarehouseSimulation::WarehouseSimulation(Parameters params)
 {
     shipments_.reserve(arrival_limit_);
     waiting_queue_.reserve(arrival_limit_);
-    (void)scheduler_.schedule(0, EventType::ShipmentArrival, 0);
+    workload_seed_=params.seed;
+    if(scenario::workload::advanced(config_)) snapshot_version_=3;
+    if(const auto first=scenario::workload::first_arrival(config_,params.rate))
+        (void)scheduler_.schedule(*first, EventType::ShipmentArrival, 0);
 }
 void WarehouseSimulation::move_clock_to(std::uint64_t tick)
 {
@@ -65,10 +68,12 @@ void WarehouseSimulation::start_waiting()
         auto& record = shipments_[id];
         if (record.status != ShipmentStatus::Waiting) throw std::logic_error("Invalid warehouse waiting queue state");
         if (!resources_.try_acquire(id)) break;
-        const auto completion_tick = checked_add(tick, processing_ticks_);
+        const auto requirement=record.required_processing_ticks ? record.required_processing_ticks : processing_ticks_;
+        const auto completion_tick = checked_add(tick, requirement);
         (void)scheduler_.schedule(completion_tick, EventType::ShipmentCompletion, id);
         record.status = ShipmentStatus::InProgress;
         record.start_tick = tick;
+        if(config_.workload.processing==scenario::ProcessingMode::Uniform) active_shipments_.insert(id);
         const auto wait = tick - record.arrival_tick;
         total_wait_ticks_ += wait;
         max_wait_ticks_ = std::max(max_wait_ticks_, wait);
@@ -82,11 +87,14 @@ void WarehouseSimulation::process(const ShipmentEvent& event)
     {
         if (event.shipment != shipments_.size() || event.tick >= horizon_ticks_)
             throw std::logic_error("Invalid warehouse arrival event");
-        shipments_.push_back({event.shipment, ShipmentStatus::Waiting, event.tick, {}, {}});
+        const auto requirement=scenario::workload::advanced(config_) ? scenario::workload::processing_ticks(config_,clock_.ticks_per_second(),workload_seed_,event.shipment) : 0;
+        shipments_.push_back({event.shipment, ShipmentStatus::Waiting, event.tick, {}, {},requirement});
         waiting_queue_.push_back(event.shipment);
-        const auto next = checked_add(event.tick, arrival_interval_ticks_);
-        if (next < horizon_ticks_)
-            (void)scheduler_.schedule(next, EventType::ShipmentArrival, event.shipment + 1);
+        if(config_.workload.arrivals==scenario::ArrivalMode::Constant) {
+            const auto next=checked_add(event.tick,arrival_interval_ticks_);
+            if(next<horizon_ticks_) (void)scheduler_.schedule(next,EventType::ShipmentArrival,event.shipment+1);
+        } else if(const auto next=scenario::workload::next_arrival(config_,clock_.ticks_per_second(),horizon_ticks_,workload_seed_,event.shipment,event.tick))
+            (void)scheduler_.schedule(*next,EventType::ShipmentArrival,event.shipment+1);
         start_waiting();
     }
     else
@@ -94,9 +102,10 @@ void WarehouseSimulation::process(const ShipmentEvent& event)
         if (event.shipment >= shipments_.size()) throw std::logic_error("Completion refers to unarrived shipment");
         auto& record = shipments_[event.shipment];
         if (record.status != ShipmentStatus::InProgress || !record.start_tick ||
-            event.tick != checked_add(*record.start_tick, processing_ticks_))
+            event.tick != checked_add(*record.start_tick, record.required_processing_ticks ? record.required_processing_ticks : processing_ticks_))
             throw std::logic_error("Invalid or duplicate warehouse completion event");
         resources_.release(event.shipment);
+        if(config_.workload.processing==scenario::ProcessingMode::Uniform) active_shipments_.erase(event.shipment);
         record.status = ShipmentStatus::Completed;
         record.completion_tick = event.tick;
         completed_processing_ticks_ += event.tick - *record.start_tick;
@@ -166,6 +175,7 @@ std::size_t WarehouseSimulation::approximate_storage_bytes() const noexcept
 {
     return shipments_.capacity() * sizeof(ShipmentRecord) + waiting_queue_.capacity() * sizeof(ShipmentId) +
            resources_.approximate_storage_bytes() + scheduler_.approximate_storage_bytes() +
-           scenario_identity_.capacity() + capacity_changes_.capacity() * sizeof(CapacityChange);
+           scenario_identity_.capacity() + capacity_changes_.capacity() * sizeof(CapacityChange) +
+           config_.workload.segments.capacity()*sizeof(scenario::DemandSegment) + active_shipments_.size()*40;
 }
 } // namespace simforge::warehouse
