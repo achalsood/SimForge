@@ -10,6 +10,7 @@
 #include <simforge/warehouse/warehouse_input.hpp>
 #include <simforge/analysis/scenario_comparison.hpp>
 #include <simforge/analysis/statistical_experiment.hpp>
+#include <simforge/analysis/sensitivity.hpp>
 #include <nlohmann/json.hpp>
 #include <fstream>
 
@@ -40,7 +41,7 @@ struct Options
     std::optional<std::filesystem::path> warehouse_replay;
     std::optional<std::pair<std::uint32_t, std::uint32_t>> compare_forklifts;
     std::optional<std::uint64_t> checkpoint_seconds;
-    std::optional<std::filesystem::path> experiment, export_json, export_csv, export_seeds;
+    std::optional<std::filesystem::path> experiment, export_json, export_csv, export_seeds,export_marginal;
     std::optional<std::uint64_t> graphics_smoke;
     std::optional<std::filesystem::path> graphics_capture;
 };
@@ -85,9 +86,9 @@ Options parse_options(int argc, char* argv[])
             if (++i == argc) throw std::invalid_argument("Missing graphics capture output path");
             options.graphics_capture = argv[i];
         }
-        else if (argument == "--experiment" || argument == "--export-json" || argument == "--export-csv" || argument == "--export-seeds")
+        else if (argument == "--experiment" || argument == "--export-json" || argument == "--export-csv" || argument == "--export-seeds" || argument=="--export-marginal")
         {
-            auto& destination = argument == "--experiment" ? options.experiment : argument == "--export-json" ? options.export_json : argument=="--export-csv"?options.export_csv:options.export_seeds;
+            auto& destination = argument == "--experiment" ? options.experiment : argument == "--export-json" ? options.export_json : argument=="--export-csv"?options.export_csv:argument=="--export-seeds"?options.export_seeds:options.export_marginal;
             if (destination) throw std::invalid_argument("Duplicate experiment/export option");
             if (++i == argc) throw std::invalid_argument("Missing experiment/export path");
             destination = argv[i];
@@ -150,14 +151,14 @@ Options parse_options(int argc, char* argv[])
         throw std::invalid_argument("Checkpoint comparison requires --headless --scenario, both comparison options, and no replay/size overrides");
     if ((options.experiment && (!options.headless || options.scenario || options.record || options.replay || options.warehouse_replay ||
         options.compare_forklifts || options.checkpoint_seconds || entities_seen || ticks_seen)) ||
-        ((options.export_json || options.export_csv || options.export_seeds) && !options.experiment))
+        ((options.export_json || options.export_csv || options.export_seeds || options.export_marginal) && !options.experiment))
         throw std::invalid_argument("--experiment requires --headless and conflicts with other workflows; exports require --experiment");
     if (options.export_json && options.export_csv && std::filesystem::absolute(*options.export_json).lexically_normal() ==
         std::filesystem::absolute(*options.export_csv).lexically_normal())
         throw std::invalid_argument("JSON and CSV output paths must differ");
     if(options.export_seeds) for(const auto* output:{&options.export_json,&options.export_csv}) if(*output && std::filesystem::absolute(**output).lexically_normal()==std::filesystem::absolute(*options.export_seeds).lexically_normal()) throw std::invalid_argument("Per-seed export path must differ from JSON and summary CSV");
     if (options.graphics_smoke && (options.headless || options.record || options.replay || options.warehouse_replay ||
-        options.experiment || options.compare_forklifts || options.checkpoint_seconds || options.export_json || options.export_csv || options.export_seeds || entities_seen || ticks_seen))
+        options.experiment || options.compare_forklifts || options.checkpoint_seconds || options.export_json || options.export_csv || options.export_seeds || options.export_marginal || entities_seen || ticks_seen))
         throw std::invalid_argument("--graphics-smoke conflicts with headless/simulation options");
     if (options.graphics_capture && (!options.graphics_smoke || (options.graphics_capture->extension() != ".ppm" && options.graphics_capture->extension() != ".png") || std::filesystem::exists(*options.graphics_capture)))
         throw std::invalid_argument("--graphics-capture requires --graphics-smoke and a new .png or .ppm output file");
@@ -168,12 +169,26 @@ int experiment_workflow(const Options& options)
 {
     using namespace simforge::analysis;
     // Check output conflicts before simulation and write only exclusive new files.
-    for (const auto* output : {&options.export_json, &options.export_csv,&options.export_seeds})
+    if(options.export_marginal&&!options.experiment)throw std::invalid_argument("Marginal CSV requires sensitivity experiment");
+    if(options.export_marginal)for(const auto* other:{&options.export_json,&options.export_csv,&options.export_seeds})if(*other&&std::filesystem::absolute(**other).lexically_normal()==std::filesystem::absolute(*options.export_marginal).lexically_normal())throw std::invalid_argument("Export paths must differ");
+    for (const auto* output : {&options.export_json, &options.export_csv,&options.export_seeds,&options.export_marginal})
         if (*output && std::filesystem::exists(**output)) throw std::invalid_argument("Export output already exists: " + (**output).string());
     {
         if(std::filesystem::file_size(*options.experiment)>max_experiment_bytes) throw std::length_error("Experiment specification exceeds byte budget");
         std::ifstream input(*options.experiment);nlohmann::json specification;input>>specification;
+        if(specification.is_object()&&specification.contains("schema_version")&&specification.at("schema_version").is_number_integer()&&specification.at("schema_version")==3) {
+            if(!specification.contains("mode")||specification.at("mode")!="sensitivity") {std::cerr<<"Unsupported sensitivity mode\n";return 3;}
+            try {const auto request=load_sensitivity_experiment(*options.experiment);const auto report=run_sensitivity(request);
+                std::cout<<"SimForge Sensitivity | "<<parameter_name(request.parameter)<<" | "<<request.plan.count<<" seeds | "<<report.simulation_executions<<" executions\n";
+                for(const auto& p:report.points) {std::cout<<p.value<<" | Mean: ";if(p.means[static_cast<std::size_t>(request.objective)])std::cout<<*p.means[static_cast<std::size_t>(request.objective)];else std::cout<<"undefined";std::cout<<" | "<<p.marginal_interpretation<<'\n';}
+                if(options.export_json)save_sensitivity_report(*options.export_json,report);
+                if(options.export_csv)save_sensitivity_csv(*options.export_csv,report,SensitivityCsv::Summary);
+                if(options.export_seeds)save_sensitivity_csv(*options.export_seeds,report,SensitivityCsv::Seeds);
+                if(options.export_marginal)save_sensitivity_csv(*options.export_marginal,report,SensitivityCsv::Marginal);return 0;
+            }catch(const simforge::simulation::ExecutionCancelled& e) {std::cerr<<e.what()<<'\n';return 5;}catch(const std::invalid_argument& e) {std::cerr<<e.what()<<'\n';return 2;}catch(const std::exception& e) {std::cerr<<e.what()<<'\n';return 4;}
+        }
         if(specification.is_object() && specification.contains("schema_version") && specification.at("schema_version").is_number_integer() && specification.at("schema_version")==2) {
+            if(options.export_marginal)throw std::invalid_argument("Marginal CSV requires sensitivity experiment");
             if(!specification.contains("mode") || !specification.at("mode").is_string()) {std::cerr<<"Statistical mode must be a string\n";return 2;}
             if(specification.at("mode")!="paired_statistical") {std::cerr<<"Unsupported statistical mode; only paired fresh-start capacity comparisons are supported\n";return 3;}
             try {
@@ -189,6 +204,7 @@ int experiment_workflow(const Options& options)
             }catch(const simforge::simulation::ExecutionCancelled& e) {std::cerr<<e.what()<<'\n';return 5;}catch(const std::invalid_argument& e) {std::cerr<<e.what()<<'\n';return 2;}catch(const std::exception& e) {std::cerr<<e.what()<<'\n';return 4;}
         }
     }
+    if(options.export_marginal)throw std::invalid_argument("Marginal CSV requires sensitivity experiment");
     if(options.export_seeds) throw std::invalid_argument("Per-seed CSV requires a statistical experiment");
     const auto report = run_comparison(load_experiment(*options.experiment));
     std::cout << "SimForge Batch Comparison | Objective: " << objective_name(report.request.objective)

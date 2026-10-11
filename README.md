@@ -316,6 +316,12 @@ docs/         Architecture and design documentation
 cmake/        CMake helper modules
 ```
 
+## How many forklifts does this warehouse actually need?
+
+Open `examples/warehouse-baseline.json`, select **Analysis → Sensitivity Analysis**, and sweep forklift capacity from **1 to 6** with step **1**. Run a single realization, or load the statistical workload example and choose 20 paired seeds. Inspect measured throughput, baseline effects, signed marginal gains and uncertainty, then create a candidate or explicitly seeded playable run from a tested value. The deterministic example completes **32, 63, 94, 94, 94, 94** shipments: three is the first best observed value in this tested range, with other capacities held fixed.
+
+See [sensitivity methodology, CLI, persistence, measurements and native screenshots](docs/sensitivity-analysis.md). This workflow reports bounded one-factor evidence and practical thresholds; it does not claim global optimality or financial ROI.
+
 ## Build artifacts
 
 Graphics reviews now use unique PNG runs under `build/test-artifacts`; successful

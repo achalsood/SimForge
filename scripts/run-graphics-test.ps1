@@ -1,6 +1,6 @@
 param(
  [Parameter(Mandatory=$true)][string]$Executable,
- [string]$Scenario,[switch]$Live,[switch]$ProjectRoundTrip,[switch]$Language,[switch]$Workload,[switch]$Statistical,[ValidateRange(120,10000)][int]$Frames=180,
+ [string]$Scenario,[switch]$Live,[switch]$ProjectRoundTrip,[switch]$Language,[switch]$Workload,[switch]$Statistical,[switch]$Sensitivity,[ValidateRange(120,10000)][int]$Frames=180,
  [ValidateSet('Test','Review')][string]$Mode='Test',
  [ValidateRange(1,100)][int]$KeepRuns=3,[string]$ArtifactRoot,[switch]$ForceFailure
 )
@@ -21,11 +21,13 @@ if($Mode -eq 'Review') { $arguments+=@('--graphics-capture',(Join-Path $dir 'cap
 $oldLanguage=$env:SIMFORGE_LANGUAGE_TEST_PATH; $oldProject=$env:SIMFORGE_PROJECT_TEST_PATH; $oldCapture=$env:SIMFORGE_FAILURE_CAPTURE; $oldFailure=$env:SIMFORGE_TEST_FAIL_AFTER_PRESENT; $oldMetrics=$env:SIMFORGE_CAPTURE_METRICS
 $oldWorkload=$env:SIMFORGE_WORKLOAD_TEST_PATH
 $oldStatistical=$env:SIMFORGE_STATISTICAL_TEST_PATH
+$oldSensitivity=$env:SIMFORGE_SENSITIVITY_TEST_PATH
 $exitCode=1; $start=[Diagnostics.Stopwatch]::StartNew()
 try {
  if($Language) { $env:SIMFORGE_LANGUAGE_TEST_PATH=Join-Path $dir "language.simforge" }
  if($Workload) { $env:SIMFORGE_WORKLOAD_TEST_PATH=Join-Path $dir "workload.simforge" }
  if($Statistical) { $env:SIMFORGE_STATISTICAL_TEST_PATH=Join-Path $dir "statistical.simforge" }
+ if($Sensitivity) { $env:SIMFORGE_SENSITIVITY_TEST_PATH=Join-Path $dir "sensitivity.simforge" }
  if($ProjectRoundTrip) { $env:SIMFORGE_PROJECT_TEST_PATH=Join-Path $dir "project.simforge" }
  $env:SIMFORGE_FAILURE_CAPTURE=Join-Path $dir 'failure.png'
  if($Mode -eq 'Review') { $env:SIMFORGE_CAPTURE_METRICS='1' }
@@ -35,8 +37,8 @@ try {
  $ErrorActionPreference='Continue'
  & $Executable @arguments *> (Join-Path $dir 'console.log')
  $exitCode=$LASTEXITCODE
- if(($ProjectRoundTrip -or $Language -or $Workload -or $Statistical) -and $exitCode -eq 0) {
-   $projectFile=if($Statistical){'statistical.simforge'}elseif($Workload){'workload.simforge'}elseif($Language){'language.simforge'}else{'project.simforge'}
+ if(($ProjectRoundTrip -or $Language -or $Workload -or $Statistical -or $Sensitivity) -and $exitCode -eq 0) {
+   $projectFile=if($Sensitivity){'sensitivity.simforge'}elseif($Statistical){'statistical.simforge'}elseif($Workload){'workload.simforge'}elseif($Language){'language.simforge'}else{'project.simforge'}
    $projectArgs=@('--project',(Join-Path $dir $projectFile),'--graphics-smoke',"$Frames")
    if($Mode -eq 'Review') { $projectArgs+=@('--graphics-capture',(Join-Path $dir 'reopened.png')) }
    & $Executable @projectArgs *>> (Join-Path $dir 'console.log')
@@ -47,6 +49,7 @@ try {
  $env:SIMFORGE_LANGUAGE_TEST_PATH=$oldLanguage; $env:SIMFORGE_PROJECT_TEST_PATH=$oldProject; $env:SIMFORGE_FAILURE_CAPTURE=$oldCapture; $env:SIMFORGE_TEST_FAIL_AFTER_PRESENT=$oldFailure; $env:SIMFORGE_CAPTURE_METRICS=$oldMetrics
  $env:SIMFORGE_WORKLOAD_TEST_PATH=$oldWorkload
  $env:SIMFORGE_STATISTICAL_TEST_PATH=$oldStatistical
+ $env:SIMFORGE_SENSITIVITY_TEST_PATH=$oldSensitivity
  $manifest.status=if($exitCode -eq 0){'Success'}else{'Failure'}
  $manifest['finishedUtc']=[DateTime]::UtcNow.ToString('o'); $manifest['elapsedMs']=$start.Elapsed.TotalMilliseconds
  $manifest|ConvertTo-Json|Set-Content -LiteralPath $marker -Encoding UTF8

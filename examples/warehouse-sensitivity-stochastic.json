@@ -1,0 +1,22 @@
+{
+    "schema_version":  3,
+    "mode":  "sensitivity",
+    "scenario":  "warehouse-statistical-workload.json",
+    "parameter":  "forklifts",
+    "range":  {
+                  "minimum":  1,
+                  "maximum":  6,
+                  "step":  1
+              },
+    "objective":  "completed",
+    "multi_seed":  true,
+    "replications":  {
+                         "count":  20,
+                         "policy":  "sequential_v1",
+                         "base_seed":  1001,
+                         "generator_version":  1,
+                         "method_version":  1,
+                         "confidence":  0.95
+                     },
+    "practical_threshold":  1
+}

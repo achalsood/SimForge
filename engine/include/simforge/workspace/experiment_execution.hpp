@@ -16,6 +16,7 @@ struct ExperimentProgress
     std::uint64_t current_candidate{0};
     std::string replication_seed;
     std::string phase, candidate, error;
+    bool sensitivity{false};std::string parameter,sweep_value;
     bool cancellation_requested{false};
     double elapsed_seconds{0};
     [[nodiscard]] bool active() const noexcept

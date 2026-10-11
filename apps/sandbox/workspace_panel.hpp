@@ -2,7 +2,7 @@
 #include "dashboard.hpp"
 #include "scenario_language_panel.hpp"
 #include <simforge/workspace/scenario_workspace.hpp>
-enum class WorkspaceAction { Validate, Revert, Open, Save, Run, Add, Edit, Update, Rename, Duplicate, Remove, Restore, Compare, Cancel, View, Baseline, Json, Csv, SelectRun, RemoveRun, Live, SimulateCandidate, SimulateResult, LoadRun, ApplyLanguage, CsvSeeds };
+enum class WorkspaceAction { Validate, Revert, Open, Save, Run, Add, Edit, Update, Rename, Duplicate, Remove, Restore, Compare, Cancel, View, Baseline, Json, Csv, SelectRun, RemoveRun, Live, SimulateCandidate, SimulateResult, LoadRun, ApplyLanguage, CsvSeeds, Sweep, SweepCandidate, SweepRun, CsvMarginal };
 struct WorkspaceCommand
 {
     WorkspaceAction action;
@@ -15,6 +15,8 @@ struct WorkspaceCommand
     std::optional<simforge::scenario::language::Proposal> proposal;
     bool approved{false};
     std::optional<simforge::analysis::ReplicationPlan> replications;
+    std::optional<simforge::analysis::SensitivityRequest> sensitivity;
+    std::uint64_t seed{0};
 };
 struct WorkspaceUI
 {
@@ -45,6 +47,15 @@ struct WorkspaceUI
     glm::vec2 export_field{}, export_json{}, export_csv{};
     double results_ui_us{0}; std::uint64_t results_frames{0};
     bool analysis_page{false};
+    bool sensitivity{false},sweep_multi{false},sweep_explicit{false};
+    bool close_sweep_settings{false};glm::vec2 sweep_settings_header{};
+    int sweep_parameter{0},sweep_objective{0},sweep_selected{0},sweep_seed{0};
+    std::string sweep_min{"1"},sweep_max{"6"},sweep_step{"1"},sweep_values{"1,2,3,4,5,6"},sweep_threshold{"1"},sweep_name{"Tested configuration"};
+    glm::vec2 sweep_toggle{},sweep_start{},sweep_multi_control{},sweep_point_control{},sweep_add{},sweep_run{},sweep_curve{},sweep_marginal{};
+    std::array<glm::vec2,3> sweep_range_controls{};
+    std::vector<glm::vec2> sweep_point_options;
+    glm::vec2 sweep_parameter_control{};std::array<glm::vec2,5> sweep_parameter_options{};
+    double sweep_chart_us{0};std::uint64_t sweep_chart_frames{0};
     LanguageUI language;
     glm::vec2 describe{};
     bool dialog_used{false};

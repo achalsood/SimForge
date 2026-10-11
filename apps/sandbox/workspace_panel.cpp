@@ -7,6 +7,7 @@
 #include <simforge/workspace/presentation.hpp>
 #include "save_dialog.hpp"
 #include "statistical_panel.hpp"
+#include "sensitivity_panel.hpp"
 
 using namespace simforge;
 void apply_workspace(workspace::ScenarioWorkspace& w, const WorkspaceCommand& c)
@@ -41,6 +42,12 @@ void apply_workspace(workspace::ScenarioWorkspace& w, const WorkspaceCommand& c)
     case WorkspaceAction::Json: w.export_json(std::filesystem::u8path(c.text)); break;
     case WorkspaceAction::Csv: w.export_csv(std::filesystem::u8path(c.text)); break;
     case WorkspaceAction::CsvSeeds: w.export_seed_csv(std::filesystem::u8path(c.text));break;
+    case WorkspaceAction::Sweep: if(!c.sensitivity)throw std::invalid_argument("Missing sensitivity inputs");w.start_sensitivity(*c.sensitivity);break;
+    case WorkspaceAction::SweepCandidate:
+    case WorkspaceAction::SweepRun:
+        if(!c.sensitivity||!w.report()||!w.report()->sensitivity||analysis::serialize_sensitivity_request(*c.sensitivity)!=analysis::serialize_sensitivity_request(w.report()->sensitivity->request))throw std::invalid_argument("Sensitivity results changed; select the tested configuration again");
+        if(c.action==WorkspaceAction::SweepCandidate)w.add_sensitivity_candidate(c.id,c.text,c.seed);else w.simulate_sensitivity(c.id,c.seed);break;
+    case WorkspaceAction::CsvMarginal: w.export_marginal_csv(std::filesystem::u8path(c.text));break;
     }
 }
 namespace
@@ -141,7 +148,7 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
         else { queue(std::move(c)); ui.requested_tab=2; }
     };
     const auto progress = w.execution().progress();
-    if(ui.analysis_page) draw_statistical_setup(w,ui,s);
+    if(ui.analysis_page) {draw_sensitivity_setup(w,ui,s);if(!ui.sensitivity)draw_statistical_setup(w,ui,s);}
     if (progress.request_id != 0 && ui.analysis_page && !(progress.total_replications && !progress.active()))
     {
         ImGui::Separator();
@@ -157,7 +164,7 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
         ImGui::Text("%s | Candidates %llu / %llu | Elapsed %.1f s",progress.phase.c_str(),
             static_cast<unsigned long long>(progress.completed_candidates),static_cast<unsigned long long>(progress.total_candidates),progress.elapsed_seconds);
         if(progress.total_replications) ImGui::TextWrapped("Paired seed %llu / %llu (seed %s) | Completed seeds %llu | Current candidate %llu / %llu",static_cast<unsigned long long>(progress.current_replication),static_cast<unsigned long long>(progress.total_replications),progress.replication_seed.c_str(),static_cast<unsigned long long>(progress.completed_replications),static_cast<unsigned long long>(progress.current_candidate),static_cast<unsigned long long>(progress.candidates_per_replication));
-        if (progress.active() && !progress.candidate.empty()) ImGui::TextWrapped("Submitted configuration: %s",progress.candidate.c_str());
+        if (progress.active() && !progress.candidate.empty()) {if(progress.sensitivity){if(!progress.sweep_value.empty())ImGui::TextWrapped("Submitted sweep parameter: %s | current value %s",progress.parameter.c_str(),progress.sweep_value.c_str());}else ImGui::TextWrapped("Submitted configuration: %s",progress.candidate.c_str());}
         if (progress.horizon) ImGui::Text("Run tick %llu / %llu",static_cast<unsigned long long>(progress.tick),static_cast<unsigned long long>(progress.horizon));
         // Candidate count measures completed evaluations; setup/probes/publication are indeterminate.
         if (progress.state == workspace::ExecutionState::Completed) ImGui::ProgressBar(1.0f,{-1,18*s},"Report ready");
@@ -168,7 +175,7 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
             ImGui::TextWrapped("Using submitted inputs. Edits apply to future experiments.");
         }
         if (!progress.error.empty()) ImGui::TextWrapped("Experiment failed: %s",progress.error.c_str());
-        if (progress.state == workspace::ExecutionState::Completed && w.report() && !w.report()->statistics && w.report()->request_id == progress.request_id)
+        if (progress.state == workspace::ExecutionState::Completed && w.report() && !w.report()->statistics && !w.report()->sensitivity && w.report()->request_id == progress.request_id)
             ImGui::Text("Baseline completed shipments: %llu",static_cast<unsigned long long>(w.report()->baseline.metrics.completed));
         if (const auto attempt=w.execution().last_unsuccessful_attempt(); attempt && attempt->request_id != progress.request_id)
         {
@@ -381,11 +388,12 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
             const auto start=std::chrono::steady_clock::now();
             if(!w.report())
             {
-                ImGui::PushFont(nullptr,28); ImGui::TextUnformatted("No comparison yet"); ImGui::PopFont();
-                ImGui::TextWrapped("Add candidates and run a comparison. Completed reports retain the submitted inputs.");
+                ImGui::PushFont(nullptr,28); ImGui::TextUnformatted(ui.sensitivity?"No sweep yet":"No comparison yet"); ImGui::PopFont();
+                ImGui::TextWrapped("%s",ui.sensitivity?"Choose a parameter and bounded values, then Run Sweep. The loaded scenario is the immutable source.":"Add candidates and run a comparison. Completed reports retain the submitted inputs.");
                 if(ImGui::Button("Configure an experiment",{240*s,36*s})) ui.requested_tab=0;
                 if(!w.viewing_baseline() && ImGui::Button("Return to preserved baseline",{-1,36*s})) queue({WorkspaceAction::Baseline});
             }
+            else if(w.report()->sensitivity) draw_sensitivity_results(w,ui,s);
             else if(w.report()->statistics) draw_statistical_results(w,ui,s);
             else
             {

@@ -30,6 +30,7 @@ std::uint64_t ExperimentExecution::start(ExperimentRequest request, Observer obs
     if (next_id_ == std::numeric_limits<std::uint64_t>::max()) throw std::overflow_error("Request identities exhausted");
     if (worker_.joinable()) worker_.join();
     request.id = next_id_++;
+    if(request.sensitivity)request.sensitivity->id=request.id;
     const auto id = request.id;
     {
         std::lock_guard lock{mutex_};
@@ -37,6 +38,7 @@ std::uint64_t ExperimentExecution::start(ExperimentRequest request, Observer obs
         progress_.total_candidates = request.candidates.size(); progress_.state = ExecutionState::Preparing;
         progress_.candidates_per_replication=request.candidates.size();
         if(request.replications) {progress_.total_replications=request.replications->count;progress_.total_candidates*=request.replications->count;}
+        if(request.sensitivity) {progress_.sensitivity=true;progress_.parameter=analysis::parameter_name(request.sensitivity->parameter);progress_.total_replications=request.sensitivity->plan.count;progress_.candidates_per_replication=request.sensitivity->values.size();progress_.total_candidates=progress_.candidates_per_replication*progress_.total_replications;}
         progress_.phase = "Preparing"; started_ = std::chrono::steady_clock::now();
     }
     try {
@@ -50,6 +52,8 @@ std::uint64_t ExperimentExecution::start(ExperimentRequest request, Observer obs
                         if (phase == "Candidate complete") ++progress_.completed_candidates;
                         if(phase=="Replication") {progress_.current_replication=tick;progress_.replication_seed=name;progress_.current_candidate=0;}
                         if(phase=="Evaluating candidate") progress_.current_candidate=progress_.completed_candidates%progress_.candidates_per_replication+1;
+                        if(progress_.sensitivity&&phase=="Replication")progress_.sweep_value.clear();
+                        if(progress_.sensitivity&&phase=="Evaluating candidate")progress_.sweep_value=name;
                         if(phase=="Replication complete") progress_.completed_replications=tick;
                         if (phase != "Simulating") { progress_.phase = phase; progress_.tick = 0; progress_.horizon = 0; }
                         if (!name.empty() && phase != "Bottleneck probes") progress_.candidate = name;

@@ -41,7 +41,7 @@ void restore_ui(const workspace::ProjectPreferences& p,DashboardState& d,Workspa
     e.editing=p.selected_candidate;e.mode=static_cast<int>(p.comparison_mode);e.objective=static_cast<int>(p.objective);
     e.current_checkpoint=p.current_checkpoint;e.checkpoint_seconds=p.checkpoint_seconds;e.notes=p.notes;e.result_name=p.result_name;
     e.current_tab=p.editor_tab;e.requested_tab=p.application_mode==1?p.editor_tab:-1; e.pending.clear();e.confirmation.reset();e.error.clear();e.result_order.clear();
-    e.statistical=p.statistical;e.replications=p.replications;e.base_seed=p.base_seed;e.seed_list=p.seed_list;e.seed_policy=p.seed_policy;e.statistical_metric=p.statistical_metric;
+    e.sensitivity=p.sensitivity;e.sweep_multi=p.sweep_multi;e.sweep_explicit=p.sweep_explicit;e.sweep_parameter=p.sweep_parameter;e.sweep_objective=p.sweep_objective;e.sweep_selected=p.sweep_selected;e.sweep_seed=p.sweep_seed;e.sweep_min=p.sweep_min;e.sweep_max=p.sweep_max;e.sweep_step=p.sweep_step;e.sweep_values=p.sweep_values;e.sweep_threshold=p.sweep_threshold;e.sweep_name=p.sweep_name;e.statistical=p.statistical;e.replications=p.replications;e.base_seed=p.base_seed;e.seed_list=p.seed_list;e.seed_policy=p.seed_policy;e.statistical_metric=p.statistical_metric;
     e.language={}; // Review state is temporary; reopened projects never reapply a proposal.
 }
 }
@@ -53,7 +53,7 @@ void capture_project_preferences(workspace::Project& p,const DashboardState& d,c
     value.comparison_mode=static_cast<workspace::ComparisonMode>(e.mode);value.objective=static_cast<analysis::Objective>(e.objective);
     value.current_checkpoint=e.current_checkpoint;value.checkpoint_seconds=e.checkpoint_seconds;value.selected_candidate=e.editing;
     value.notes=e.notes;value.result_name=e.result_name;value.editor_tab=e.current_tab;
-    value.statistical=e.statistical;value.replications=e.replications;value.base_seed=e.base_seed;value.seed_list=e.seed_list;value.seed_policy=e.seed_policy;value.statistical_metric=e.statistical_metric;
+    value.sensitivity=e.sensitivity;value.sweep_multi=e.sweep_multi;value.sweep_explicit=e.sweep_explicit;value.sweep_parameter=e.sweep_parameter;value.sweep_objective=e.sweep_objective;value.sweep_selected=e.sweep_selected;value.sweep_seed=e.sweep_seed;value.sweep_min=e.sweep_min;value.sweep_max=e.sweep_max;value.sweep_step=e.sweep_step;value.sweep_values=e.sweep_values;value.sweep_threshold=e.sweep_threshold;value.sweep_name=e.sweep_name;value.statistical=e.statistical;value.replications=e.replications;value.base_seed=e.base_seed;value.seed_list=e.seed_list;value.seed_policy=e.seed_policy;value.statistical_metric=e.statistical_metric;
     p.preferences(std::move(value));
 }
 void process_project(workspace::Project& project,workspace::ScenarioWorkspace& w,ProjectUI& ui,DashboardState& d,WorkspaceUI& e)

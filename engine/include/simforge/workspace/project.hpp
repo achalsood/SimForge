@@ -22,6 +22,9 @@ struct ProjectPreferences
     bool statistical{false};
     std::string replications{"20"},base_seed{"1001"},seed_list;
     int seed_policy{0},statistical_metric{0};
+    bool sensitivity{false},sweep_multi{false},sweep_explicit{false};
+    int sweep_parameter{0},sweep_objective{0},sweep_selected{0},sweep_seed{0};
+    std::string sweep_min{"1"},sweep_max{"6"},sweep_step{"1"},sweep_values{"1,2,3,4,5,6"},sweep_threshold{"1"},sweep_name{"Tested configuration"};
     bool operator==(const ProjectPreferences&) const = default;
 };
 struct ProjectInfo

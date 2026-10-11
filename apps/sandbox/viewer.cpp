@@ -157,7 +157,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         workspace_ui.mode=static_cast<int>(p.comparison_mode);workspace_ui.objective=static_cast<int>(p.objective);
         workspace_ui.current_checkpoint=p.current_checkpoint;workspace_ui.checkpoint_seconds=p.checkpoint_seconds;workspace_ui.editing=p.selected_candidate;
         workspace_ui.notes=p.notes;workspace_ui.result_name=p.result_name;workspace_ui.current_tab=p.editor_tab;
-        workspace_ui.statistical=p.statistical;workspace_ui.replications=p.replications;workspace_ui.base_seed=p.base_seed;workspace_ui.seed_list=p.seed_list;workspace_ui.seed_policy=p.seed_policy;workspace_ui.statistical_metric=p.statistical_metric;
+        workspace_ui.sensitivity=p.sensitivity;workspace_ui.sweep_multi=p.sweep_multi;workspace_ui.sweep_explicit=p.sweep_explicit;workspace_ui.sweep_parameter=p.sweep_parameter;workspace_ui.sweep_objective=p.sweep_objective;workspace_ui.sweep_selected=p.sweep_selected;workspace_ui.sweep_seed=p.sweep_seed;workspace_ui.sweep_min=p.sweep_min;workspace_ui.sweep_max=p.sweep_max;workspace_ui.sweep_step=p.sweep_step;workspace_ui.sweep_values=p.sweep_values;workspace_ui.sweep_threshold=p.sweep_threshold;workspace_ui.sweep_name=p.sweep_name;workspace_ui.statistical=p.statistical;workspace_ui.replications=p.replications;workspace_ui.base_seed=p.base_seed;workspace_ui.seed_list=p.seed_list;workspace_ui.seed_policy=p.seed_policy;workspace_ui.statistical_metric=p.statistical_metric;
         if(p.application_mode==1) workspace_ui.requested_tab=p.editor_tab;
         if(workspace.report()) {workspace_ui.result_order=workspace.report()->ranking;for(const auto& c:workspace.report()->candidates) if(!c.rank) workspace_ui.result_order.push_back(c.candidate.name);}
     }
@@ -261,7 +261,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         controller.set_viewport(dashboard_viewport(controller,ui_state),ui_state.panel_changed); ui_state.panel_changed = false;
         ui_state.results_available=workspace.report().has_value();
         ui_state.viewing_baseline=workspace.viewing_baseline();
-        ui_state.statistical_report=workspace.report() && workspace.report()->statistics.has_value();
+        ui_state.statistical_report=workspace.report() && (workspace.report()->statistics.has_value() || workspace.report()->sensitivity.has_value());
         ui_state.run_identity=workspace.viewed_identity(); ui_state.active_run=workspace.active_run_id();
         ui_state.runs={{0,"Original Baseline: "+workspace.baseline().name}};
         for (const auto& run : workspace.runs()) ui_state.runs.emplace_back(run.id,run.controller->name()+" / Run #"+std::to_string(run.id));
@@ -326,6 +326,15 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         }
         window.resize(1280,720); submit(); submit();
     };
+    if(smoke_frames && project_path && std::getenv("SIMFORGE_SENSITIVITY_TEST_PATH")) {
+        require(workspace.report()&&workspace.report()->sensitivity&&workspace.report()->final_snapshots.empty(),"Restored sensitivity report missing or synthetic snapshot present");
+        require(workspace.active_run_id()!=0&&workspace.runs().size()==1&&workspace.candidates().size()==1,"Sensitivity candidate/playable run did not restore");
+        require(workspace.execution().progress().state==workspace::ExecutionState::Idle,"Sensitivity project reran analysis");
+        const auto directory=std::filesystem::path(std::getenv("SIMFORGE_SENSITIVITY_TEST_PATH")).parent_path();std::ifstream input(directory/"sensitivity.json");const std::string expected{std::istreambuf_iterator<char>(input),{}};
+        require(workspace.json()==expected,"Sensitivity report changed on fresh-process reopen");require(workspace_ui.sensitivity&&workspace_ui.sweep_multi,"Sensitivity setup preferences lost");
+        const auto saved=workspace.view().runtime().capture_snapshot();submit();submit();diagnostic_failure_probe();capture("sensitivity-restored");require(workspace.view().runtime().capture_snapshot()==saved,"Reopened analytical view changed playable state");
+        std::cout<<"Sensitivity fresh process: exact report, selected candidate, seeded playable run and setup restored with idle worker.\n";
+    }
     if(smoke_frames && project_path && std::getenv("SIMFORGE_STATISTICAL_TEST_PATH")) {
         const auto saved=workspace.view().runtime().capture_snapshot();
         const auto camera=workspace.view().orbit_camera().pose();
@@ -338,7 +347,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         require(workspace.view().runtime().capture_snapshot()==saved && workspace.view().orbit_camera().pose()==camera,"Aggregate analysis changed restored live state or camera");
         std::cout<<"Statistical fresh process: exact raw pairs, intervals, settings and live state restored without running an experiment or creating an average snapshot.\n";
     }
-    if(smoke_frames && project_path && !std::getenv("SIMFORGE_STATISTICAL_TEST_PATH")) {
+    if(smoke_frames && project_path && !std::getenv("SIMFORGE_STATISTICAL_TEST_PATH") && !std::getenv("SIMFORGE_SENSITIVITY_TEST_PATH")) {
         const auto saved=workspace.view().runtime().capture_snapshot();const auto saved_clock=workspace.view().runtime().clock().capture_snapshot();
         const auto saved_camera=workspace.view().orbit_camera().pose();const auto active=workspace.active_run_id();
         submit();submit();diagnostic_failure_probe();capture("project-restored");
@@ -432,6 +441,31 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         require(std::filesystem::exists(project_ui.test_path) && project_ui.error.empty(),"Workload project save failed");capture("workload-project");
         std::cout<<"Workload graphics: profile boundaries/queue, native distribution controls, sampled inspection, restart, independent runs, async isolation, exports and project save verified.\n";
     }
+    if(smoke_frames && !project_path && std::getenv("SIMFORGE_SENSITIVITY_TEST_PATH")) {
+        submit();submit();diagnostic_failure_probe();controller.seek(7200ULL*definition.simulation.tick_rate);submit();const auto saved=controller.runtime().capture_snapshot();
+        window.resize(1600,1100);submit();submit();click(dashboard.analysis_mode);submit();click(workspace_ui.sweep_toggle);submit();require(workspace_ui.sensitivity,"Sensitivity workflow toggle failed");click(workspace_ui.sweep_parameter_control);submit();click(workspace_ui.sweep_parameter_options[3]);submit();require(workspace_ui.sweep_parameter==0,"Incompatible arrival sweep was offered");click(workspace_ui.sweep_parameter_options[0]);submit();capture("sensitivity-setup");
+        const auto wait_sweep=[&] {const auto deadline=Clock::now()+std::chrono::seconds(30);while(workspace.execution().progress().active()){require(Clock::now()<deadline,"Sensitivity sweep timed out");submit();}submit();require(workspace.report()&&workspace.report()->sensitivity&&workspace.execution().progress().state==workspace::ExecutionState::Completed,"Sensitivity report publication failed");};
+        click(workspace_ui.sweep_start);submit();wait_sweep();require(workspace.report()->sensitivity->request.plan.count==1,"Single-seed sweep control failed");capture("sensitivity-single");
+        require(workspace.view().runtime().capture_snapshot()==saved,"Single-seed sweep changed active simulation");
+        workspace_ui.scroll_target=40;submit();submit();click(workspace_ui.sweep_settings_header);submit();click(workspace_ui.sweep_multi_control);submit();workspace_ui.replications="3";workspace_ui.base_seed="1001";submit();click(workspace_ui.sweep_start);submit();wait_sweep();
+        require(workspace.report()->sensitivity->request.plan.count==3,"Multi-seed sensitivity control failed");const auto previous=workspace.json();
+        const auto previous_request=workspace.report()->sensitivity->request;auto heavy=previous_request;heavy.source.simulation.duration_seconds=100000;heavy.plan.count=20;auto& workload=std::get<scenario::WarehouseConfig>(heavy.source.domain).workload;workload.arrival_min_seconds=1;workload.arrival_max_seconds=3;workload.processing_min_seconds=1;workload.processing_max_seconds=8;
+        workspace::ExperimentRequest request;request.baseline=heavy.source;request.sensitivity=heavy;
+        auto gate=std::make_shared<ExperimentGate>();gate->target_phase="Simulating";auto armed=std::make_shared<bool>(false);struct ReleaseSweep {std::shared_ptr<ExperimentGate> gate;~ReleaseSweep(){gate->release();}} release{gate};
+        workspace.execution().start(request,[gate,armed](auto phase,auto,auto tick,auto){if(phase=="Evaluating candidate")*armed=true;if(*armed&&phase=="Simulating"&&tick>0)gate->checkpoint(phase);});gate->wait();submit();
+        require(workspace.execution().progress().current_replication==1&&workspace.execution().progress().tick>0,"Sensitivity progress lacked actual seed/tick identity");capture("sensitivity-progress");
+        click(dashboard.simulation_mode);submit();const auto viewport=controller.viewport().pixels();const glm::vec2 focus{viewport.x+viewport.width/2,viewport.y+viewport.height/2};
+        SDL_Event down{};down.type=SDL_EVENT_MOUSE_BUTTON_DOWN;down.button.windowID=id;down.button.button=SDL_BUTTON_LEFT;down.button.x=focus.x;down.button.y=focus.y;push(down);submit();SDL_Event motion{};motion.type=SDL_EVENT_MOUSE_MOTION;motion.motion.windowID=id;motion.motion.x=focus.x+24;motion.motion.y=focus.y+12;motion.motion.xrel=24;motion.motion.yrel=12;motion.motion.state=SDL_BUTTON_LMASK;push(motion);submit();down.type=SDL_EVENT_MOUSE_BUTTON_UP;push(down);submit();
+        click(dashboard.analysis_mode);submit();click(workspace_ui.cancel_experiment);submit();gate->release();const auto deadline=Clock::now()+std::chrono::seconds(30);while(workspace.execution().progress().active()){require(Clock::now()<deadline,"Sensitivity cancellation timeout");submit();}submit();require(workspace.json()==previous&&workspace.execution().progress().state==workspace::ExecutionState::Cancelled,"Cancelled sweep replaced report");
+        workspace.execution().start(request);double frame_ms=0;unsigned frames=0;for(unsigned i=0;i<20&&workspace.execution().progress().active();++i){const auto start=Clock::now();submit();frame_ms+=std::chrono::duration<double,std::milli>(Clock::now()-start).count();++frames;}workspace.execution().cancel();while(workspace.execution().progress().active()){require(Clock::now()<deadline,"Ungated sweep cancellation timeout");submit();}submit();require(frames>0&&controller.runtime().capture_snapshot()==saved,"Sweep worker lost live-view isolation");std::cout<<"Sensitivity ungated active frames: "<<frames<<" | mean CPU frame including present "<<frame_ms/frames<<" ms\n";
+        workspace.start_sensitivity(workspace.report()->sensitivity->request);wait_sweep();require(analysis::serialize_sensitivity_report(analysis::run_sensitivity(workspace.report()->sensitivity->request))==workspace.json(),"Native and headless sensitivity disagree");WorkspaceCommand stale{WorkspaceAction::SweepCandidate};stale.sensitivity=previous_request;stale.id=4;stale.seed=1001;stale.text="Stale selection";bool stale_rejected=false;try{apply_workspace(workspace,stale);}catch(const std::invalid_argument&){stale_rejected=true;}require(stale_rejected&&workspace.candidates().empty(),"Stale point gesture reinterpreted a newer report");capture("sensitivity-curve");workspace_ui.scroll_target=42;submit();submit();capture("sensitivity-marginal");
+        workspace_ui.sweep_name="Tested three forklifts";workspace_ui.scroll_target=41;submit();submit();click(workspace_ui.sweep_point_control);submit();require(workspace_ui.sweep_point_options.size()==6,"Sweep point menu missing");click(workspace_ui.sweep_point_options[2]);submit();require(workspace_ui.sweep_selected==2,"Sweep point selection failed");capture("sensitivity-selected");click(workspace_ui.sweep_add);submit();require(workspace.candidates().size()==1&&std::get<scenario::WarehouseConfig>(workspace.candidates().front().definition.domain).forklifts==3,"Selected tested configuration candidate mismatch");
+        click(workspace_ui.sweep_run);submit();require(workspace.active_run_id()!=0&&workspace.runs().size()==1,"Selected sweep configuration did not create independent playback");const auto& run=workspace.runs().back().controller;run->seek(scenario::total_ticks(analysis::tested_definition(workspace.report()->sensitivity->request,3,1001)));submit();
+        require(run->runtime().metrics()==workspace.report()->sensitivity->replications[0].points[2],"Playable seeded result differs from measured sweep point");click(dashboard.simulation_mode);submit();capture("sensitivity-playback");
+        const auto directory=std::filesystem::path(std::getenv("SIMFORGE_SENSITIVITY_TEST_PATH")).parent_path();workspace.export_json(directory/"sensitivity.json");workspace.export_csv(directory/"summary.csv");workspace.export_seed_csv(directory/"seeds.csv");workspace.export_marginal_csv(directory/"marginal.csv");
+        window.resize(640,480);submit();window.resize(1600,900);submit();SDL_MinimizeWindow(window.native_handle());frame(std::chrono::nanoseconds{0});SDL_RestoreWindow(window.native_handle());submit();project_ui.test_path=std::filesystem::u8path(std::getenv("SIMFORGE_SENSITIVITY_TEST_PATH"));click(dashboard.file_menu);submit();click(project_ui.save_button);submit();require(std::filesystem::exists(project_ui.test_path)&&project_ui.error.empty(),"Sensitivity native project save failed");
+        std::cout<<"Sensitivity graphics: single and paired sweeps, charts, actual progress, camera navigation, cancellation preservation, candidate, seeded playable run, exports, save and resize verified.\n";
+    }
     if(smoke_frames && !project_path && std::getenv("SIMFORGE_STATISTICAL_TEST_PATH")) {
         submit();submit();diagnostic_failure_probe();controller.seek(7200ULL*definition.simulation.tick_rate);submit();
         const auto saved=controller.runtime().capture_snapshot();
@@ -493,7 +527,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         require(std::filesystem::exists(project_ui.test_path) && project_ui.error.empty(),"Statistical project save failed");capture("statistical-project");
         std::cout<<"Statistical graphics: native setup, real progress, camera navigation, cancellation preservation, paired intervals/raw details, exports, save, resize and aggregate-only semantics verified.\n";
     }
-    if (smoke_frames && !project_path && !std::getenv("SIMFORGE_WORKLOAD_TEST_PATH") && !std::getenv("SIMFORGE_STATISTICAL_TEST_PATH"))
+    if (smoke_frames && !project_path && !std::getenv("SIMFORGE_WORKLOAD_TEST_PATH") && !std::getenv("SIMFORGE_STATISTICAL_TEST_PATH") && !std::getenv("SIMFORGE_SENSITIVITY_TEST_PATH"))
     {
         submit(); submit(); diagnostic_failure_probe(); const auto overview = capture("overview");
         require(graphics.info().ui_vertices > 1000 && graphics.info().ui_draw_calls >= 3,"Dashboard emitted no meaningful UI draw data");
@@ -980,6 +1014,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         << " us | dynamic " << measurements.dynamic_us/measurements.frames << " us | input " << measurements.input_us/measurements.frames
         << " us | record/submit/present " << measurements.present_ms/measurements.frames << " ms\n";
     if (workspace_ui.results_frames) std::cout << "Workspace result UI mean: " << workspace_ui.results_ui_us/workspace_ui.results_frames << " us\n";
+    if(workspace_ui.sweep_chart_frames)std::cout<<"Sensitivity two-chart CPU build mean: "<<workspace_ui.sweep_chart_us/workspace_ui.sweep_chart_frames<<" us\n";
     if (measurements.frames) std::cout << "CPU total frame mean: " << measurements.total_ms/measurements.frames << " ms (poll, commands, runtime, UI, GPU fence waits and present; no GPU timer)\n";
     require(!info.validation_errors && !info.validation_warnings,"Viewer Vulkan validation was not clean");
     if (smoke_frames && window.is_open())

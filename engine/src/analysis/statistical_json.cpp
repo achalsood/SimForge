@@ -1,5 +1,6 @@
 #include <simforge/analysis/statistical_experiment.hpp>
 #include "comparison_json.hpp"
+#include "statistical_json_shared.hpp"
 #include <algorithm>
 #include <charconv>
 #include <cmath>
@@ -130,6 +131,16 @@ Json report_json(const StatisticalReport& r) {
 }
 std::string number(std::optional<double> x) {if(!x) return {};char buffer[64];const auto result=std::to_chars(buffer,buffer+64,*x,std::chars_format::general,std::numeric_limits<double>::max_digits10);if(result.ec!=std::errc{}) throw std::runtime_error("CSV number conversion");return {buffer,result.ptr};}
 std::string escape(std::string_view x) {std::string out="\"";for(char c:x) {if(c=='"') out+='"';out+=c;}return out+'"';}
+}
+namespace detail {
+Json statistical_plan_json(const ReplicationPlan& p) {return plan_json(p);}
+ReplicationPlan statistical_plan_value(const Json& j) {return plan_value(j);}
+Json statistical_metrics_json(const warehouse::WarehouseMetrics& m) {return metrics_json(m);}
+warehouse::WarehouseMetrics statistical_metrics_value(const Json& j) {return metrics_value(j);}
+Json statistical_summary_json(const PairedSummary& s) {return summary_json(s);}
+void validate_statistical_metrics(const warehouse::WarehouseMetrics& m,const scenario::ScenarioDefinition& d) {
+    validate_metrics(m,d,scenario::workload::arrival_count(d),counts(d));
+}
 }
 std::string serialize_statistical_request(const StatisticalRequest& r) {return request_json(r).dump();}
 StatisticalRequest parse_statistical_request(std::string_view text) {return request_value(parse_json(text,max_report_bytes));}

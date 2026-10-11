@@ -78,6 +78,10 @@ bool has_statistics(const Json& j)
     if(j.is_object()) {if(j.contains("statistical_report_version") || j.contains("statistics")) return true;for(const auto& child:j) if(has_statistics(child)) return true;}
     else if(j.is_array()) for(const auto& child:j) if(has_statistics(child)) return true;return false;
 }
+bool has_sensitivity(const Json& j) {
+    if(j.is_object()) {if(j.contains("sensitivity_report_version") || j.contains("sensitivity"))return true;for(const auto& child:j)if(has_sensitivity(child))return true;}
+    else if(j.is_array())for(const auto& child:j)if(has_sensitivity(child))return true;return false;
+}
 double number(const Json& j,double minimum,double maximum,const char* label)
 {
     if(!j.is_number()) invalid(label,"expected numeric value");
@@ -153,11 +157,14 @@ Json preferences_json(const ProjectPreferences& p)
         {"notes",p.notes},{"result_name",p.result_name},{"editor_tab",p.editor_tab}};
     if(p.statistical || p.replications!="20" || p.base_seed!="1001" || !p.seed_list.empty() || p.seed_policy || p.statistical_metric)
         j["statistics"]={{"enabled",p.statistical},{"replications",p.replications},{"base_seed",p.base_seed},{"seed_list",p.seed_list},{"seed_policy",p.seed_policy},{"metric",p.statistical_metric}};
+    const ProjectPreferences defaults;
+    if(p.sensitivity || p.sweep_multi || p.sweep_explicit || p.sweep_parameter || p.sweep_objective || p.sweep_selected || p.sweep_seed || p.sweep_min!=defaults.sweep_min || p.sweep_max!=defaults.sweep_max || p.sweep_step!=defaults.sweep_step || p.sweep_values!=defaults.sweep_values || p.sweep_threshold!=defaults.sweep_threshold || p.sweep_name!=defaults.sweep_name)
+        j["sensitivity"]={{"enabled",p.sensitivity},{"multi",p.sweep_multi},{"explicit",p.sweep_explicit},{"parameter",p.sweep_parameter},{"objective",p.sweep_objective},{"selected",p.sweep_selected},{"seed",p.sweep_seed},{"minimum",p.sweep_min},{"maximum",p.sweep_max},{"step",p.sweep_step},{"values",p.sweep_values},{"threshold",p.sweep_threshold},{"name",p.sweep_name}};
     return j;
 }
 ProjectPreferences preferences_value(const Json& j)
 {
-    fields(j,{"mode","metrics","inspector","focus","workspace","metrics_explicit","comparison_mode","objective","current_checkpoint","checkpoint_seconds","selected_candidate","notes","result_name","editor_tab"},{"statistics"},"preferences");
+    fields(j,{"mode","metrics","inspector","focus","workspace","metrics_explicit","comparison_mode","objective","current_checkpoint","checkpoint_seconds","selected_candidate","notes","result_name","editor_tab"},{"statistics","sensitivity"},"preferences");
     ProjectPreferences p;
     p.application_mode=static_cast<int>(integer(j.at("mode"),2,"mode")); p.metrics=boolean(j.at("metrics")); p.inspector=boolean(j.at("inspector"));
     p.focus=boolean(j.at("focus")); p.workspace=boolean(j.at("workspace")); p.metrics_explicit=boolean(j.at("metrics_explicit"));
@@ -170,6 +177,10 @@ ProjectPreferences preferences_value(const Json& j)
     if(j.contains("statistics")) {const auto& s=j.at("statistics");fields(s,{"enabled","replications","base_seed","seed_list","seed_policy","metric"},{},"statistical preferences");
         p.statistical=boolean(s.at("enabled"));p.replications=bounded(s.at("replications"),4096,"replications");p.base_seed=bounded(s.at("base_seed"),4096,"base seed");p.seed_list=bounded(s.at("seed_list"),4096,"seed list");
         p.seed_policy=static_cast<int>(integer(s.at("seed_policy"),1,"seed policy"));p.statistical_metric=static_cast<int>(integer(s.at("metric"),4,"metric"));}
+    if(j.contains("sensitivity")) {const auto& s=j.at("sensitivity");fields(s,{"enabled","multi","explicit","parameter","objective","selected","seed","minimum","maximum","step","values","threshold","name"},{},"sensitivity preferences");
+        p.sensitivity=boolean(s.at("enabled"));p.sweep_multi=boolean(s.at("multi"));p.sweep_explicit=boolean(s.at("explicit"));
+        p.sweep_parameter=static_cast<int>(integer(s.at("parameter"),4,"parameter"));p.sweep_objective=static_cast<int>(integer(s.at("objective"),4,"objective"));p.sweep_selected=static_cast<int>(integer(s.at("selected"),49,"selected"));p.sweep_seed=static_cast<int>(integer(s.at("seed"),99,"seed"));
+        p.sweep_min=bounded(s.at("minimum"),4096,"minimum");p.sweep_max=bounded(s.at("maximum"),4096,"maximum");p.sweep_step=bounded(s.at("step"),4096,"step");p.sweep_values=bounded(s.at("values"),4096,"values");p.sweep_threshold=bounded(s.at("threshold"),4096,"threshold");p.sweep_name=bounded(s.at("name"),4096,"name");}
     return p;
 }
 void path_valid(const std::filesystem::path& path)
@@ -281,6 +292,7 @@ struct ProjectCodec
     {
         if(!w.report_) return nullptr;
         const auto& r=*w.report_;
+        if(r.sensitivity)return {{"kind","sensitivity"},{"sensitivity",Json::parse(analysis::serialize_sensitivity_report(*r.sensitivity))}};
         if(r.statistics) return {{"kind","paired_statistical"},{"statistics",Json::parse(analysis::serialize_statistical_report(*r.statistics))}};
         Json j{{"request_id",r.request_id},{"mode",static_cast<int>(r.mode)},{"objective",static_cast<int>(r.objective)},
             {"baseline",definition(r.baseline_definition)},{"candidate_ids",r.candidate_ids},{"definitions",Json::array()},
@@ -296,6 +308,9 @@ struct ProjectCodec
     {
         if(j.is_null()) return;
         if(j.contains("kind")) {
+            if(j.at("kind")=="sensitivity") {fields(j,{"kind","sensitivity"},{},"sensitivity project report");Comparison r;r.sensitivity=analysis::parse_sensitivity_report(j.at("sensitivity").dump());const auto& input=r.sensitivity->request;
+                r.request_id=input.id;r.baseline_definition=input.source;if(!r.request_id||scenario::serialize_scenario(input.source)!=scenario::serialize_scenario(w.baseline()))invalid("report","sensitivity source provenance mismatch");
+                r.limitations=r.sensitivity->limitations;const auto request_id=r.request_id;w.report_=std::move(r);++w.report_generation_;w.execution().reserve_request_ids(request_id);return;}
             fields(j,{"kind","statistics"},{},"statistical project report");if(string(j.at("kind"),"report kind")!="paired_statistical") invalid("report","unsupported kind");
             Comparison r;r.statistics=analysis::parse_statistical_report(j.at("statistics").dump());const auto& input=r.statistics->request;
             r.request_id=input.id;r.baseline_definition=input.baseline;r.objective=input.objective;
@@ -376,7 +391,7 @@ struct ProjectCodec
         if(w.draft_origin_.workload!=WorkloadDraft{}) j["draft_origin_workload"]=workload_draft_json(w.draft_origin_.workload);
         for(const auto& c:w.candidates_) j["candidates"].push_back({{"id",c.id},{"definition",definition(c.definition)},{"notes",c.notes},{"changed_inputs",c.changed_inputs}});
         for(const auto& r:w.runs_) j["runs"].push_back(run(*r.controller,r.id));
-        if(w.preview_view_ && w.report_ && !w.report_->statistics) {
+        if(w.preview_view_ && w.report_ && !w.report_->statistics && !w.report_->sensitivity) {
             const auto separator=w.viewed_identity_.find(": "); const auto name=w.viewed_identity_.substr(separator+2);
             j["preview"]=w.preview_report_generation_==w.report_generation_ ? Json(name) : Json{{"unavailable",true}};
         }
@@ -475,6 +490,7 @@ std::string Project::serialize() const
         {"payload_size",text.size()},{"crc32",checksum(text)},{"payload",std::move(payload)}};
     if(has_workload(envelope.at("payload"))) envelope["features"].push_back("workload_v1");
     if(has_statistics(envelope.at("payload"))) envelope["features"].push_back("statistics_v1");
+    if(has_sensitivity(envelope.at("payload")))envelope["features"].push_back("sensitivity_v1");
     auto bytes=envelope.dump();
     if(bytes.size()>project_max_bytes) throw std::length_error("Project exceeds 256 MiB limit");
     timings_.serialization_ms=ms(began); timings_.bytes=bytes.size(); return bytes;
@@ -505,6 +521,7 @@ void Project::load(const std::filesystem::path& path,bool recovery)
     const auto legacy_features=Json::array({"warehouse_snapshots","clock_phase","historical_reports","independent_runs"});
     auto expected_features=legacy_features;if(has_workload(j.at("payload"))) expected_features.push_back("workload_v1");
     if(has_statistics(j.at("payload"))) expected_features.push_back("statistics_v1");
+    if(has_sensitivity(j.at("payload")))expected_features.push_back("sensitivity_v1");
     if(j.at("features")!=expected_features) invalid("features","unsupported or missing persistence features");
     const auto payload=j.at("payload").dump();
     if(integer(j.at("payload_size"),project_max_bytes,"payload size")!=payload.size() ||

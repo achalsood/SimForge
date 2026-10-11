@@ -1,6 +1,7 @@
 #pragma once
 #include <simforge/analysis/scenario_comparison.hpp>
 #include <simforge/analysis/statistical_experiment.hpp>
+#include <simforge/analysis/sensitivity.hpp>
 #include <simforge/viewer/viewer.hpp>
 #include <simforge/scenario/scenario_language.hpp>
 #include <array>
@@ -34,6 +35,7 @@ enum class ComparisonMode { Initial, Checkpoint };
 enum class Status { Empty, Ready, Modified, Invalid, ComparisonReady, Results, ExportFailed };
 struct Comparison
 {
+    std::optional<analysis::SensitivityReport> sensitivity;
     std::optional<analysis::StatisticalReport> statistics;
     std::uint64_t request_id{0};
     std::vector<std::uint64_t> candidate_ids;
@@ -62,6 +64,7 @@ struct ExperimentRequest
     std::optional<std::uint64_t> checkpoint_tick;
     std::optional<warehouse::WarehouseSnapshot> checkpoint;
     std::optional<analysis::ReplicationPlan> replications;
+    std::optional<analysis::SensitivityRequest> sensitivity;
 };
 void validate_experiment_request(const ExperimentRequest& request);
 [[nodiscard]] Comparison execute_experiment(const ExperimentRequest& request,
@@ -106,6 +109,10 @@ public:
         std::optional<std::uint64_t> tick = {}) const;
     void start_experiment(ComparisonMode mode, analysis::Objective objective, std::optional<std::uint64_t> tick = {});
     void start_statistical_experiment(ComparisonMode mode, analysis::Objective objective,const analysis::ReplicationPlan& plan);
+    void start_sensitivity(analysis::SensitivityRequest request);
+    std::uint64_t add_sensitivity_candidate(std::uint64_t point,std::string name,std::uint64_t seed);
+    void simulate_sensitivity(std::uint64_t point,std::uint64_t seed);
+    void export_marginal_csv(const std::filesystem::path& path);
     bool poll_experiment();
     ExperimentExecution& execution();
     void view_result(std::optional<std::string> candidate); // nullopt previews report baseline.
