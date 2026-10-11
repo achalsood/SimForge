@@ -24,7 +24,7 @@ if(WIN32)
 endif()
 if(SIMFORGE_BUILD_RENDERER)
     find_package(imgui CONFIG REQUIRED)
-    target_sources(simforge_sandbox PRIVATE graphics.cpp viewer.cpp dashboard.cpp workspace_panel.cpp statistical_panel.cpp sensitivity_panel.cpp project_panel.cpp scenario_language_panel.cpp save_dialog.cpp capture_failure.cpp)
+    target_sources(simforge_sandbox PRIVATE graphics.cpp viewer.cpp dashboard.cpp workspace_panel.cpp statistical_panel.cpp sensitivity_panel.cpp interaction_panel.cpp project_panel.cpp scenario_language_panel.cpp save_dialog.cpp capture_failure.cpp)
     add_custom_command(TARGET simforge_sandbox POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROJECT_SOURCE_DIR}/examples" "$<TARGET_FILE_DIR:simforge_sandbox>/examples"
         VERBATIM)

@@ -227,6 +227,10 @@ if(SIMFORGE_BUILD_RENDERER)
                 -File ${PROJECT_SOURCE_DIR}/scripts/run-graphics-test.ps1 -Executable $<TARGET_FILE:simforge_sandbox>
                 -Scenario ${PROJECT_SOURCE_DIR}/examples/warehouse-statistical-workload.json -Live -Sensitivity -ArtifactRoot ${SIMFORGE_ARTIFACT_ROOT})
             set_tests_properties(simforge_sensitivity_graphics PROPERTIES LABELS graphics TIMEOUT 100 RUN_SERIAL TRUE)
+            add_test(NAME simforge_interaction_graphics COMMAND ${SIMFORGE_POWERSHELL} -NoProfile -ExecutionPolicy Bypass
+                -File ${PROJECT_SOURCE_DIR}/scripts/run-graphics-test.ps1 -Executable $<TARGET_FILE:simforge_sandbox>
+                -Scenario ${PROJECT_SOURCE_DIR}/examples/warehouse-statistical-workload.json -Live -Interaction -ArtifactRoot ${SIMFORGE_ARTIFACT_ROOT})
+            set_tests_properties(simforge_interaction_graphics PROPERTIES LABELS graphics TIMEOUT 100 RUN_SERIAL TRUE)
         endif()
         add_graphics_case(simforge_live_graphics ${PROJECT_SOURCE_DIR}/examples/warehouse-baseline.json live)
         add_graphics_case(simforge_custom_live_graphics ${PROJECT_SOURCE_DIR}/examples/warehouse-higher-capacity.json live)
@@ -360,6 +364,21 @@ if(WIN32)
     set_tests_properties(simforge_statistical_cli_contract PROPERTIES TIMEOUT 30)
 endif()
 # Tool executables retain full Debug symbols, but do not need incremental-link databases.
+add_executable(simforge_interaction_test interaction_test.cpp)
+if(WIN32)
+    add_test(NAME simforge_interaction_cli_contract COMMAND ${SIMFORGE_POWERSHELL} -NoProfile -ExecutionPolicy Bypass
+        -File ${PROJECT_SOURCE_DIR}/tests/interaction_cli_test.ps1 -Executable $<TARGET_FILE:simforge_headless> -SourceRoot ${PROJECT_SOURCE_DIR})
+    set_tests_properties(simforge_interaction_cli_contract PROPERTIES TIMEOUT 30)
+endif()
+target_link_libraries(simforge_interaction_test PRIVATE simforge_workspace nlohmann_json::nlohmann_json)
+foreach(case contrast nonfinite fixtures lower irregular missing samples validation limits workload transfer isolation engine reuse external single streams ordering seeds ties exports corrupt undefined async playback persistence transactional cancellation between failure partial)
+    add_test(NAME simforge_interaction_${case} COMMAND simforge_interaction_test ${case})
+    set_tests_properties(simforge_interaction_${case} PROPERTIES TIMEOUT 60)
+endforeach()
+foreach(example forklifts-workers forklifts-bays workers-bays no-effect)
+    add_test(NAME simforge_interaction_cli_${example} COMMAND simforge_headless --headless --experiment ${PROJECT_SOURCE_DIR}/examples/warehouse-interaction-${example}.json)
+    set_tests_properties(simforge_interaction_cli_${example} PROPERTIES PASS_REGULAR_EXPRESSION "SimForge Two-Factor Interaction")
+endforeach()
 add_executable(simforge_sensitivity_test sensitivity_test.cpp)
 if(WIN32)
     add_test(NAME simforge_sensitivity_cli_contract COMMAND ${SIMFORGE_POWERSHELL} -NoProfile -ExecutionPolicy Bypass

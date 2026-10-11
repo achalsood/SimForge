@@ -22,6 +22,11 @@ struct ProjectPreferences
     bool statistical{false};
     std::string replications{"20"},base_seed{"1001"},seed_list;
     int seed_policy{0},statistical_metric{0};
+    bool interaction{false},grid_multi{false},grid_delta{false},grid_interactions{false};
+    int grid_x{0},grid_y{1},grid_objective{0},grid_metric{0},grid_selected{0},grid_rectangle{0},grid_seed{0};
+    std::array<bool,2> grid_explicit{false,false};
+    std::array<std::string,2> grid_min{"1","1"},grid_max{"3","3"},grid_step{"1","1"},grid_values{"1,2,3","1,2,3"};
+    std::string grid_name{"Tested interaction configuration"};
     bool sensitivity{false},sweep_multi{false},sweep_explicit{false};
     int sweep_parameter{0},sweep_objective{0},sweep_selected{0},sweep_seed{0};
     std::string sweep_min{"1"},sweep_max{"6"},sweep_step{"1"},sweep_values{"1,2,3,4,5,6"},sweep_threshold{"1"},sweep_name{"Tested configuration"};

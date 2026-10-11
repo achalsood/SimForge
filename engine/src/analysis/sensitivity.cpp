@@ -1,4 +1,6 @@
 #include <simforge/analysis/sensitivity.hpp>
+#include "evaluation.hpp"
+#include "parameter_transform.hpp"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -14,21 +16,14 @@ SweepParameter parse_parameter(std::string_view name) {
     for(auto p:{SweepParameter::Forklifts,SweepParameter::Workers,SweepParameter::LoadingBays,SweepParameter::ArrivalInterval,SweepParameter::ProcessingDuration})
         if(parameter_name(p)==name)return p;throw std::invalid_argument("Unsupported sweep parameter");
 }
-namespace {
-std::uint32_t& field(scenario::WarehouseConfig& c,SweepParameter p) {
-    switch(p) {case SweepParameter::Forklifts:return c.forklifts;case SweepParameter::Workers:return c.workers;
-    case SweepParameter::LoadingBays:return c.loading_bays;case SweepParameter::ArrivalInterval:return c.shipment_interval_seconds;
-    case SweepParameter::ProcessingDuration:return c.processing_duration_seconds;}throw std::invalid_argument("Unsupported sweep parameter");
-}
-}
-std::uint32_t parameter_value(const scenario::ScenarioDefinition& d,SweepParameter p) {auto c=std::get<scenario::WarehouseConfig>(d.domain);return field(c,p);}
+std::uint32_t parameter_value(const scenario::ScenarioDefinition& d,SweepParameter p) {const auto& c=std::get<scenario::WarehouseConfig>(d.domain);return detail::parameter_field(c,p);}
 std::vector<std::uint32_t> sweep_range(std::uint32_t lo,std::uint32_t hi,std::uint32_t step) {
     if(!step || lo>hi || (std::uint64_t{hi}-lo)%step)throw std::invalid_argument("Range requires positive step, ordered bounds and an exactly reachable maximum");
     const auto n=(std::uint64_t{hi}-lo)/step+1;if(n>max_sweep_points)throw std::length_error("At most 50 sweep points");
     std::vector<std::uint32_t> values;for(std::uint64_t i=0;i<n;++i)values.push_back(static_cast<std::uint32_t>(std::uint64_t{lo}+i*step));return values;
 }
 scenario::ScenarioDefinition tested_definition(const SensitivityRequest& r,std::uint32_t v,std::uint64_t seed) {
-    auto d=r.source;auto& c=std::get<scenario::WarehouseConfig>(d.domain);field(c,r.parameter)=v;d.simulation.random_seed=seed;scenario::validate(d);return d;
+    auto d=r.source;auto& c=std::get<scenario::WarehouseConfig>(d.domain);detail::parameter_field(c,r.parameter)=v;d.simulation.random_seed=seed;scenario::validate(d);return d;
 }
 void validate_sensitivity_request(const SensitivityRequest& r) {
     if(r.schema_version!=1)throw std::invalid_argument("Unsupported sensitivity request version");scenario::validate(r.source);
@@ -100,7 +95,7 @@ SensitivityReport run_sensitivity(const SensitivityRequest& request,const simula
     const auto seeds=replication_seeds(request.plan);const auto baseline_value=parameter_value(request.source,request.parameter);
     for(std::size_t s=0;s<seeds.size();++s) {
         if(control)control->update("Replication",std::to_string(seeds[s]),s+1,seeds.size());SensitivityReplication row;row.seed=seeds[s];
-        const auto execute=[&](const auto& d) {warehouse::WarehouseSimulation simulation(d);simulation.run(control);++r.simulation_executions;r.processed_events+=simulation.processed_events();return simulation.metrics();};
+        const auto execute=[&](const auto& d) {return detail::evaluate(d,control,r.simulation_executions,r.processed_events);};
         auto baseline=request.source;baseline.simulation.random_seed=seeds[s];if(control)control->update("Simulating baseline");row.baseline=execute(baseline);
         for(auto v:r.request.values) {
             if(control)control->update("Evaluating candidate",std::to_string(v));
@@ -109,7 +104,7 @@ SensitivityReport run_sensitivity(const SensitivityRequest& request,const simula
         }
         const auto& b=std::get<scenario::WarehouseConfig>(baseline.domain);
         for(std::size_t p=0;p<3;++p) {auto probe=baseline;auto& c=std::get<scenario::WarehouseConfig>(probe.domain);auto parameter=p==0?SweepParameter::LoadingBays:p==1?SweepParameter::Workers:SweepParameter::Forklifts;
-            const auto capacity=parameter_value(baseline,parameter);if(std::uint64_t{b.loading_bays}+b.workers+b.forklifts>=100000)continue;field(c,parameter)=capacity+1;
+            const auto capacity=parameter_value(baseline,parameter);if(std::uint64_t{b.loading_bays}+b.workers+b.forklifts>=100000)continue;detail::parameter_field(c,parameter)=capacity+1;
             if(control)control->update("Bottleneck probes",parameter_name(parameter));
             auto existing=std::find(r.request.values.begin(),r.request.values.end(),capacity+1);
             if(parameter==request.parameter&&existing!=r.request.values.end())row.probes[p]=row.points[static_cast<std::size_t>(existing-r.request.values.begin())];else row.probes[p]=execute(probe);

@@ -2,7 +2,7 @@
 #include "dashboard.hpp"
 #include "scenario_language_panel.hpp"
 #include <simforge/workspace/scenario_workspace.hpp>
-enum class WorkspaceAction { Validate, Revert, Open, Save, Run, Add, Edit, Update, Rename, Duplicate, Remove, Restore, Compare, Cancel, View, Baseline, Json, Csv, SelectRun, RemoveRun, Live, SimulateCandidate, SimulateResult, LoadRun, ApplyLanguage, CsvSeeds, Sweep, SweepCandidate, SweepRun, CsvMarginal };
+enum class WorkspaceAction { Validate, Revert, Open, Save, Run, Add, Edit, Update, Rename, Duplicate, Remove, Restore, Compare, Cancel, View, Baseline, Json, Csv, SelectRun, RemoveRun, Live, SimulateCandidate, SimulateResult, LoadRun, ApplyLanguage, CsvSeeds, Sweep, SweepCandidate, SweepRun, CsvMarginal, Interaction, InteractionCandidate, InteractionRun, CsvInteractions, CsvInteractionSeeds };
 struct WorkspaceCommand
 {
     WorkspaceAction action;
@@ -17,6 +17,7 @@ struct WorkspaceCommand
     std::optional<simforge::analysis::ReplicationPlan> replications;
     std::optional<simforge::analysis::SensitivityRequest> sensitivity;
     std::uint64_t seed{0};
+    std::optional<simforge::analysis::InteractionRequest> interaction;
 };
 struct WorkspaceUI
 {
@@ -47,6 +48,14 @@ struct WorkspaceUI
     glm::vec2 export_field{}, export_json{}, export_csv{};
     double results_ui_us{0}; std::uint64_t results_frames{0};
     bool analysis_page{false};
+    bool interaction{false},grid_multi{false},grid_delta{false},grid_interactions{false},close_grid_settings{false};
+    int grid_x{0},grid_y{1},grid_objective{0},grid_metric{0},grid_selected{0},grid_rectangle{0},grid_seed{0};
+    std::array<bool,2> grid_explicit{false,false};
+    std::array<std::string,2> grid_min{"1","1"},grid_max{"3","3"},grid_step{"1","1"},grid_values{"1,2,3","1,2,3"};
+    std::string grid_name{"Tested interaction configuration"};
+    glm::vec2 grid_toggle{},grid_start{},grid_settings{},grid_add{},grid_run{},grid_view{},grid_heatmap{},grid_seed_details{};
+    std::vector<glm::vec2> grid_cell_controls;
+    double grid_chart_us{0};std::uint64_t grid_chart_frames{0};
     bool sensitivity{false},sweep_multi{false},sweep_explicit{false};
     bool close_sweep_settings{false};glm::vec2 sweep_settings_header{};
     int sweep_parameter{0},sweep_objective{0},sweep_selected{0},sweep_seed{0};

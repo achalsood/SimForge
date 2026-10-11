@@ -1,0 +1,27 @@
+{
+    "schema_version":  4,
+    "mode":  "interaction",
+    "scenario":  "warehouse-statistical-workload.json",
+    "x_parameter":  "workers",
+    "y_parameter":  "loading_bays",
+    "x_values":  [
+                     1,
+                     2,
+                     3
+                 ],
+    "y_values":  [
+                     1,
+                     2,
+                     3
+                 ],
+    "objective":  "completed",
+    "multi_seed":  true,
+    "replications":  {
+                         "count":  20,
+                         "policy":  "sequential_v1",
+                         "base_seed":  1001,
+                         "generator_version":  1,
+                         "method_version":  1,
+                         "confidence":  0.95
+                     }
+}

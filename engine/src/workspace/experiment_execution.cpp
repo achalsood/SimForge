@@ -31,6 +31,7 @@ std::uint64_t ExperimentExecution::start(ExperimentRequest request, Observer obs
     if (worker_.joinable()) worker_.join();
     request.id = next_id_++;
     if(request.sensitivity)request.sensitivity->id=request.id;
+    if(request.interaction)request.interaction->id=request.id;
     const auto id = request.id;
     {
         std::lock_guard lock{mutex_};
@@ -39,6 +40,7 @@ std::uint64_t ExperimentExecution::start(ExperimentRequest request, Observer obs
         progress_.candidates_per_replication=request.candidates.size();
         if(request.replications) {progress_.total_replications=request.replications->count;progress_.total_candidates*=request.replications->count;}
         if(request.sensitivity) {progress_.sensitivity=true;progress_.parameter=analysis::parameter_name(request.sensitivity->parameter);progress_.total_replications=request.sensitivity->plan.count;progress_.candidates_per_replication=request.sensitivity->values.size();progress_.total_candidates=progress_.candidates_per_replication*progress_.total_replications;}
+        if(request.interaction) {progress_.interaction=true;progress_.x_parameter=analysis::parameter_name(request.interaction->x);progress_.y_parameter=analysis::parameter_name(request.interaction->y);progress_.total_replications=request.interaction->plan.count;progress_.candidates_per_replication=request.interaction->x_values.size()*request.interaction->y_values.size();progress_.total_candidates=progress_.candidates_per_replication*progress_.total_replications;}
         progress_.phase = "Preparing"; started_ = std::chrono::steady_clock::now();
     }
     try {
@@ -49,6 +51,7 @@ std::uint64_t ExperimentExecution::start(ExperimentRequest request, Observer obs
                     {
                         std::lock_guard lock{mutex_};
                         if (progress_.state != ExecutionState::Cancelling) progress_.state = ExecutionState::Running;
+                        if(progress_.interaction&&phase=="Evaluating candidate"){progress_.x_value=static_cast<std::uint32_t>(tick);progress_.y_value=static_cast<std::uint32_t>(horizon);}
                         if (phase == "Candidate complete") ++progress_.completed_candidates;
                         if(phase=="Replication") {progress_.current_replication=tick;progress_.replication_seed=name;progress_.current_candidate=0;}
                         if(phase=="Evaluating candidate") progress_.current_candidate=progress_.completed_candidates%progress_.candidates_per_replication+1;

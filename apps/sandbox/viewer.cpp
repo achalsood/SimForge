@@ -157,6 +157,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         workspace_ui.mode=static_cast<int>(p.comparison_mode);workspace_ui.objective=static_cast<int>(p.objective);
         workspace_ui.current_checkpoint=p.current_checkpoint;workspace_ui.checkpoint_seconds=p.checkpoint_seconds;workspace_ui.editing=p.selected_candidate;
         workspace_ui.notes=p.notes;workspace_ui.result_name=p.result_name;workspace_ui.current_tab=p.editor_tab;
+        workspace_ui.interaction=p.interaction;workspace_ui.grid_multi=p.grid_multi;workspace_ui.grid_delta=p.grid_delta;workspace_ui.grid_interactions=p.grid_interactions;workspace_ui.grid_x=p.grid_x;workspace_ui.grid_y=p.grid_y;workspace_ui.grid_objective=p.grid_objective;workspace_ui.grid_metric=p.grid_metric;workspace_ui.grid_selected=p.grid_selected;workspace_ui.grid_rectangle=p.grid_rectangle;workspace_ui.grid_seed=p.grid_seed;workspace_ui.grid_explicit=p.grid_explicit;workspace_ui.grid_min=p.grid_min;workspace_ui.grid_max=p.grid_max;workspace_ui.grid_step=p.grid_step;workspace_ui.grid_values=p.grid_values;workspace_ui.grid_name=p.grid_name;
         workspace_ui.sensitivity=p.sensitivity;workspace_ui.sweep_multi=p.sweep_multi;workspace_ui.sweep_explicit=p.sweep_explicit;workspace_ui.sweep_parameter=p.sweep_parameter;workspace_ui.sweep_objective=p.sweep_objective;workspace_ui.sweep_selected=p.sweep_selected;workspace_ui.sweep_seed=p.sweep_seed;workspace_ui.sweep_min=p.sweep_min;workspace_ui.sweep_max=p.sweep_max;workspace_ui.sweep_step=p.sweep_step;workspace_ui.sweep_values=p.sweep_values;workspace_ui.sweep_threshold=p.sweep_threshold;workspace_ui.sweep_name=p.sweep_name;workspace_ui.statistical=p.statistical;workspace_ui.replications=p.replications;workspace_ui.base_seed=p.base_seed;workspace_ui.seed_list=p.seed_list;workspace_ui.seed_policy=p.seed_policy;workspace_ui.statistical_metric=p.statistical_metric;
         if(p.application_mode==1) workspace_ui.requested_tab=p.editor_tab;
         if(workspace.report()) {workspace_ui.result_order=workspace.report()->ranking;for(const auto& c:workspace.report()->candidates) if(!c.rank) workspace_ui.result_order.push_back(c.candidate.name);}
@@ -261,7 +262,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         controller.set_viewport(dashboard_viewport(controller,ui_state),ui_state.panel_changed); ui_state.panel_changed = false;
         ui_state.results_available=workspace.report().has_value();
         ui_state.viewing_baseline=workspace.viewing_baseline();
-        ui_state.statistical_report=workspace.report() && (workspace.report()->statistics.has_value() || workspace.report()->sensitivity.has_value());
+        ui_state.statistical_report=workspace.report() && (workspace.report()->statistics.has_value() || workspace.report()->sensitivity.has_value() || workspace.report()->interaction.has_value());
         ui_state.run_identity=workspace.viewed_identity(); ui_state.active_run=workspace.active_run_id();
         ui_state.runs={{0,"Original Baseline: "+workspace.baseline().name}};
         for (const auto& run : workspace.runs()) ui_state.runs.emplace_back(run.id,run.controller->name()+" / Run #"+std::to_string(run.id));
@@ -326,6 +327,15 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         }
         window.resize(1280,720); submit(); submit();
     };
+    if(smoke_frames && project_path && std::getenv("SIMFORGE_INTERACTION_TEST_PATH")) {
+        require(workspace.report()&&workspace.report()->interaction&&workspace.report()->final_snapshots.empty(),"Interaction restoration fabricated or lost report");
+        require(workspace.active_run_id()!=0&&workspace.runs().size()==1&&workspace.candidates().size()==1,"Interaction candidate/playback restoration failed");
+        require(workspace.execution().progress().state==workspace::ExecutionState::Idle,"Interaction load reran experiments");
+        const auto directory=std::filesystem::path(std::getenv("SIMFORGE_INTERACTION_TEST_PATH")).parent_path();std::ifstream in(directory/"interaction.json");const std::string expected{std::istreambuf_iterator<char>(in),{}};
+        require(workspace.json()==expected&&workspace_ui.interaction&&workspace_ui.grid_multi,"Interaction raw report/settings changed on reopen");
+        const auto& r=*workspace.report()->interaction;require(workspace.view().runtime().metrics()==r.replications[0].cells[8],"Restored selected-cell playback differs from stored observation");submit();submit();capture("interaction-restored");
+        std::cout<<"Interaction fresh process: exact evidence, candidate, explicit seeded playback and idle worker restored.\n";
+    }
     if(smoke_frames && project_path && std::getenv("SIMFORGE_SENSITIVITY_TEST_PATH")) {
         require(workspace.report()&&workspace.report()->sensitivity&&workspace.report()->final_snapshots.empty(),"Restored sensitivity report missing or synthetic snapshot present");
         require(workspace.active_run_id()!=0&&workspace.runs().size()==1&&workspace.candidates().size()==1,"Sensitivity candidate/playable run did not restore");
@@ -347,7 +357,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         require(workspace.view().runtime().capture_snapshot()==saved && workspace.view().orbit_camera().pose()==camera,"Aggregate analysis changed restored live state or camera");
         std::cout<<"Statistical fresh process: exact raw pairs, intervals, settings and live state restored without running an experiment or creating an average snapshot.\n";
     }
-    if(smoke_frames && project_path && !std::getenv("SIMFORGE_STATISTICAL_TEST_PATH") && !std::getenv("SIMFORGE_SENSITIVITY_TEST_PATH")) {
+    if(smoke_frames && project_path && !std::getenv("SIMFORGE_STATISTICAL_TEST_PATH") && !std::getenv("SIMFORGE_SENSITIVITY_TEST_PATH") && !std::getenv("SIMFORGE_INTERACTION_TEST_PATH")) {
         const auto saved=workspace.view().runtime().capture_snapshot();const auto saved_clock=workspace.view().runtime().clock().capture_snapshot();
         const auto saved_camera=workspace.view().orbit_camera().pose();const auto active=workspace.active_run_id();
         submit();submit();diagnostic_failure_probe();capture("project-restored");
@@ -441,6 +451,24 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         require(std::filesystem::exists(project_ui.test_path) && project_ui.error.empty(),"Workload project save failed");capture("workload-project");
         std::cout<<"Workload graphics: profile boundaries/queue, native distribution controls, sampled inspection, restart, independent runs, async isolation, exports and project save verified.\n";
     }
+    if(smoke_frames && !project_path && std::getenv("SIMFORGE_INTERACTION_TEST_PATH")) {
+        submit();submit();diagnostic_failure_probe();controller.seek(7200ULL*definition.simulation.tick_rate);submit();const auto saved=controller.runtime().capture_snapshot();
+        window.resize(1600,1100);submit();submit();click(dashboard.analysis_mode);submit();click(workspace_ui.grid_toggle);submit();require(workspace_ui.interaction,"Interaction workflow toggle failed");capture("interaction-setup");
+        const auto wait_grid=[&]{const auto deadline=Clock::now()+std::chrono::seconds(30);while(workspace.execution().progress().active()){require(Clock::now()<deadline,"Interaction timed out");submit();}submit();require(workspace.report()&&workspace.report()->interaction&&workspace.execution().progress().state==workspace::ExecutionState::Completed,"Interaction publication failed");};
+        click(workspace_ui.grid_start);submit();wait_grid();require(workspace.report()->interaction->request.plan.count==1,"Single grid control failed");capture("interaction-single");
+        workspace_ui.scroll_target=50;submit();submit();click(workspace_ui.grid_settings);submit();workspace_ui.grid_multi=true;workspace_ui.replications="3";workspace_ui.base_seed="1001";workspace_ui.scroll_target=54;submit();submit();click(workspace_ui.grid_start);submit();wait_grid();require(workspace.report()->interaction->request.plan.count==3,"Paired grid control failed");
+        const auto previous=workspace.json();const auto previous_request=workspace.report()->interaction->request;auto heavy=previous_request;heavy.source.simulation.duration_seconds=100000;heavy.plan.count=20;auto& workload=std::get<scenario::WarehouseConfig>(heavy.source.domain).workload;workload.arrival_min_seconds=1;workload.arrival_max_seconds=3;workload.processing_min_seconds=1;workload.processing_max_seconds=8;
+        workspace::ExperimentRequest request;request.interaction=heavy;auto gate=std::make_shared<ExperimentGate>();gate->target_phase="Simulating";auto armed=std::make_shared<bool>(false);struct ReleaseGrid{std::shared_ptr<ExperimentGate> gate;~ReleaseGrid(){gate->release();}}release{gate};
+        workspace.execution().start(request,[gate,armed](auto phase,auto,auto tick,auto){if(phase=="Evaluating candidate")*armed=true;if(*armed&&phase=="Simulating"&&tick>0)gate->checkpoint(phase);});gate->wait();submit();require(workspace.execution().progress().interaction&&workspace.execution().progress().tick>0,"Interaction progress lacks actual event-loop identity");capture("interaction-progress");
+        click(workspace_ui.cancel_experiment);submit();gate->release();const auto deadline=Clock::now()+std::chrono::seconds(30);while(workspace.execution().progress().active()){require(Clock::now()<deadline,"Interaction cancel timeout");submit();}submit();require(workspace.json()==previous&&workspace.execution().progress().state==workspace::ExecutionState::Cancelled,"Cancelled grid replaced evidence");
+        workspace.execution().start(request);double frame_ms=0;unsigned frames=0;for(unsigned i=0;i<20&&workspace.execution().progress().active();++i){const auto start=Clock::now();submit();frame_ms+=std::chrono::duration<double,std::milli>(Clock::now()-start).count();++frames;}workspace.execution().cancel();while(workspace.execution().progress().active()){require(Clock::now()<deadline,"Ungated grid cancellation timeout");submit();}submit();require(frames>0&&controller.runtime().capture_snapshot()==saved,"Interaction computation advanced baseline");std::cout<<"Interaction ungated active frames: "<<frames<<" | mean CPU frame including present "<<frame_ms/frames<<" ms\n";
+        workspace.start_interaction(previous_request);wait_grid();require(analysis::serialize_interaction_report(analysis::run_interaction(workspace.report()->interaction->request))==workspace.json(),"Native and headless grids differ");WorkspaceCommand stale{WorkspaceAction::InteractionCandidate};stale.interaction=previous_request;stale.id=workspace.report()->interaction->cells.back().id;stale.seed=1001;stale.text="Stale grid";bool rejected=false;try{apply_workspace(workspace,stale);}catch(const std::invalid_argument&){rejected=true;}require(rejected&&workspace.candidates().empty(),"Stale grid selection was accepted");
+        workspace_ui.scroll_target=52;submit();submit();capture("interaction-outcome");require(workspace_ui.grid_cell_controls.size()==9,"Outcome heatmap has wrong shape");click(workspace_ui.grid_cell_controls[8]);submit();require(workspace_ui.grid_selected==8,"Cell click mapping failed");click(workspace_ui.grid_view);submit();require(workspace_ui.grid_interactions&&workspace_ui.grid_cell_controls.size()==4,"Interaction view failed");click(workspace_ui.grid_cell_controls[0]);submit();capture("interaction-contrast");
+        workspace_ui.scroll_target=53;submit();submit();click(workspace_ui.grid_seed_details);submit();capture("interaction-seeds");workspace_ui.scroll_target=51;submit();submit();workspace_ui.grid_name="Measured three forklifts and workers";capture("interaction-selected");click(workspace_ui.grid_add);submit();require(workspace.candidates().size()==1,"Cell candidate failed");click(workspace_ui.grid_run);submit();require(workspace.runs().size()==1&&workspace.active_run_id()!=0,"Cell playback failed");workspace.view().seek(workspace.view().observation().horizon);submit();require(workspace.view().runtime().metrics()==workspace.report()->interaction->replications[0].cells[8],"Cell playback metrics differ from seed 1001");require(workspace.viewed_identity().find("seed 1001")!=std::string::npos,"Viewer lost explicit seed");click(dashboard.simulation_mode);submit();capture("interaction-playback");
+        const auto directory=std::filesystem::path(std::getenv("SIMFORGE_INTERACTION_TEST_PATH")).parent_path();workspace.export_json(directory/"interaction.json");workspace.export_csv(directory/"grid.csv");workspace.export_seed_csv(directory/"cells.csv");workspace.export_interaction_csv(directory/"contrasts.csv");workspace.export_interaction_csv(directory/"contrast-seeds.csv",true);
+        window.resize(640,480);submit();click(dashboard.analysis_mode);submit();workspace_ui.scroll_target=52;submit();submit();window.resize(1280,720);submit();workspace_ui.scroll_target=52;submit();submit();capture("interaction-compact");window.resize(1600,900);submit();SDL_MinimizeWindow(window.native_handle());frame(std::chrono::nanoseconds{0});SDL_RestoreWindow(window.native_handle());submit();project_ui.test_path=std::filesystem::u8path(std::getenv("SIMFORGE_INTERACTION_TEST_PATH"));click(dashboard.file_menu);submit();click(project_ui.save_button);submit();require(std::filesystem::exists(project_ui.test_path)&&project_ui.error.empty(),"Interaction project save failed");
+        std::cout<<"Interaction graphics: single/paired grids, heatmaps, progress, cancellation, contrasts, candidate, seeded playback, exports, persistence and resize verified.\n";
+    }
     if(smoke_frames && !project_path && std::getenv("SIMFORGE_SENSITIVITY_TEST_PATH")) {
         submit();submit();diagnostic_failure_probe();controller.seek(7200ULL*definition.simulation.tick_rate);submit();const auto saved=controller.runtime().capture_snapshot();
         window.resize(1600,1100);submit();submit();click(dashboard.analysis_mode);submit();click(workspace_ui.sweep_toggle);submit();require(workspace_ui.sensitivity,"Sensitivity workflow toggle failed");click(workspace_ui.sweep_parameter_control);submit();click(workspace_ui.sweep_parameter_options[3]);submit();require(workspace_ui.sweep_parameter==0,"Incompatible arrival sweep was offered");click(workspace_ui.sweep_parameter_options[0]);submit();capture("sensitivity-setup");
@@ -527,7 +555,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         require(std::filesystem::exists(project_ui.test_path) && project_ui.error.empty(),"Statistical project save failed");capture("statistical-project");
         std::cout<<"Statistical graphics: native setup, real progress, camera navigation, cancellation preservation, paired intervals/raw details, exports, save, resize and aggregate-only semantics verified.\n";
     }
-    if (smoke_frames && !project_path && !std::getenv("SIMFORGE_WORKLOAD_TEST_PATH") && !std::getenv("SIMFORGE_STATISTICAL_TEST_PATH") && !std::getenv("SIMFORGE_SENSITIVITY_TEST_PATH"))
+    if (smoke_frames && !project_path && !std::getenv("SIMFORGE_WORKLOAD_TEST_PATH") && !std::getenv("SIMFORGE_STATISTICAL_TEST_PATH") && !std::getenv("SIMFORGE_SENSITIVITY_TEST_PATH") && !std::getenv("SIMFORGE_INTERACTION_TEST_PATH"))
     {
         submit(); submit(); diagnostic_failure_probe(); const auto overview = capture("overview");
         require(graphics.info().ui_vertices > 1000 && graphics.info().ui_draw_calls >= 3,"Dashboard emitted no meaningful UI draw data");
@@ -1015,6 +1043,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         << " us | record/submit/present " << measurements.present_ms/measurements.frames << " ms\n";
     if (workspace_ui.results_frames) std::cout << "Workspace result UI mean: " << workspace_ui.results_ui_us/workspace_ui.results_frames << " us\n";
     if(workspace_ui.sweep_chart_frames)std::cout<<"Sensitivity two-chart CPU build mean: "<<workspace_ui.sweep_chart_us/workspace_ui.sweep_chart_frames<<" us\n";
+    if(workspace_ui.grid_chart_frames)std::cout<<"Interaction heatmap CPU build mean: "<<workspace_ui.grid_chart_us/workspace_ui.grid_chart_frames<<" us\n";
     if (measurements.frames) std::cout << "CPU total frame mean: " << measurements.total_ms/measurements.frames << " ms (poll, commands, runtime, UI, GPU fence waits and present; no GPU timer)\n";
     require(!info.validation_errors && !info.validation_warnings,"Viewer Vulkan validation was not clean");
     if (smoke_frames && window.is_open())

@@ -8,6 +8,7 @@
 #include "save_dialog.hpp"
 #include "statistical_panel.hpp"
 #include "sensitivity_panel.hpp"
+#include "interaction_panel.hpp"
 
 using namespace simforge;
 void apply_workspace(workspace::ScenarioWorkspace& w, const WorkspaceCommand& c)
@@ -48,6 +49,13 @@ void apply_workspace(workspace::ScenarioWorkspace& w, const WorkspaceCommand& c)
         if(!c.sensitivity||!w.report()||!w.report()->sensitivity||analysis::serialize_sensitivity_request(*c.sensitivity)!=analysis::serialize_sensitivity_request(w.report()->sensitivity->request))throw std::invalid_argument("Sensitivity results changed; select the tested configuration again");
         if(c.action==WorkspaceAction::SweepCandidate)w.add_sensitivity_candidate(c.id,c.text,c.seed);else w.simulate_sensitivity(c.id,c.seed);break;
     case WorkspaceAction::CsvMarginal: w.export_marginal_csv(std::filesystem::u8path(c.text));break;
+    case WorkspaceAction::Interaction: if(!c.interaction)throw std::invalid_argument("Missing grid inputs");w.start_interaction(*c.interaction);break;
+    case WorkspaceAction::InteractionCandidate:
+    case WorkspaceAction::InteractionRun:
+        if(!c.interaction||!w.report()||!w.report()->interaction||analysis::serialize_interaction_request(*c.interaction)!=analysis::serialize_interaction_request(w.report()->interaction->request))throw std::invalid_argument("Interaction results changed; select the tested configuration again");
+        if(c.action==WorkspaceAction::InteractionCandidate)w.add_interaction_candidate(c.interaction->id,c.id,c.text,c.seed);else w.simulate_interaction(c.interaction->id,c.id,c.seed);break;
+    case WorkspaceAction::CsvInteractions: w.export_interaction_csv(std::filesystem::u8path(c.text));break;
+    case WorkspaceAction::CsvInteractionSeeds: w.export_interaction_csv(std::filesystem::u8path(c.text),true);break;
     }
 }
 namespace
@@ -148,7 +156,7 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
         else { queue(std::move(c)); ui.requested_tab=2; }
     };
     const auto progress = w.execution().progress();
-    if(ui.analysis_page) {draw_sensitivity_setup(w,ui,s);if(!ui.sensitivity)draw_statistical_setup(w,ui,s);}
+    if(ui.analysis_page) {draw_interaction_setup(w,ui,s);if(!ui.interaction){if(ImGui::GetContentRegionAvail().x/s>500)ImGui::SameLine();draw_sensitivity_setup(w,ui,s);if(!ui.sensitivity)draw_statistical_setup(w,ui,s);}}
     if (progress.request_id != 0 && ui.analysis_page && !(progress.total_replications && !progress.active()))
     {
         ImGui::Separator();
@@ -164,6 +172,7 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
         ImGui::Text("%s | Candidates %llu / %llu | Elapsed %.1f s",progress.phase.c_str(),
             static_cast<unsigned long long>(progress.completed_candidates),static_cast<unsigned long long>(progress.total_candidates),progress.elapsed_seconds);
         if(progress.total_replications) ImGui::TextWrapped("Paired seed %llu / %llu (seed %s) | Completed seeds %llu | Current candidate %llu / %llu",static_cast<unsigned long long>(progress.current_replication),static_cast<unsigned long long>(progress.total_replications),progress.replication_seed.c_str(),static_cast<unsigned long long>(progress.completed_replications),static_cast<unsigned long long>(progress.current_candidate),static_cast<unsigned long long>(progress.candidates_per_replication));
+        if(progress.interaction&&progress.current_candidate)ImGui::TextWrapped("Grid: %s = %u | %s = %u | Completed cell-seed evaluations %llu / %llu",progress.x_parameter.c_str(),progress.x_value,progress.y_parameter.c_str(),progress.y_value,static_cast<unsigned long long>(progress.completed_candidates),static_cast<unsigned long long>(progress.total_candidates));
         if (progress.active() && !progress.candidate.empty()) {if(progress.sensitivity){if(!progress.sweep_value.empty())ImGui::TextWrapped("Submitted sweep parameter: %s | current value %s",progress.parameter.c_str(),progress.sweep_value.c_str());}else ImGui::TextWrapped("Submitted configuration: %s",progress.candidate.c_str());}
         if (progress.horizon) ImGui::Text("Run tick %llu / %llu",static_cast<unsigned long long>(progress.tick),static_cast<unsigned long long>(progress.horizon));
         // Candidate count measures completed evaluations; setup/probes/publication are indeterminate.
@@ -175,7 +184,7 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
             ImGui::TextWrapped("Using submitted inputs. Edits apply to future experiments.");
         }
         if (!progress.error.empty()) ImGui::TextWrapped("Experiment failed: %s",progress.error.c_str());
-        if (progress.state == workspace::ExecutionState::Completed && w.report() && !w.report()->statistics && !w.report()->sensitivity && w.report()->request_id == progress.request_id)
+        if (progress.state == workspace::ExecutionState::Completed && w.report() && !w.report()->statistics && !w.report()->sensitivity && !w.report()->interaction && w.report()->request_id == progress.request_id)
             ImGui::Text("Baseline completed shipments: %llu",static_cast<unsigned long long>(w.report()->baseline.metrics.completed));
         if (const auto attempt=w.execution().last_unsuccessful_attempt(); attempt && attempt->request_id != progress.request_id)
         {
@@ -393,6 +402,7 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
                 if(ImGui::Button("Configure an experiment",{240*s,36*s})) ui.requested_tab=0;
                 if(!w.viewing_baseline() && ImGui::Button("Return to preserved baseline",{-1,36*s})) queue({WorkspaceAction::Baseline});
             }
+            else if(w.report()->interaction) draw_interaction_results(w,ui,s);
             else if(w.report()->sensitivity) draw_sensitivity_results(w,ui,s);
             else if(w.report()->statistics) draw_statistical_results(w,ui,s);
             else

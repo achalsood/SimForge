@@ -16,6 +16,7 @@ struct ExperimentProgress
     std::uint64_t current_candidate{0};
     std::string replication_seed;
     std::string phase, candidate, error;
+    bool interaction{false};std::string x_parameter,y_parameter;std::uint32_t x_value{0},y_value{0};
     bool sensitivity{false};std::string parameter,sweep_value;
     bool cancellation_requested{false};
     double elapsed_seconds{0};

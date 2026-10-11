@@ -46,7 +46,7 @@ endif()
 
 add_library(simforge_analysis STATIC src/analysis/comparison.cpp src/analysis/experiment_json.cpp src/analysis/report_export.cpp
     src/analysis/paired_statistics.cpp src/analysis/statistical_experiment.cpp src/analysis/statistical_json.cpp
-    src/analysis/sensitivity.cpp src/analysis/sensitivity_json.cpp)
+    src/analysis/sensitivity.cpp src/analysis/sensitivity_json.cpp src/analysis/interaction.cpp src/analysis/interaction_json.cpp)
 target_link_libraries(simforge_analysis PUBLIC simforge_engine PRIVATE nlohmann_json::nlohmann_json)
 target_compile_features(simforge_analysis PUBLIC cxx_std_23)
 if(MSVC)

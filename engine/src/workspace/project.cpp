@@ -78,6 +78,9 @@ bool has_statistics(const Json& j)
     if(j.is_object()) {if(j.contains("statistical_report_version") || j.contains("statistics")) return true;for(const auto& child:j) if(has_statistics(child)) return true;}
     else if(j.is_array()) for(const auto& child:j) if(has_statistics(child)) return true;return false;
 }
+bool has_interaction(const Json& j) {
+    if(j.is_object()){if(j.contains("interaction_report_version")||j.contains("interaction"))return true;for(const auto& child:j)if(has_interaction(child))return true;}else if(j.is_array())for(const auto& child:j)if(has_interaction(child))return true;return false;
+}
 bool has_sensitivity(const Json& j) {
     if(j.is_object()) {if(j.contains("sensitivity_report_version") || j.contains("sensitivity"))return true;for(const auto& child:j)if(has_sensitivity(child))return true;}
     else if(j.is_array())for(const auto& child:j)if(has_sensitivity(child))return true;return false;
@@ -158,13 +161,15 @@ Json preferences_json(const ProjectPreferences& p)
     if(p.statistical || p.replications!="20" || p.base_seed!="1001" || !p.seed_list.empty() || p.seed_policy || p.statistical_metric)
         j["statistics"]={{"enabled",p.statistical},{"replications",p.replications},{"base_seed",p.base_seed},{"seed_list",p.seed_list},{"seed_policy",p.seed_policy},{"metric",p.statistical_metric}};
     const ProjectPreferences defaults;
+    if(p.interaction||p.grid_multi||p.grid_delta||p.grid_interactions||p.grid_x||p.grid_y!=1||p.grid_objective||p.grid_metric||p.grid_selected||p.grid_rectangle||p.grid_seed||p.grid_explicit!=defaults.grid_explicit||p.grid_min!=defaults.grid_min||p.grid_max!=defaults.grid_max||p.grid_step!=defaults.grid_step||p.grid_values!=defaults.grid_values||p.grid_name!=defaults.grid_name)
+        j["interaction"]={{"enabled",p.interaction},{"multi",p.grid_multi},{"delta",p.grid_delta},{"interactions",p.grid_interactions},{"x",p.grid_x},{"y",p.grid_y},{"objective",p.grid_objective},{"metric",p.grid_metric},{"selected",p.grid_selected},{"rectangle",p.grid_rectangle},{"seed",p.grid_seed},{"explicit",p.grid_explicit},{"minimum",p.grid_min},{"maximum",p.grid_max},{"step",p.grid_step},{"values",p.grid_values},{"name",p.grid_name}};
     if(p.sensitivity || p.sweep_multi || p.sweep_explicit || p.sweep_parameter || p.sweep_objective || p.sweep_selected || p.sweep_seed || p.sweep_min!=defaults.sweep_min || p.sweep_max!=defaults.sweep_max || p.sweep_step!=defaults.sweep_step || p.sweep_values!=defaults.sweep_values || p.sweep_threshold!=defaults.sweep_threshold || p.sweep_name!=defaults.sweep_name)
         j["sensitivity"]={{"enabled",p.sensitivity},{"multi",p.sweep_multi},{"explicit",p.sweep_explicit},{"parameter",p.sweep_parameter},{"objective",p.sweep_objective},{"selected",p.sweep_selected},{"seed",p.sweep_seed},{"minimum",p.sweep_min},{"maximum",p.sweep_max},{"step",p.sweep_step},{"values",p.sweep_values},{"threshold",p.sweep_threshold},{"name",p.sweep_name}};
     return j;
 }
 ProjectPreferences preferences_value(const Json& j)
 {
-    fields(j,{"mode","metrics","inspector","focus","workspace","metrics_explicit","comparison_mode","objective","current_checkpoint","checkpoint_seconds","selected_candidate","notes","result_name","editor_tab"},{"statistics","sensitivity"},"preferences");
+    fields(j,{"mode","metrics","inspector","focus","workspace","metrics_explicit","comparison_mode","objective","current_checkpoint","checkpoint_seconds","selected_candidate","notes","result_name","editor_tab"},{"statistics","sensitivity","interaction"},"preferences");
     ProjectPreferences p;
     p.application_mode=static_cast<int>(integer(j.at("mode"),2,"mode")); p.metrics=boolean(j.at("metrics")); p.inspector=boolean(j.at("inspector"));
     p.focus=boolean(j.at("focus")); p.workspace=boolean(j.at("workspace")); p.metrics_explicit=boolean(j.at("metrics_explicit"));
@@ -181,6 +186,11 @@ ProjectPreferences preferences_value(const Json& j)
         p.sensitivity=boolean(s.at("enabled"));p.sweep_multi=boolean(s.at("multi"));p.sweep_explicit=boolean(s.at("explicit"));
         p.sweep_parameter=static_cast<int>(integer(s.at("parameter"),4,"parameter"));p.sweep_objective=static_cast<int>(integer(s.at("objective"),4,"objective"));p.sweep_selected=static_cast<int>(integer(s.at("selected"),49,"selected"));p.sweep_seed=static_cast<int>(integer(s.at("seed"),99,"seed"));
         p.sweep_min=bounded(s.at("minimum"),4096,"minimum");p.sweep_max=bounded(s.at("maximum"),4096,"maximum");p.sweep_step=bounded(s.at("step"),4096,"step");p.sweep_values=bounded(s.at("values"),4096,"values");p.sweep_threshold=bounded(s.at("threshold"),4096,"threshold");p.sweep_name=bounded(s.at("name"),4096,"name");}
+    if(j.contains("interaction")){const auto& g=j.at("interaction");fields(g,{"enabled","multi","delta","interactions","x","y","objective","metric","selected","rectangle","seed","explicit","minimum","maximum","step","values","name"},{},"interaction preferences");
+        p.interaction=boolean(g.at("enabled"));p.grid_multi=boolean(g.at("multi"));p.grid_delta=boolean(g.at("delta"));p.grid_interactions=boolean(g.at("interactions"));
+        p.grid_x=static_cast<int>(integer(g.at("x"),4,"x"));p.grid_y=static_cast<int>(integer(g.at("y"),4,"y"));p.grid_objective=static_cast<int>(integer(g.at("objective"),4,"objective"));p.grid_metric=static_cast<int>(integer(g.at("metric"),4,"metric"));p.grid_selected=static_cast<int>(integer(g.at("selected"),99,"selected"));p.grid_rectangle=static_cast<int>(integer(g.at("rectangle"),80,"rectangle"));p.grid_seed=static_cast<int>(integer(g.at("seed"),99,"seed"));
+        for(auto name:{"explicit","minimum","maximum","step","values"})if(!g.at(name).is_array()||g.at(name).size()!=2)invalid(name,"two axis settings required");
+        for(std::size_t a=0;a<2;++a){p.grid_explicit[a]=boolean(g.at("explicit")[a]);p.grid_min[a]=bounded(g.at("minimum")[a],4096,"minimum");p.grid_max[a]=bounded(g.at("maximum")[a],4096,"maximum");p.grid_step[a]=bounded(g.at("step")[a],4096,"step");p.grid_values[a]=bounded(g.at("values")[a],4096,"values");}p.grid_name=bounded(g.at("name"),4096,"name");}
     return p;
 }
 void path_valid(const std::filesystem::path& path)
@@ -292,6 +302,7 @@ struct ProjectCodec
     {
         if(!w.report_) return nullptr;
         const auto& r=*w.report_;
+        if(r.interaction)return {{"kind","interaction"},{"interaction",Json::parse(analysis::serialize_interaction_report(*r.interaction))}};
         if(r.sensitivity)return {{"kind","sensitivity"},{"sensitivity",Json::parse(analysis::serialize_sensitivity_report(*r.sensitivity))}};
         if(r.statistics) return {{"kind","paired_statistical"},{"statistics",Json::parse(analysis::serialize_statistical_report(*r.statistics))}};
         Json j{{"request_id",r.request_id},{"mode",static_cast<int>(r.mode)},{"objective",static_cast<int>(r.objective)},
@@ -308,6 +319,7 @@ struct ProjectCodec
     {
         if(j.is_null()) return;
         if(j.contains("kind")) {
+            if(j.at("kind")=="interaction") {fields(j,{"kind","interaction"},{},"interaction project report");Comparison r;r.interaction=analysis::parse_interaction_report(j.at("interaction").dump());const auto& input=r.interaction->request;r.request_id=input.id;r.baseline_definition=input.source;if(!r.request_id||scenario::serialize_scenario(input.source)!=scenario::serialize_scenario(w.baseline()))invalid("report","interaction source provenance mismatch");r.limitations=r.interaction->limitations;const auto request_id=r.request_id;w.report_=std::move(r);++w.report_generation_;w.execution().reserve_request_ids(request_id);return;}
             if(j.at("kind")=="sensitivity") {fields(j,{"kind","sensitivity"},{},"sensitivity project report");Comparison r;r.sensitivity=analysis::parse_sensitivity_report(j.at("sensitivity").dump());const auto& input=r.sensitivity->request;
                 r.request_id=input.id;r.baseline_definition=input.source;if(!r.request_id||scenario::serialize_scenario(input.source)!=scenario::serialize_scenario(w.baseline()))invalid("report","sensitivity source provenance mismatch");
                 r.limitations=r.sensitivity->limitations;const auto request_id=r.request_id;w.report_=std::move(r);++w.report_generation_;w.execution().reserve_request_ids(request_id);return;}
@@ -391,7 +403,7 @@ struct ProjectCodec
         if(w.draft_origin_.workload!=WorkloadDraft{}) j["draft_origin_workload"]=workload_draft_json(w.draft_origin_.workload);
         for(const auto& c:w.candidates_) j["candidates"].push_back({{"id",c.id},{"definition",definition(c.definition)},{"notes",c.notes},{"changed_inputs",c.changed_inputs}});
         for(const auto& r:w.runs_) j["runs"].push_back(run(*r.controller,r.id));
-        if(w.preview_view_ && w.report_ && !w.report_->statistics && !w.report_->sensitivity) {
+        if(w.preview_view_ && w.report_ && !w.report_->statistics && !w.report_->sensitivity && !w.report_->interaction) {
             const auto separator=w.viewed_identity_.find(": "); const auto name=w.viewed_identity_.substr(separator+2);
             j["preview"]=w.preview_report_generation_==w.report_generation_ ? Json(name) : Json{{"unavailable",true}};
         }
@@ -490,6 +502,7 @@ std::string Project::serialize() const
         {"payload_size",text.size()},{"crc32",checksum(text)},{"payload",std::move(payload)}};
     if(has_workload(envelope.at("payload"))) envelope["features"].push_back("workload_v1");
     if(has_statistics(envelope.at("payload"))) envelope["features"].push_back("statistics_v1");
+    if(has_interaction(envelope.at("payload")))envelope["features"].push_back("interaction_v1");
     if(has_sensitivity(envelope.at("payload")))envelope["features"].push_back("sensitivity_v1");
     auto bytes=envelope.dump();
     if(bytes.size()>project_max_bytes) throw std::length_error("Project exceeds 256 MiB limit");
@@ -521,6 +534,7 @@ void Project::load(const std::filesystem::path& path,bool recovery)
     const auto legacy_features=Json::array({"warehouse_snapshots","clock_phase","historical_reports","independent_runs"});
     auto expected_features=legacy_features;if(has_workload(j.at("payload"))) expected_features.push_back("workload_v1");
     if(has_statistics(j.at("payload"))) expected_features.push_back("statistics_v1");
+    if(has_interaction(j.at("payload")))expected_features.push_back("interaction_v1");
     if(has_sensitivity(j.at("payload")))expected_features.push_back("sensitivity_v1");
     if(j.at("features")!=expected_features) invalid("features","unsupported or missing persistence features");
     const auto payload=j.at("payload").dump();

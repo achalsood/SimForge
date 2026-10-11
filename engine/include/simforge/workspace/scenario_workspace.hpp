@@ -2,6 +2,7 @@
 #include <simforge/analysis/scenario_comparison.hpp>
 #include <simforge/analysis/statistical_experiment.hpp>
 #include <simforge/analysis/sensitivity.hpp>
+#include <simforge/analysis/interaction.hpp>
 #include <simforge/viewer/viewer.hpp>
 #include <simforge/scenario/scenario_language.hpp>
 #include <array>
@@ -36,6 +37,7 @@ enum class Status { Empty, Ready, Modified, Invalid, ComparisonReady, Results, E
 struct Comparison
 {
     std::optional<analysis::SensitivityReport> sensitivity;
+    std::optional<analysis::InteractionReport> interaction;
     std::optional<analysis::StatisticalReport> statistics;
     std::uint64_t request_id{0};
     std::vector<std::uint64_t> candidate_ids;
@@ -65,6 +67,7 @@ struct ExperimentRequest
     std::optional<warehouse::WarehouseSnapshot> checkpoint;
     std::optional<analysis::ReplicationPlan> replications;
     std::optional<analysis::SensitivityRequest> sensitivity;
+    std::optional<analysis::InteractionRequest> interaction;
 };
 void validate_experiment_request(const ExperimentRequest& request);
 [[nodiscard]] Comparison execute_experiment(const ExperimentRequest& request,
@@ -109,6 +112,10 @@ public:
         std::optional<std::uint64_t> tick = {}) const;
     void start_experiment(ComparisonMode mode, analysis::Objective objective, std::optional<std::uint64_t> tick = {});
     void start_statistical_experiment(ComparisonMode mode, analysis::Objective objective,const analysis::ReplicationPlan& plan);
+    void start_interaction(analysis::InteractionRequest request);
+    std::uint64_t add_interaction_candidate(std::uint64_t experiment,std::uint64_t cell,std::string name,std::uint64_t seed);
+    void simulate_interaction(std::uint64_t experiment,std::uint64_t cell,std::uint64_t seed);
+    void export_interaction_csv(const std::filesystem::path&,bool per_seed=false);
     void start_sensitivity(analysis::SensitivityRequest request);
     std::uint64_t add_sensitivity_candidate(std::uint64_t point,std::string name,std::uint64_t seed);
     void simulate_sensitivity(std::uint64_t point,std::uint64_t seed);

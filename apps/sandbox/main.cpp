@@ -11,6 +11,7 @@
 #include <simforge/analysis/scenario_comparison.hpp>
 #include <simforge/analysis/statistical_experiment.hpp>
 #include <simforge/analysis/sensitivity.hpp>
+#include <simforge/analysis/interaction.hpp>
 #include <nlohmann/json.hpp>
 #include <fstream>
 
@@ -42,6 +43,7 @@ struct Options
     std::optional<std::pair<std::uint32_t, std::uint32_t>> compare_forklifts;
     std::optional<std::uint64_t> checkpoint_seconds;
     std::optional<std::filesystem::path> experiment, export_json, export_csv, export_seeds,export_marginal;
+    std::optional<std::filesystem::path> export_interactions,export_interaction_seeds;
     std::optional<std::uint64_t> graphics_smoke;
     std::optional<std::filesystem::path> graphics_capture;
 };
@@ -115,6 +117,8 @@ Options parse_options(int argc, char* argv[])
             if (++i == argc) throw std::invalid_argument("Missing --checkpoint-seconds value");
             options.checkpoint_seconds = parse_count(argv[i]);
         }
+        else if(argument=="--export-interactions"&&!options.export_interactions) {if(++i==argc)throw std::invalid_argument("Missing interaction export path");options.export_interactions=argv[i];}
+        else if(argument=="--export-interaction-seeds"&&!options.export_interaction_seeds) {if(++i==argc)throw std::invalid_argument("Missing contrast seed export path");options.export_interaction_seeds=argv[i];}
         else if (argument == "--headless" && !options.headless) options.headless = true;
         else if (argument == "--entities" && !entities_seen)
         {
@@ -162,12 +166,18 @@ Options parse_options(int argc, char* argv[])
         throw std::invalid_argument("--graphics-smoke conflicts with headless/simulation options");
     if (options.graphics_capture && (!options.graphics_smoke || (options.graphics_capture->extension() != ".ppm" && options.graphics_capture->extension() != ".png") || std::filesystem::exists(*options.graphics_capture)))
         throw std::invalid_argument("--graphics-capture requires --graphics-smoke and a new .png or .ppm output file");
+    if((options.export_interactions||options.export_interaction_seeds)&&!options.experiment)throw std::invalid_argument("Interaction exports require --experiment");
     return options;
 }
 
 int experiment_workflow(const Options& options)
 {
     using namespace simforge::analysis;
+    const std::array outputs{&options.export_json,&options.export_csv,&options.export_seeds,&options.export_marginal,&options.export_interactions,&options.export_interaction_seeds};
+    for(std::size_t i=0;i<outputs.size();++i)if(*outputs[i]) {
+        if(std::filesystem::exists(**outputs[i]))throw std::invalid_argument("Export output already exists");
+        for(std::size_t j=0;j<i;++j)if(*outputs[j]&&std::filesystem::absolute(**outputs[i]).lexically_normal()==std::filesystem::absolute(**outputs[j]).lexically_normal())throw std::invalid_argument("Export paths must differ");
+    }
     // Check output conflicts before simulation and write only exclusive new files.
     if(options.export_marginal&&!options.experiment)throw std::invalid_argument("Marginal CSV requires sensitivity experiment");
     if(options.export_marginal)for(const auto* other:{&options.export_json,&options.export_csv,&options.export_seeds})if(*other&&std::filesystem::absolute(**other).lexically_normal()==std::filesystem::absolute(*options.export_marginal).lexically_normal())throw std::invalid_argument("Export paths must differ");
@@ -176,6 +186,21 @@ int experiment_workflow(const Options& options)
     {
         if(std::filesystem::file_size(*options.experiment)>max_experiment_bytes) throw std::length_error("Experiment specification exceeds byte budget");
         std::ifstream input(*options.experiment);nlohmann::json specification;input>>specification;
+        if(specification.is_object()&&specification.contains("schema_version")&&specification.at("schema_version").is_number_integer()&&specification.at("schema_version")==4) {
+            if(!specification.contains("mode")||specification.at("mode")!="interaction"){std::cerr<<"Unsupported interaction mode\n";return 3;}
+            try {if(options.export_marginal)throw std::invalid_argument("Marginal CSV belongs to sensitivity experiments");
+                const auto request=load_interaction_experiment(*options.experiment);const auto report=run_interaction(request);
+                std::cout<<"SimForge Two-Factor Interaction | "<<parameter_name(request.x)<<" x "<<parameter_name(request.y)<<" | "<<report.cells.size()<<" cells | "<<request.plan.count<<" seeds | "<<report.simulation_executions<<" executions\n";
+                for(const auto& c:report.cells){std::cout<<c.x<<','<<c.y<<" | Mean: ";if(c.means[static_cast<std::size_t>(request.objective)])std::cout<<*c.means[static_cast<std::size_t>(request.objective)];else std::cout<<"undefined";std::cout<<'\n';}
+                for(const auto& r:report.interactions)std::cout<<r.x0<<".."<<r.x1<<" x "<<r.y0<<".."<<r.y1<<" | "<<r.interpretation<<'\n';
+                if(options.export_json)save_interaction_report(*options.export_json,report);
+                if(options.export_csv)save_interaction_csv(*options.export_csv,report);
+                if(options.export_seeds)save_interaction_csv(*options.export_seeds,report,InteractionCsv::Seeds);
+                if(options.export_interactions)save_interaction_csv(*options.export_interactions,report,InteractionCsv::Interactions);
+                if(options.export_interaction_seeds)save_interaction_csv(*options.export_interaction_seeds,report,InteractionCsv::InteractionSeeds);return 0;
+            }catch(const simforge::simulation::ExecutionCancelled& e){std::cerr<<e.what()<<'\n';return 5;}catch(const std::invalid_argument& e){std::cerr<<e.what()<<'\n';return 2;}catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 4;}
+        }
+        if(options.export_interactions||options.export_interaction_seeds)throw std::invalid_argument("Interaction exports require schema 4 interaction experiment");
         if(specification.is_object()&&specification.contains("schema_version")&&specification.at("schema_version").is_number_integer()&&specification.at("schema_version")==3) {
             if(!specification.contains("mode")||specification.at("mode")!="sensitivity") {std::cerr<<"Unsupported sensitivity mode\n";return 3;}
             try {const auto request=load_sensitivity_experiment(*options.experiment);const auto report=run_sensitivity(request);
@@ -462,6 +487,7 @@ int main(int argc, char* argv[])
         std::cerr << "  --headless --scenario FILE --compare-forklifts A,B --checkpoint-seconds S [--record OUTPUT]\n"
                   << "  --headless --warehouse-replay FILE [--scenario FILE]\n"
                   << "  --headless --experiment FILE [--export-json NEW_FILE] [--export-csv NEW_FILE] [--export-seeds NEW_FILE]\n"
+                  << "    Sensitivity: [--export-marginal NEW_FILE] | Interaction: [--export-interactions NEW_FILE] [--export-interaction-seeds NEW_FILE]\n"
                   << "  --graphics-smoke FRAMES (120..10000; display/GPU/validation required)\n";
         std::cerr << "  --project PROJECT.simforge (restore saved workspace)\n";
         std::cerr << "  --scenario WAREHOUSE_FILE [--graphics-smoke FRAMES] [--graphics-capture NEW_FILE.png]\n";

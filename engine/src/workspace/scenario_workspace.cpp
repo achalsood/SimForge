@@ -251,7 +251,7 @@ void ScenarioWorkspace::simulate_candidate(std::uint64_t id) { (void)create_run(
 void ScenarioWorkspace::simulate_result(std::string_view name)
 {
     if (!report_) throw std::logic_error("No comparison report");
-    if(report_->statistics || report_->sensitivity) throw std::logic_error("Select an explicit tested configuration and measured seed; aggregate results are not playable snapshots");
+    if(report_->statistics || report_->sensitivity || report_->interaction) throw std::logic_error("Select an explicit tested configuration and measured seed; aggregate results are not playable snapshots");
     if (report_->mode == ComparisonMode::Checkpoint) throw std::logic_error("Checkpoint interventions are preview-only; initial configuration is a separate timeline");
     if (name.empty() || name == "Baseline") { (void)create_run(report_->baseline_definition); return; }
     const auto found = std::find_if(report_->definitions.begin(),report_->definitions.end(),[&](const auto& d){ return d.name == name; });
@@ -317,6 +317,7 @@ ExperimentRequest ScenarioWorkspace::capture_request(ComparisonMode mode, analys
 }
 void validate_experiment_request(const ExperimentRequest& request)
 {
+    if(request.interaction) {if(request.sensitivity || request.replications || request.checkpoint || request.checkpoint_tick || !request.candidates.empty() || request.mode!=ComparisonMode::Initial)throw std::invalid_argument("Interaction request cannot mix comparison inputs");analysis::validate_interaction_request(*request.interaction);return;}
     if(request.sensitivity) {if(request.replications || request.checkpoint || request.checkpoint_tick || !request.candidates.empty() || request.mode!=ComparisonMode::Initial)throw std::invalid_argument("Sensitivity request cannot mix comparison inputs");analysis::validate_sensitivity_request(*request.sensitivity);return;}
     if(request.replications) {
         if(request.mode!=ComparisonMode::Initial || request.checkpoint || request.checkpoint_tick) throw std::invalid_argument("Statistical experiments support fresh starts only; checkpoints belong to one seed");
@@ -356,6 +357,29 @@ void ScenarioWorkspace::compare(ComparisonMode mode, analysis::Objective objecti
     ++persistent_generation_; ++report_generation_; report_ = std::move(prepared); status_ = Status::Results; message_ = "Comparison complete. Best among tested configurations; active baseline preserved.";
 }
 ExperimentExecution& ScenarioWorkspace::execution() { return *execution_; }
+void ScenarioWorkspace::start_interaction(analysis::InteractionRequest input) {
+    if(scenario::serialize_scenario(input.source)!=scenario::serialize_scenario(baseline()))throw std::invalid_argument("Interaction source must match immutable loaded baseline");
+    ExperimentRequest request;request.baseline=input.source;request.interaction=std::move(input);execution_->start(std::move(request));
+}
+namespace {
+const analysis::InteractionCell& selected_interaction(const std::optional<Comparison>& report,std::uint64_t experiment,std::uint64_t cell,std::uint64_t seed) {
+    if(!report||!report->interaction||report->request_id!=experiment)throw std::invalid_argument("Interaction report changed; select the tested cell again");
+    const auto& r=*report->interaction;const auto found=std::find_if(r.cells.begin(),r.cells.end(),[&](const auto& c){return c.id==cell;});
+    if(found==r.cells.end())throw std::invalid_argument("Unknown interaction cell");const auto seeds=analysis::replication_seeds(r.request.plan);
+    if(std::find(seeds.begin(),seeds.end(),seed)==seeds.end())throw std::invalid_argument("Select an available measured seed");return *found;
+}
+}
+std::uint64_t ScenarioWorkspace::add_interaction_candidate(std::uint64_t experiment,std::uint64_t cell,std::string name,std::uint64_t seed) {
+    const auto& c=selected_interaction(report_,experiment,cell,seed);const auto& r=*report_->interaction;
+    check_name(name);if(candidates_.size()>=analysis::max_candidates)throw std::length_error("At most 50 candidates");if(next_id_==UINT64_MAX)throw std::overflow_error("Candidate identities exhausted");
+    auto d=analysis::tested_definition(r.request,c.x,c.y,seed);d.name=std::move(name);scenario::validate(d);const auto changed=differences(baseline(),d);const auto id=next_id_++;
+    const auto notes="Interaction experiment "+std::to_string(experiment)+" cell "+std::to_string(cell)+" ("+std::string(analysis::parameter_name(r.request.x))+"="+std::to_string(c.x)+", "+std::string(analysis::parameter_name(r.request.y))+"="+std::to_string(c.y)+") seed "+std::to_string(seed);
+    candidates_.push_back({id,std::move(d),notes,changed});invalidate();return id;
+}
+void ScenarioWorkspace::simulate_interaction(std::uint64_t experiment,std::uint64_t cell,std::uint64_t seed) {
+    const auto& c=selected_interaction(report_,experiment,cell,seed);const auto& r=*report_->interaction;auto d=analysis::tested_definition(r.request,c.x,c.y,seed);
+    d.name="Interaction "+std::string(analysis::parameter_name(r.request.x))+" "+std::to_string(c.x)+" x "+std::string(analysis::parameter_name(r.request.y))+" "+std::to_string(c.y)+" seed "+std::to_string(seed);(void)create_run(d);
+}
 void ScenarioWorkspace::start_sensitivity(analysis::SensitivityRequest input) {
     if(scenario::serialize_scenario(input.source)!=scenario::serialize_scenario(baseline()))throw std::invalid_argument("Sensitivity source must match the immutable loaded baseline");
     ExperimentRequest request;request.baseline=input.source;request.sensitivity=std::move(input);execution_->start(std::move(request));
@@ -398,6 +422,7 @@ bool ScenarioWorkspace::poll_experiment()
 Comparison execute_experiment(const ExperimentRequest& request, const simulation::ExecutionControl* control)
 {
     validate_experiment_request(request);
+    if(request.interaction) {auto input=*request.interaction;input.id=request.id;Comparison result;result.request_id=request.id;result.baseline_definition=input.source;result.interaction=analysis::run_interaction(input,control);result.limitations=result.interaction->limitations;return result;}
     if(request.sensitivity) {auto input=*request.sensitivity;input.id=request.id;Comparison result;result.request_id=request.id;result.baseline_definition=input.source;
         result.sensitivity=analysis::run_sensitivity(input,control);result.limitations=result.sensitivity->limitations;return result;}
     if(request.replications) {
@@ -482,7 +507,7 @@ Comparison execute_experiment(const ExperimentRequest& request, const simulation
 void ScenarioWorkspace::view_result(std::optional<std::string> name)
 {
     if (!report_) throw std::logic_error("Run a comparison first"); const auto& r = *report_;
-    if(r.statistics || r.sensitivity) throw std::logic_error("Aggregate reports have no average warehouse snapshot; select a tested configuration and seed");
+    if(r.statistics || r.sensitivity || r.interaction) throw std::logic_error("Aggregate reports have no average warehouse snapshot; select a tested configuration and seed");
     auto d = r.baseline_definition; auto expected = r.baseline.metrics; auto capacity = r.baseline.candidate.resources; std::size_t index = 0;
     if(name)
     {
@@ -510,10 +535,11 @@ void ScenarioWorkspace::view_result(std::optional<std::string> name)
 void ScenarioWorkspace::return_to_baseline()
 { select_run(0); }
 std::string ScenarioWorkspace::csv() const
-{ if(!report_) throw std::logic_error("No comparison report");if(report_->sensitivity)return analysis::serialize_sensitivity_csv(*report_->sensitivity); if(report_->statistics) return analysis::serialize_statistical_csv(*report_->statistics);return analysis::serialize_comparison_csv(report_->baseline,report_->candidates); }
+{ if(!report_) throw std::logic_error("No comparison report");if(report_->interaction)return analysis::serialize_interaction_csv(*report_->interaction);if(report_->sensitivity)return analysis::serialize_sensitivity_csv(*report_->sensitivity); if(report_->statistics) return analysis::serialize_statistical_csv(*report_->statistics);return analysis::serialize_comparison_csv(report_->baseline,report_->candidates); }
 std::string ScenarioWorkspace::json() const
 {
     if(!report_) throw std::logic_error("No comparison report"); const auto& r = *report_;
+    if(r.interaction)return analysis::serialize_interaction_report(*r.interaction);
     if(r.sensitivity)return analysis::serialize_sensitivity_report(*r.sensitivity);
     if(r.statistics) return analysis::serialize_statistical_report(*r.statistics);
     if(r.mode == ComparisonMode::Checkpoint) return analysis::serialize_report(r.executions.front());
@@ -537,13 +563,19 @@ void ScenarioWorkspace::export_csv(const std::filesystem::path& path)
 }
 void ScenarioWorkspace::export_seed_csv(const std::filesystem::path& path)
 {
+    if(report_&&report_->interaction) {analysis::save_interaction_csv(path,*report_->interaction,analysis::InteractionCsv::Seeds);return;}
     if(report_&&report_->sensitivity) {analysis::detail::save_output(path,analysis::serialize_sensitivity_csv(*report_->sensitivity,analysis::SensitivityCsv::Seeds));return;}
     if(!report_ || !report_->statistics) throw std::logic_error("No statistical report");
     analysis::detail::save_output(path,analysis::serialize_statistical_csv(*report_->statistics,true));
 }
 void ScenarioWorkspace::export_marginal_csv(const std::filesystem::path& path) {if(!report_||!report_->sensitivity)throw std::logic_error("No sensitivity report");analysis::detail::save_output(path,analysis::serialize_sensitivity_csv(*report_->sensitivity,analysis::SensitivityCsv::Marginal));}
+void ScenarioWorkspace::export_interaction_csv(const std::filesystem::path& path,bool per_seed) {
+    if(!report_||!report_->interaction)throw std::logic_error("No interaction report");
+    analysis::save_interaction_csv(path,*report_->interaction,per_seed?analysis::InteractionCsv::InteractionSeeds:analysis::InteractionCsv::Interactions);
+}
 void ScenarioWorkspace::verify_export(std::string_view bytes)
 {
+    if(scenario::detail::parse_json(bytes,analysis::max_report_bytes).contains("interaction_report_version")) {(void)analysis::parse_interaction_report(bytes);return;}
     if(scenario::detail::parse_json(bytes,analysis::max_report_bytes).contains("sensitivity_report_version")) {(void)analysis::parse_sensitivity_report(bytes);return;}
     if(scenario::detail::Json::parse(bytes).contains("statistical_report_version")) {(void)analysis::replay_statistical_report(bytes);return;}
     const auto j = scenario::detail::parse_json(bytes,analysis::max_report_bytes);

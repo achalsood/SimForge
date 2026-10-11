@@ -1,5 +1,11 @@
 # SimForge
 
+### Do more workers help when forklift capacity changes?
+
+Open the variable-demand warehouse (`examples/warehouse-statistical-workload.json`), choose Analysis → Two-Factor Interaction, and test forklifts 1..3 against workers 1..3. Run a single seed first, then enable 20 paired seeds starting at 1001. Click outcome cells, switch to the interaction heatmap, and inspect the four matched observations for each seed before creating a candidate or explicitly seeded playback.
+
+The curated 20-seed study measures no completion gain from workers 1→2 at one forklift, but a mean gain of 31 at two forklifts: local additive interaction +31, nominal 95% interval [30.4964,31.5036]. Other tested rectangles have zero interaction. These are model results on tested values; best-observed selection is not global optimality and grid intervals are not simultaneous. See [two-factor interaction studies](docs/two-factor-interactions.md) for the formula, heatmaps, CLI, exports, limits and measured validation.
+
 SimForge is an AI-native simulation platform powered by a custom high-performance C++ engine.
 
 The goal is to let users describe systems, simulate them, compare alternatives, and understand why those systems behave the way they do.
