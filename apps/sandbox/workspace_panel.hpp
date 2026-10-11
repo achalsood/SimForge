@@ -2,7 +2,7 @@
 #include "dashboard.hpp"
 #include "scenario_language_panel.hpp"
 #include <simforge/workspace/scenario_workspace.hpp>
-enum class WorkspaceAction { Validate, Revert, Open, Save, Run, Add, Edit, Update, Rename, Duplicate, Remove, Restore, Compare, Cancel, View, Baseline, Json, Csv, SelectRun, RemoveRun, Live, SimulateCandidate, SimulateResult, LoadRun, ApplyLanguage };
+enum class WorkspaceAction { Validate, Revert, Open, Save, Run, Add, Edit, Update, Rename, Duplicate, Remove, Restore, Compare, Cancel, View, Baseline, Json, Csv, SelectRun, RemoveRun, Live, SimulateCandidate, SimulateResult, LoadRun, ApplyLanguage, CsvSeeds };
 struct WorkspaceCommand
 {
     WorkspaceAction action;
@@ -14,6 +14,7 @@ struct WorkspaceCommand
     bool discard{false};
     std::optional<simforge::scenario::language::Proposal> proposal;
     bool approved{false};
+    std::optional<simforge::analysis::ReplicationPlan> replications;
 };
 struct WorkspaceUI
 {
@@ -24,6 +25,13 @@ struct WorkspaceUI
     std::optional<std::uint64_t> editing;
     std::optional<WorkspaceCommand> confirmation;
     int objective{0}, mode{0};
+    bool statistical{false};std::string replications{"20"},base_seed{"1001"},seed_list;
+    int seed_policy{0},statistical_metric{0};
+    bool close_statistical_settings{false};
+    glm::vec2 statistical_settings_header{};
+    glm::vec2 statistical_toggle{},statistical_count{},statistical_seed{},statistical_start{},statistical_metric_control{},statistical_candidate_control{},export_seeds{};
+    std::array<glm::vec2,5> statistical_metric_options{};
+    std::vector<glm::vec2> statistical_candidate_options;
     bool current_checkpoint{true}; std::string checkpoint_seconds{"7200"};
     glm::vec2 name_field{}, forklift_field{}, validate{}, add{}, compare{}, candidate_view{}, baseline_view{};
     glm::vec2 probe_toggle{};

@@ -205,16 +205,27 @@ void rank_candidates(std::vector<CandidateResult>& candidates, Objective objecti
     for (std::size_t i = 0; i < sorted.size(); ++i) sorted[i]->rank = static_cast<std::uint32_t>(i + 1);
 }
 AnalysisReport run_comparison(const ComparisonRequest& request, const simulation::ExecutionControl* control,
-    std::vector<warehouse::WarehouseSnapshot>* final_snapshots)
+    std::vector<warehouse::WarehouseSnapshot>* final_snapshots, bool fresh_start)
 {
     if (control) control->update("Validating");
-    validate_request(request); // Preflight every requested candidate before any branch runs.
+    if(!fresh_start) validate_request(request);
+    else {
+        warehouse::validate_snapshot(request.checkpoint);validate_candidates(request.candidates);(void)objective_name(request.objective);
+        if(request.schema_version!=1 || request.scenario_identity!=request.checkpoint.scenario_identity ||
+            request.checkpoint.current_tick!=0 || !request.checkpoint.capacity_changes.empty()) throw std::invalid_argument("Fresh comparison requires the original tick-zero scenario");
+    }
+    const auto execute=[&](ResourceCounts counts,warehouse::WarehouseSnapshot* final=nullptr) {
+        if(!fresh_start) return execute_candidate(request.checkpoint,counts,control,final);
+        auto d=scenario::parse_scenario(request.scenario_identity);auto& c=std::get<scenario::WarehouseConfig>(d.domain);
+        c.loading_bays=counts.loading_bays;c.workers=counts.workers;c.forklifts=counts.forklifts;
+        warehouse::WarehouseSimulation runtime(d);runtime.run(control);if(final) *final=runtime.capture_snapshot();return runtime.metrics();
+    };
     AnalysisReport report; report.request = request;
     std::sort(report.request.candidates.begin(), report.request.candidates.end(), [](const auto& a, const auto& b) { return a.name < b.name; });
     const auto baseline_counts = request.checkpoint.capacity;
     warehouse::WarehouseSnapshot final_snapshot;
     if (control) control->update("Simulating baseline");
-    const auto baseline_metrics = execute_candidate(request.checkpoint, baseline_counts,control,final_snapshots ? &final_snapshot : nullptr);
+    const auto baseline_metrics = execute(baseline_counts,final_snapshots ? &final_snapshot : nullptr);
     if (final_snapshots) final_snapshots->push_back(std::move(final_snapshot));
     report.baseline = result_for({"Baseline", baseline_counts}, baseline_metrics, baseline_counts, baseline_metrics);
     report.baseline.eligible = objective_value(baseline_metrics, request.objective).has_value();
@@ -222,7 +233,7 @@ AnalysisReport run_comparison(const ComparisonRequest& request, const simulation
     for (const auto& candidate : report.request.candidates)
     {
         if (control) control->update("Evaluating candidate",candidate.name);
-        report.candidates.push_back(result_for(candidate, baseline_metrics, baseline_counts, execute_candidate(request.checkpoint, candidate.resources,control,final_snapshots ? &final_snapshot : nullptr)));
+        report.candidates.push_back(result_for(candidate, baseline_metrics, baseline_counts, execute(candidate.resources,final_snapshots ? &final_snapshot : nullptr)));
         if (final_snapshots) final_snapshots->push_back(std::move(final_snapshot));
         if (control) control->update("Candidate complete",candidate.name);
     }
@@ -251,7 +262,7 @@ AnalysisReport run_comparison(const ComparisonRequest& request, const simulation
         {
             // Reuse an already measured identical candidate; inputs and boundary are equal.
             const auto found = std::find_if(report.candidates.begin(), report.candidates.end(), [&](const auto& c) { return c.candidate.resources == counts; });
-            const auto metrics = found == report.candidates.end() ? execute_candidate(request.checkpoint, counts,control) : found->metrics;
+            const auto metrics = found == report.candidates.end() ? execute(counts) : found->metrics;
             evidence.result = result_for({"Add one " + std::string{warehouse::resource_name(resource)}, counts}, baseline_metrics, baseline_counts, metrics);
             const auto before = objective_value(baseline_metrics, request.objective), after = objective_value(metrics, request.objective);
             evidence.conclusion = !before || !after ? BottleneckConclusion::Inconclusive :

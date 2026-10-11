@@ -6,6 +6,7 @@
 #include <cstring>
 #include <simforge/workspace/presentation.hpp>
 #include "save_dialog.hpp"
+#include "statistical_panel.hpp"
 
 using namespace simforge;
 void apply_workspace(workspace::ScenarioWorkspace& w, const WorkspaceCommand& c)
@@ -33,12 +34,13 @@ void apply_workspace(workspace::ScenarioWorkspace& w, const WorkspaceCommand& c)
     case WorkspaceAction::Duplicate: w.duplicate_candidate(c.id,c.text); break;
     case WorkspaceAction::Remove: w.remove_candidate(c.id); break;
     case WorkspaceAction::Restore: w.restore_candidate(c.id); break;
-    case WorkspaceAction::Compare: w.start_experiment(c.mode,c.objective,c.tick); break;
+    case WorkspaceAction::Compare: if(c.replications) w.start_statistical_experiment(c.mode,c.objective,*c.replications);else w.start_experiment(c.mode,c.objective,c.tick); break;
     case WorkspaceAction::Cancel: w.execution().cancel(); break;
     case WorkspaceAction::View: w.view_result(c.text.empty() ? std::nullopt : std::optional{c.text}); break;
     case WorkspaceAction::Baseline: w.return_to_baseline(); break;
     case WorkspaceAction::Json: w.export_json(std::filesystem::u8path(c.text)); break;
     case WorkspaceAction::Csv: w.export_csv(std::filesystem::u8path(c.text)); break;
+    case WorkspaceAction::CsvSeeds: w.export_seed_csv(std::filesystem::u8path(c.text));break;
     }
 }
 namespace
@@ -130,6 +132,7 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
     {
         WorkspaceCommand c{WorkspaceAction::Compare}; c.mode=ui.mode==0?workspace::ComparisonMode::Initial:workspace::ComparisonMode::Checkpoint;
         c.objective=static_cast<analysis::Objective>(ui.objective);
+        if(ui.statistical) {try {c.replications=statistical_plan(ui);queue(std::move(c));ui.requested_tab=2;}catch(const std::exception& e){ui.error=e.what();}return;}
         if(ui.mode==1 && !ui.current_checkpoint)
         {
             try { c.tick=workspace::checkpoint_tick(w.baseline(),ui.checkpoint_seconds); queue(std::move(c)); ui.requested_tab=2; }
@@ -138,7 +141,8 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
         else { queue(std::move(c)); ui.requested_tab=2; }
     };
     const auto progress = w.execution().progress();
-    if (progress.request_id != 0 && ui.analysis_page)
+    if(ui.analysis_page) draw_statistical_setup(w,ui,s);
+    if (progress.request_id != 0 && ui.analysis_page && !(progress.total_replications && !progress.active()))
     {
         ImGui::Separator();
         ImGui::Text("Experiment #%llu: %s",static_cast<unsigned long long>(progress.request_id),workspace::execution_state_name(progress.state));
@@ -152,6 +156,7 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
         }
         ImGui::Text("%s | Candidates %llu / %llu | Elapsed %.1f s",progress.phase.c_str(),
             static_cast<unsigned long long>(progress.completed_candidates),static_cast<unsigned long long>(progress.total_candidates),progress.elapsed_seconds);
+        if(progress.total_replications) ImGui::TextWrapped("Paired seed %llu / %llu (seed %s) | Completed seeds %llu | Current candidate %llu / %llu",static_cast<unsigned long long>(progress.current_replication),static_cast<unsigned long long>(progress.total_replications),progress.replication_seed.c_str(),static_cast<unsigned long long>(progress.completed_replications),static_cast<unsigned long long>(progress.current_candidate),static_cast<unsigned long long>(progress.candidates_per_replication));
         if (progress.active() && !progress.candidate.empty()) ImGui::TextWrapped("Submitted configuration: %s",progress.candidate.c_str());
         if (progress.horizon) ImGui::Text("Run tick %llu / %llu",static_cast<unsigned long long>(progress.tick),static_cast<unsigned long long>(progress.horizon));
         // Candidate count measures completed evaluations; setup/probes/publication are indeterminate.
@@ -163,7 +168,7 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
             ImGui::TextWrapped("Using submitted inputs. Edits apply to future experiments.");
         }
         if (!progress.error.empty()) ImGui::TextWrapped("Experiment failed: %s",progress.error.c_str());
-        if (progress.state == workspace::ExecutionState::Completed && w.report() && w.report()->request_id == progress.request_id)
+        if (progress.state == workspace::ExecutionState::Completed && w.report() && !w.report()->statistics && w.report()->request_id == progress.request_id)
             ImGui::Text("Baseline completed shipments: %llu",static_cast<unsigned long long>(w.report()->baseline.metrics.completed));
         if (const auto attempt=w.execution().last_unsuccessful_attempt(); attempt && attempt->request_id != progress.request_id)
         {
@@ -171,6 +176,10 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
             if (!attempt->error.empty()) ImGui::TextWrapped("%s",attempt->error.c_str());
         }
         ImGui::Separator();
+    }
+    if(ui.analysis_page && progress.total_replications && !progress.active()) {
+        ImGui::Text("Experiment #%llu: %s | Completed seeds %llu / %llu | Candidates %llu / %llu",static_cast<unsigned long long>(progress.request_id),workspace::execution_state_name(progress.state),static_cast<unsigned long long>(progress.completed_replications),static_cast<unsigned long long>(progress.total_replications),static_cast<unsigned long long>(progress.completed_candidates),static_cast<unsigned long long>(progress.total_candidates));
+        if(!progress.error.empty()) ImGui::TextWrapped("%s",progress.error.c_str());
     }
     if (w.report() && ui.analysis_page)
         ImGui::TextWrapped("Report #%llu uses its saved inputs; current edits and pending attempts are separate.",static_cast<unsigned long long>(w.report()->request_id));
@@ -377,6 +386,7 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
                 if(ImGui::Button("Configure an experiment",{240*s,36*s})) ui.requested_tab=0;
                 if(!w.viewing_baseline() && ImGui::Button("Return to preserved baseline",{-1,36*s})) queue({WorkspaceAction::Baseline});
             }
+            else if(w.report()->statistics) draw_statistical_results(w,ui,s);
             else
             {
                 const auto& report=*w.report();

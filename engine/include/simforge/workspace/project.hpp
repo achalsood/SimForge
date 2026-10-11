@@ -19,6 +19,9 @@ struct ProjectPreferences
     std::optional<std::uint64_t> selected_candidate;
     std::string notes, result_name;
     int editor_tab{0};
+    bool statistical{false};
+    std::string replications{"20"},base_seed{"1001"},seed_list;
+    int seed_policy{0},statistical_metric{0};
     bool operator==(const ProjectPreferences&) const = default;
 };
 struct ProjectInfo

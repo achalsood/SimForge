@@ -30,6 +30,7 @@ struct DashboardState
     bool context_action{false};
     bool results_available{false};
     bool viewing_baseline{true};
+    bool statistical_report{false};
     std::string run_identity;
     bool show_file_menu{false}, project_dirty{false};
     std::string project_name, project_location;

@@ -12,6 +12,9 @@ struct ExperimentProgress
 {
     ExecutionState state{ExecutionState::Idle};
     std::uint64_t request_id{0}, completed_candidates{0}, total_candidates{0}, tick{0}, horizon{0};
+    std::uint64_t current_replication{0},completed_replications{0},total_replications{0},candidates_per_replication{0};
+    std::uint64_t current_candidate{0};
+    std::string replication_seed;
     std::string phase, candidate, error;
     bool cancellation_requested{false};
     double elapsed_seconds{0};

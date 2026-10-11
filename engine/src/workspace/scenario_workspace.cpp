@@ -251,6 +251,7 @@ void ScenarioWorkspace::simulate_candidate(std::uint64_t id) { (void)create_run(
 void ScenarioWorkspace::simulate_result(std::string_view name)
 {
     if (!report_) throw std::logic_error("No comparison report");
+    if(report_->statistics) throw std::logic_error("Choose an explicit seeded scenario in the editor; aggregate statistical results are not playable snapshots");
     if (report_->mode == ComparisonMode::Checkpoint) throw std::logic_error("Checkpoint interventions are preview-only; initial configuration is a separate timeline");
     if (name.empty() || name == "Baseline") { (void)create_run(report_->baseline_definition); return; }
     const auto found = std::find_if(report_->definitions.begin(),report_->definitions.end(),[&](const auto& d){ return d.name == name; });
@@ -316,6 +317,12 @@ ExperimentRequest ScenarioWorkspace::capture_request(ComparisonMode mode, analys
 }
 void validate_experiment_request(const ExperimentRequest& request)
 {
+    if(request.replications) {
+        if(request.mode!=ComparisonMode::Initial || request.checkpoint || request.checkpoint_tick) throw std::invalid_argument("Statistical experiments support fresh starts only; checkpoints belong to one seed");
+        analysis::StatisticalRequest statistical;statistical.id=request.id;statistical.baseline=request.baseline;statistical.objective=request.objective;statistical.plan=*request.replications;
+        for(const auto& c:request.candidates) statistical.candidates.push_back({c.id,c.definition});
+        analysis::validate_statistical_request(statistical);
+    }
     if (request.mode != ComparisonMode::Initial && request.mode != ComparisonMode::Checkpoint) throw std::invalid_argument("Unsupported comparison mode");
     warehouse_only(request.baseline); (void)analysis::objective_name(request.objective);
     if (request.checkpoint_tick && request.checkpoint) throw std::invalid_argument("Choose an explicit checkpoint tick or an owned historical snapshot");
@@ -348,6 +355,11 @@ void ScenarioWorkspace::compare(ComparisonMode mode, analysis::Objective objecti
     ++persistent_generation_; ++report_generation_; report_ = std::move(prepared); status_ = Status::Results; message_ = "Comparison complete. Best among tested configurations; active baseline preserved.";
 }
 ExperimentExecution& ScenarioWorkspace::execution() { return *execution_; }
+void ScenarioWorkspace::start_statistical_experiment(ComparisonMode mode,analysis::Objective objective,const analysis::ReplicationPlan& plan)
+{
+    if(mode!=ComparisonMode::Initial) throw std::invalid_argument("Statistical experiments support fresh starts only; checkpoint comparisons remain single-seed");
+    auto request=capture_request(mode,objective);request.replications=plan;validate_experiment_request(request);execution_->start(std::move(request));
+}
 void ScenarioWorkspace::start_experiment(ComparisonMode mode, analysis::Objective objective, std::optional<std::uint64_t> tick)
 {
     if (execution_->progress().active()) throw std::logic_error("An experiment is already active");
@@ -367,6 +379,14 @@ bool ScenarioWorkspace::poll_experiment()
 Comparison execute_experiment(const ExperimentRequest& request, const simulation::ExecutionControl* control)
 {
     validate_experiment_request(request);
+    if(request.replications) {
+        analysis::StatisticalRequest input;input.id=request.id;input.baseline=request.baseline;input.objective=request.objective;input.plan=*request.replications;
+        for(const auto& c:request.candidates) input.candidates.push_back({c.id,c.definition});
+        const auto started=Timer::now();Comparison result;result.request_id=request.id;result.baseline_definition=request.baseline;result.objective=request.objective;
+        result.statistics=analysis::run_statistical_experiment(input,control);result.execution_ms=std::chrono::duration<double,std::milli>{Timer::now()-started}.count();
+        for(const auto& c:result.statistics->request.candidates) {result.candidate_ids.push_back(c.id);result.definitions.push_back(c.definition);result.changed_inputs.push_back(differences(request.baseline,c.definition));}
+        result.limitations=result.statistics->limitations;return result;
+    }
     if (request.mode == ComparisonMode::Checkpoint && !request.checkpoint_tick && !request.checkpoint) throw std::invalid_argument("Missing owned checkpoint");
     const auto mode = request.mode; const auto objective = request.objective; const auto tick = request.checkpoint_tick;
     if (control) control->update("Preparing");
@@ -441,6 +461,7 @@ Comparison execute_experiment(const ExperimentRequest& request, const simulation
 void ScenarioWorkspace::view_result(std::optional<std::string> name)
 {
     if (!report_) throw std::logic_error("Run a comparison first"); const auto& r = *report_;
+    if(r.statistics) throw std::logic_error("Statistical reports are aggregate evidence; there is no average warehouse snapshot");
     auto d = r.baseline_definition; auto expected = r.baseline.metrics; auto capacity = r.baseline.candidate.resources; std::size_t index = 0;
     if(name)
     {
@@ -468,10 +489,11 @@ void ScenarioWorkspace::view_result(std::optional<std::string> name)
 void ScenarioWorkspace::return_to_baseline()
 { select_run(0); }
 std::string ScenarioWorkspace::csv() const
-{ if(!report_) throw std::logic_error("No comparison report"); return analysis::serialize_comparison_csv(report_->baseline,report_->candidates); }
+{ if(!report_) throw std::logic_error("No comparison report"); if(report_->statistics) return analysis::serialize_statistical_csv(*report_->statistics);return analysis::serialize_comparison_csv(report_->baseline,report_->candidates); }
 std::string ScenarioWorkspace::json() const
 {
     if(!report_) throw std::logic_error("No comparison report"); const auto& r = *report_;
+    if(r.statistics) return analysis::serialize_statistical_report(*r.statistics);
     if(r.mode == ComparisonMode::Checkpoint) return analysis::serialize_report(r.executions.front());
     using scenario::detail::Json;
     Json result{{"workspace_schema_version",1},{"mode","independent_initial_scenarios"},{"objective",analysis::objective_name(r.objective)},
@@ -491,8 +513,14 @@ void ScenarioWorkspace::export_csv(const std::filesystem::path& path)
         else analysis::detail::save_output(path,csv()); status_ = Status::Results; message_ = "CSV exported: "+path.string(); }
     catch(...) { status_ = Status::ExportFailed; message_ = "CSV export failed: "+path.string()+"; report retained."; throw; }
 }
+void ScenarioWorkspace::export_seed_csv(const std::filesystem::path& path)
+{
+    if(!report_ || !report_->statistics) throw std::logic_error("No statistical report");
+    analysis::detail::save_output(path,analysis::serialize_statistical_csv(*report_->statistics,true));
+}
 void ScenarioWorkspace::verify_export(std::string_view bytes)
 {
+    if(scenario::detail::Json::parse(bytes).contains("statistical_report_version")) {(void)analysis::replay_statistical_report(bytes);return;}
     const auto j = scenario::detail::parse_json(bytes,analysis::max_report_bytes);
     if(!j.contains("workspace_schema_version")) { (void)analysis::replay_report(bytes); return; }
     const auto& executions = j.at("executions");

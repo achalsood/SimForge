@@ -41,6 +41,7 @@ void restore_ui(const workspace::ProjectPreferences& p,DashboardState& d,Workspa
     e.editing=p.selected_candidate;e.mode=static_cast<int>(p.comparison_mode);e.objective=static_cast<int>(p.objective);
     e.current_checkpoint=p.current_checkpoint;e.checkpoint_seconds=p.checkpoint_seconds;e.notes=p.notes;e.result_name=p.result_name;
     e.current_tab=p.editor_tab;e.requested_tab=p.application_mode==1?p.editor_tab:-1; e.pending.clear();e.confirmation.reset();e.error.clear();e.result_order.clear();
+    e.statistical=p.statistical;e.replications=p.replications;e.base_seed=p.base_seed;e.seed_list=p.seed_list;e.seed_policy=p.seed_policy;e.statistical_metric=p.statistical_metric;
     e.language={}; // Review state is temporary; reopened projects never reapply a proposal.
 }
 }
@@ -52,6 +53,7 @@ void capture_project_preferences(workspace::Project& p,const DashboardState& d,c
     value.comparison_mode=static_cast<workspace::ComparisonMode>(e.mode);value.objective=static_cast<analysis::Objective>(e.objective);
     value.current_checkpoint=e.current_checkpoint;value.checkpoint_seconds=e.checkpoint_seconds;value.selected_candidate=e.editing;
     value.notes=e.notes;value.result_name=e.result_name;value.editor_tab=e.current_tab;
+    value.statistical=e.statistical;value.replications=e.replications;value.base_seed=e.base_seed;value.seed_list=e.seed_list;value.seed_policy=e.seed_policy;value.statistical_metric=e.statistical_metric;
     p.preferences(std::move(value));
 }
 void process_project(workspace::Project& project,workspace::ScenarioWorkspace& w,ProjectUI& ui,DashboardState& d,WorkspaceUI& e)

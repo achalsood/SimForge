@@ -6,6 +6,11 @@ sequence counters and metric history. Only future resource availability changes.
 Conclusions come from actual event execution and explicit comparisons; there is
 no language model, optimization solver, financial model or calibrated prediction.
 
+The optional [paired multi-seed mode](statistical-experiments.md) is a separate
+fresh-start capacity study with raw replications and uncertainty intervals. Existing
+single-seed checkpoint reports and final-state previews keep their original
+semantics. Statistical reports do not supply an average warehouse snapshot.
+
 ## Architecture and API
 
 `simforge_analysis` is a separate static library depending on `simforge_engine`.

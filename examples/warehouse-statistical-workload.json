@@ -1,0 +1,28 @@
+{
+    "domain":  "warehouse",
+    "schema_version":  1,
+    "warehouse":  {
+                      "workers":  10,
+                      "loading_bays":  3,
+                      "workload":  {
+                                       "generator_version":  1,
+                                       "processing":  {
+                                                          "maximum_seconds":  1200,
+                                                          "minimum_seconds":  600,
+                                                          "mode":  "uniform"
+                                                      },
+                                       "arrivals":  {
+                                                        "mode":  "uniform",
+                                                        "minimum_seconds":  240,
+                                                        "maximum_seconds":  480
+                                                    }
+                                   },
+                      "forklifts":  2
+                  },
+    "simulation":  {
+                       "duration_seconds":  28800,
+                       "tick_rate":  60,
+                       "random_seed":  12345
+                   },
+    "name":  "Paired variable demand"
+}

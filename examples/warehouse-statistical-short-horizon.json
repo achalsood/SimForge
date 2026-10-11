@@ -1,0 +1,28 @@
+{
+    "domain":  "warehouse",
+    "schema_version":  1,
+    "warehouse":  {
+                      "workers":  10,
+                      "loading_bays":  3,
+                      "workload":  {
+                                       "generator_version":  1,
+                                       "processing":  {
+                                                          "maximum_seconds":  100,
+                                                          "minimum_seconds":  1,
+                                                          "mode":  "uniform"
+                                                      },
+                                       "arrivals":  {
+                                                        "mode":  "uniform",
+                                                        "minimum_seconds":  2,
+                                                        "maximum_seconds":  8
+                                                    }
+                                   },
+                      "forklifts":  1
+                  },
+    "simulation":  {
+                       "duration_seconds":  60,
+                       "tick_rate":  10,
+                       "random_seed":  12345
+                   },
+    "name":  "Short horizon variable service"
+}

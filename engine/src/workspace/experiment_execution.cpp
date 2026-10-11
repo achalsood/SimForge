@@ -35,6 +35,8 @@ std::uint64_t ExperimentExecution::start(ExperimentRequest request, Observer obs
         std::lock_guard lock{mutex_};
         result_.reset(); progress_ = {}; progress_.request_id = id;
         progress_.total_candidates = request.candidates.size(); progress_.state = ExecutionState::Preparing;
+        progress_.candidates_per_replication=request.candidates.size();
+        if(request.replications) {progress_.total_replications=request.replications->count;progress_.total_candidates*=request.replications->count;}
         progress_.phase = "Preparing"; started_ = std::chrono::steady_clock::now();
     }
     try {
@@ -46,6 +48,9 @@ std::uint64_t ExperimentExecution::start(ExperimentRequest request, Observer obs
                         std::lock_guard lock{mutex_};
                         if (progress_.state != ExecutionState::Cancelling) progress_.state = ExecutionState::Running;
                         if (phase == "Candidate complete") ++progress_.completed_candidates;
+                        if(phase=="Replication") {progress_.current_replication=tick;progress_.replication_seed=name;progress_.current_candidate=0;}
+                        if(phase=="Evaluating candidate") progress_.current_candidate=progress_.completed_candidates%progress_.candidates_per_replication+1;
+                        if(phase=="Replication complete") progress_.completed_replications=tick;
                         if (phase != "Simulating") { progress_.phase = phase; progress_.tick = 0; progress_.horizon = 0; }
                         if (!name.empty() && phase != "Bottleneck probes") progress_.candidate = name;
                         if (phase == "Simulating") { progress_.tick = tick; progress_.horizon = horizon; }

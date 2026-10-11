@@ -76,6 +76,12 @@ interventions for bottleneck evidence. Results export to reproducible JSON and C
 See [scenario comparison contracts and actual results](docs/scenario-comparison.md)
 and [comparison performance measurements](docs/comparison-benchmarks.md).
 
+Analysis also supports explicitly configured paired multi-seed capacity experiments.
+It retains every seed's outcomes, estimates raw paired mean effects, shows nominal
+95% Student-t intervals separately from point rankings, and persists completed
+reports without rerunning them. See [statistical experiments and the forklift
+tutorial](docs/statistical-experiments.md).
+
 The custom Vulkan renderer draws scenario-driven static warehouse scenes with
 loading docks, storage racks, cargo pallets, forklifts, workers and floor markings.
 A CPU-only visualization adapter maps validated resource capacities into stable

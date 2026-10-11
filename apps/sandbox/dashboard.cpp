@@ -199,11 +199,11 @@ DashboardFrame draw_dashboard(const simforge::viewer::ViewerController& v, Dashb
         if(width/s>850)
         {
             ImGui::SameLine(width-168*s);
-            const auto* action=draft.panels.mode==ApplicationMode::Editor?"Add candidate":draft.panels.mode==ApplicationMode::Analysis?"Preview result":draft.viewing_baseline?"Frame warehouse":"Return baseline";
+            const auto* action=draft.panels.mode==ApplicationMode::Editor?"Add candidate":draft.panels.mode==ApplicationMode::Analysis?(draft.statistical_report?"Review paired results":"Preview result"):draft.viewing_baseline?"Frame warehouse":"Return baseline";
             ImGui::BeginDisabled(draft.panels.mode==ApplicationMode::Analysis && !draft.results_available);
             if(ImGui::Button(action,{150*s,layout.control_height})) draft.context_action=true;
             result.context_action=center();
-            tooltip(draft.panels.mode==ApplicationMode::Editor?"Validate and add the draft as a named alternative":draft.panels.mode==ApplicationMode::Analysis?draft.results_available?"Open the selected result as a read-only warehouse":"Add a candidate in Scenario Editor and run a comparison first":draft.viewing_baseline?"Fit the current warehouse to the viewport (F)":"Return to the preserved baseline, including its time and camera");
+            tooltip(draft.panels.mode==ApplicationMode::Editor?"Validate and add the draft as a named alternative":draft.panels.mode==ApplicationMode::Analysis?draft.results_available?(draft.statistical_report?"Review the aggregate paired evidence; no average warehouse snapshot exists":"Open the selected result as a read-only warehouse"):"Add a candidate in Scenario Editor and run a comparison first":draft.viewing_baseline?"Fit the current warehouse to the viewport (F)":"Return to the preserved baseline, including its time and camera");
             ImGui::EndDisabled();
         }
     }

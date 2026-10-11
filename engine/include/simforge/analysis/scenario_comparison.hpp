@@ -97,7 +97,7 @@ void validate_checkpoint_candidates(const warehouse::WarehouseSnapshot& checkpoi
     const warehouse::WarehouseMetrics& candidate, ResourceCounts baseline_resources, ResourceCounts candidate_resources);
 void rank_candidates(std::vector<CandidateResult>& candidates, Objective objective);
 [[nodiscard]] AnalysisReport run_comparison(const ComparisonRequest& request, const simulation::ExecutionControl* control = nullptr,
-    std::vector<warehouse::WarehouseSnapshot>* final_snapshots = nullptr);
+    std::vector<warehouse::WarehouseSnapshot>* final_snapshots = nullptr, bool fresh_start = false);
 [[nodiscard]] std::string serialize_report(const AnalysisReport& report);
 [[nodiscard]] std::string serialize_csv(const AnalysisReport& report);
 // Same CSV columns/escaping for independently executed scenarios with matching intervals.

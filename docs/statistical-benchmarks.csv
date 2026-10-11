@@ -1,0 +1,4 @@
+seeds,candidates,executions,baseline_executions,baseline_executions_saved_vs_per_pair,realized_arrivals,sync_ms,aggregation_ms,async_ms,submit_ms,report_payload_estimate_bytes,report_json_bytes,project_bytes,project_serialize_ms,process_peak_working_set_bytes
+3,3,18,3,6,15027,9.144,0.055,10.213,0.178,19705,33605,37947,1.686,6582272
+20,10,260,20,180,99955,126.358,0.257,150.301,0.278,107018,219855,227295,8.546,8957952
+50,20,1150,50,950,249941,558.581,0.592,591.366,0.516,391558,853855,865735,30.911,16359424

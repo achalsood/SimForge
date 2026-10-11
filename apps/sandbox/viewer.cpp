@@ -157,6 +157,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         workspace_ui.mode=static_cast<int>(p.comparison_mode);workspace_ui.objective=static_cast<int>(p.objective);
         workspace_ui.current_checkpoint=p.current_checkpoint;workspace_ui.checkpoint_seconds=p.checkpoint_seconds;workspace_ui.editing=p.selected_candidate;
         workspace_ui.notes=p.notes;workspace_ui.result_name=p.result_name;workspace_ui.current_tab=p.editor_tab;
+        workspace_ui.statistical=p.statistical;workspace_ui.replications=p.replications;workspace_ui.base_seed=p.base_seed;workspace_ui.seed_list=p.seed_list;workspace_ui.seed_policy=p.seed_policy;workspace_ui.statistical_metric=p.statistical_metric;
         if(p.application_mode==1) workspace_ui.requested_tab=p.editor_tab;
         if(workspace.report()) {workspace_ui.result_order=workspace.report()->ranking;for(const auto& c:workspace.report()->candidates) if(!c.rank) workspace_ui.result_order.push_back(c.candidate.name);}
     }
@@ -260,6 +261,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         controller.set_viewport(dashboard_viewport(controller,ui_state),ui_state.panel_changed); ui_state.panel_changed = false;
         ui_state.results_available=workspace.report().has_value();
         ui_state.viewing_baseline=workspace.viewing_baseline();
+        ui_state.statistical_report=workspace.report() && workspace.report()->statistics.has_value();
         ui_state.run_identity=workspace.viewed_identity(); ui_state.active_run=workspace.active_run_id();
         ui_state.runs={{0,"Original Baseline: "+workspace.baseline().name}};
         for (const auto& run : workspace.runs()) ui_state.runs.emplace_back(run.id,run.controller->name()+" / Run #"+std::to_string(run.id));
@@ -272,7 +274,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         {
             ui_state.context_action=false;
             if(ui_state.panels.mode==viewer::ApplicationMode::Editor) workspace_ui.pending.push_back({WorkspaceAction::Add,{},workspace_ui.notes});
-            else if(ui_state.panels.mode==viewer::ApplicationMode::Analysis) workspace_ui.pending.push_back({WorkspaceAction::View,workspace_ui.result_name=="Baseline"?"":workspace_ui.result_name});
+            else if(ui_state.panels.mode==viewer::ApplicationMode::Analysis) {if(ui_state.statistical_report) workspace_ui.scroll_target=31;else workspace_ui.pending.push_back({WorkspaceAction::View,workspace_ui.result_name=="Baseline"?"":workspace_ui.result_name});}
             else if(!workspace.viewing_baseline()) workspace_ui.pending.push_back({WorkspaceAction::Baseline});
             else { viewer::InputEvent e{viewer::InputKind::Key}; e.key=viewer::Key::Frame; controller.input(e,{}); }
         }
@@ -324,7 +326,19 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         }
         window.resize(1280,720); submit(); submit();
     };
-    if(smoke_frames && project_path) {
+    if(smoke_frames && project_path && std::getenv("SIMFORGE_STATISTICAL_TEST_PATH")) {
+        const auto saved=workspace.view().runtime().capture_snapshot();
+        const auto camera=workspace.view().orbit_camera().pose();
+        require(workspace.report() && workspace.report()->statistics && workspace.report()->final_snapshots.empty(),"Restored statistical report lost aggregate semantics");
+        require(workspace.candidates().size()==3 && workspace.runs().empty() && workspace.execution().progress().state==workspace::ExecutionState::Idle,"Statistical project resumed work or lost candidates");
+        const auto path=std::filesystem::path(std::getenv("SIMFORGE_STATISTICAL_TEST_PATH")).parent_path()/"statistics.json";
+        std::ifstream input(path);const std::string expected{std::istreambuf_iterator<char>(input),{}};
+        require(workspace.json()==expected,"Statistical report changed after reopening without execution");
+        workspace_ui.close_statistical_settings=true;submit();submit();diagnostic_failure_probe();workspace_ui.scroll_target=31;submit();submit();capture("statistical-restored");
+        require(workspace.view().runtime().capture_snapshot()==saved && workspace.view().orbit_camera().pose()==camera,"Aggregate analysis changed restored live state or camera");
+        std::cout<<"Statistical fresh process: exact raw pairs, intervals, settings and live state restored without running an experiment or creating an average snapshot.\n";
+    }
+    if(smoke_frames && project_path && !std::getenv("SIMFORGE_STATISTICAL_TEST_PATH")) {
         const auto saved=workspace.view().runtime().capture_snapshot();const auto saved_clock=workspace.view().runtime().clock().capture_snapshot();
         const auto saved_camera=workspace.view().orbit_camera().pose();const auto active=workspace.active_run_id();
         submit();submit();diagnostic_failure_probe();capture("project-restored");
@@ -418,7 +432,68 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         require(std::filesystem::exists(project_ui.test_path) && project_ui.error.empty(),"Workload project save failed");capture("workload-project");
         std::cout<<"Workload graphics: profile boundaries/queue, native distribution controls, sampled inspection, restart, independent runs, async isolation, exports and project save verified.\n";
     }
-    if (smoke_frames && !project_path && !std::getenv("SIMFORGE_WORKLOAD_TEST_PATH"))
+    if(smoke_frames && !project_path && std::getenv("SIMFORGE_STATISTICAL_TEST_PATH")) {
+        submit();submit();diagnostic_failure_probe();controller.seek(7200ULL*definition.simulation.tick_rate);submit();
+        const auto saved=controller.runtime().capture_snapshot();
+        const auto& original=std::get<scenario::WarehouseConfig>(definition.domain);
+        for(const auto& [name,field]:{std::pair{"Add bay",workspace::Field::Bays},std::pair{"Add forklift",workspace::Field::Forklifts},std::pair{"Add worker",workspace::Field::Workers}}) {
+            workspace.edit(workspace::Field::Name,name);workspace.edit(workspace::Field::Bays,std::to_string(original.loading_bays));workspace.edit(workspace::Field::Workers,std::to_string(original.workers));workspace.edit(workspace::Field::Forklifts,std::to_string(original.forklifts));
+            workspace.edit(field,std::to_string(field==workspace::Field::Bays?original.loading_bays+1:field==workspace::Field::Workers?original.workers+1:original.forklifts+1));workspace.add_candidate();
+        }
+        if(capture_output) {window.resize(1600,1000);submit();submit();}
+        click(dashboard.analysis_mode);submit();click(workspace_ui.statistical_toggle);submit();
+        require(workspace_ui.statistical,"Statistical mode control failed");
+        const auto enter=[&](glm::vec2 target,const char* value) {
+            click(target);const auto key=[&](SDL_Keycode code,SDL_Scancode scan,bool down,SDL_Keymod mods) {SDL_Event e{};e.type=down?SDL_EVENT_KEY_DOWN:SDL_EVENT_KEY_UP;e.key.windowID=id;e.key.key=code;e.key.scancode=scan;e.key.down=down;e.key.mod=mods;push(e);submit();};
+            key(SDLK_LCTRL,SDL_SCANCODE_LCTRL,true,SDL_KMOD_LCTRL);key(SDLK_A,SDL_SCANCODE_A,true,SDL_KMOD_LCTRL);key(SDLK_A,SDL_SCANCODE_A,false,SDL_KMOD_LCTRL);key(SDLK_LCTRL,SDL_SCANCODE_LCTRL,false,SDL_KMOD_NONE);
+            SDL_Event e{};e.type=SDL_EVENT_TEXT_INPUT;e.text.windowID=id;e.text.text=value;push(e);submit();
+        };
+        enter(workspace_ui.statistical_count,"3");enter(workspace_ui.statistical_seed,"1001");capture("statistical-setup");
+        const auto wait_statistical=[&] {const auto deadline=Clock::now()+std::chrono::seconds(20);while(workspace.execution().progress().active()) {require(Clock::now()<deadline,"Statistical experiment timed out");submit();}submit();require(workspace.execution().progress().state==workspace::ExecutionState::Completed && workspace.report() && workspace.report()->statistics,"Statistical publication failed");};
+        click(workspace_ui.statistical_start);submit();wait_statistical();
+        const auto previous=workspace.json();require(workspace.view().runtime().capture_snapshot()==saved && workspace.report()->final_snapshots.empty(),"Statistical execution changed live warehouse or created aggregate preview");
+        require(analysis::serialize_statistical_report(analysis::run_statistical_experiment(workspace.report()->statistics->request))==previous,"GUI statistical results disagree with headless runner");
+        auto request=workspace.capture_request(workspace::ComparisonMode::Initial,analysis::Objective::MaximizeCompleted);request.replications=workspace.report()->statistics->request.plan;
+        // Hold actual candidate event progress only for deterministic lifecycle assertions.
+        auto gate=std::make_shared<ExperimentGate>();gate->target_phase="Simulating";auto armed=std::make_shared<bool>(false);
+        struct Release {std::shared_ptr<ExperimentGate> gate;~Release(){gate->release();}} release{gate};
+        auto long_request=request;long_request.baseline.simulation.duration_seconds=100000;long_request.replications->count=20;
+        for(auto& c:long_request.candidates) c.definition.simulation.duration_seconds=100000;
+        workspace.execution().start(long_request,[gate,armed](auto phase,auto,auto tick,auto){if(phase=="Evaluating candidate") *armed=true;if(*armed && phase=="Simulating" && tick>0) gate->checkpoint(phase);});gate->wait();submit();
+        require(workspace.execution().progress().current_replication==1 && workspace.execution().progress().tick>0,"Statistical progress did not reflect actual seed/tick work");capture("statistical-progress");
+        click(dashboard.simulation_mode);submit();const auto p=controller.viewport().pixels();const glm::vec2 focus{p.x+p.width/2,p.y+p.height/2};
+        SDL_Event down{};down.type=SDL_EVENT_MOUSE_BUTTON_DOWN;down.button.windowID=id;down.button.button=SDL_BUTTON_LEFT;down.button.x=focus.x;down.button.y=focus.y;push(down);submit();
+        SDL_Event move{};move.type=SDL_EVENT_MOUSE_MOTION;move.motion.windowID=id;move.motion.x=focus.x+24;move.motion.y=focus.y+12;move.motion.xrel=24;move.motion.yrel=12;move.motion.state=SDL_BUTTON_LMASK;push(move);submit();
+        SDL_Event up=down;up.type=SDL_EVENT_MOUSE_BUTTON_UP;push(up);submit();require(controller.runtime().capture_snapshot()==saved,"Viewer navigation during statistics changed warehouse state");
+        click(dashboard.analysis_mode);submit();click(workspace_ui.cancel_experiment);submit();gate->release();
+        const auto deadline=Clock::now()+std::chrono::seconds(20);while(workspace.execution().progress().active()) {require(Clock::now()<deadline,"Statistical cancellation timed out");submit();}submit();
+        require(workspace.execution().progress().state==workspace::ExecutionState::Cancelled && workspace.json()==previous,"Cancelled statistics replaced the previous report");
+        // Separate ungated run measures actual frame work while the CPU worker simulates.
+        auto heavy=long_request;auto& workload=std::get<scenario::WarehouseConfig>(heavy.baseline.domain).workload;
+        workload.arrival_min_seconds=1;workload.arrival_max_seconds=3;workload.processing_min_seconds=1;workload.processing_max_seconds=8;
+        for(auto& c:heavy.candidates) std::get<scenario::WarehouseConfig>(c.definition.domain).workload=workload;
+        workspace.execution().start(heavy);double frame_ms=0;unsigned active_frames=0;
+        for(unsigned j=0;j<20 && workspace.execution().progress().active();++j) {const auto start=Clock::now();submit();frame_ms+=std::chrono::duration<double,std::milli>(Clock::now()-start).count();++active_frames;}
+        workspace.execution().cancel();while(workspace.execution().progress().active()) {require(Clock::now()<deadline,"Ungated statistical cancellation timed out");submit();}submit();
+        require(active_frames>0 && controller.runtime().capture_snapshot()==saved,"Background statistical work lost live isolation");
+        std::cout<<"Statistical ungated background frames: "<<active_frames<<" | CPU mean including present: "<<frame_ms/active_frames<<" ms\n";
+        workspace_ui.pending.push_back({WorkspaceAction::Compare});workspace_ui.pending.back().replications=request.replications;submit();wait_statistical();
+        workspace_ui.scroll_target=31;submit();submit();capture("statistical-results");
+        click(workspace_ui.statistical_metric_control);submit();click(workspace_ui.statistical_metric_options[3]);submit();require(workspace_ui.statistical_metric==3,"Statistical metric selection failed");
+        workspace_ui.scroll_target=34;submit();submit();click(workspace_ui.statistical_candidate_control);submit();
+        require(workspace_ui.statistical_candidate_options.size()==3,"Statistical candidate selection lost identities");click(workspace_ui.statistical_candidate_options[1]);submit();
+        workspace_ui.scroll_target=32;submit();submit();capture("statistical-per-seed");
+        const auto directory=std::filesystem::path(std::getenv("SIMFORGE_STATISTICAL_TEST_PATH")).parent_path();
+        for(const auto& [action,file]:{std::pair{WorkspaceAction::Json,"statistics.json"},std::pair{WorkspaceAction::Csv,"summary.csv"},std::pair{WorkspaceAction::CsvSeeds,"per-seed.csv"}}) {
+            workspace_ui.export_path=(directory/file).string();workspace_ui.scroll_target=33;submit();submit();
+            click(action==WorkspaceAction::Json?workspace_ui.export_json:action==WorkspaceAction::Csv?workspace_ui.export_csv:workspace_ui.export_seeds);submit();require(std::filesystem::exists(directory/file) && workspace_ui.error.empty(),"Statistical UI export failed");
+        }
+        window.resize(640,480);submit();window.resize(1600,900);submit();SDL_MinimizeWindow(window.native_handle());frame(std::chrono::nanoseconds{0});SDL_RestoreWindow(window.native_handle());submit();
+        project_ui.test_path=std::filesystem::u8path(std::getenv("SIMFORGE_STATISTICAL_TEST_PATH"));click(dashboard.file_menu);submit();click(project_ui.save_button);submit();
+        require(std::filesystem::exists(project_ui.test_path) && project_ui.error.empty(),"Statistical project save failed");capture("statistical-project");
+        std::cout<<"Statistical graphics: native setup, real progress, camera navigation, cancellation preservation, paired intervals/raw details, exports, save, resize and aggregate-only semantics verified.\n";
+    }
+    if (smoke_frames && !project_path && !std::getenv("SIMFORGE_WORKLOAD_TEST_PATH") && !std::getenv("SIMFORGE_STATISTICAL_TEST_PATH"))
     {
         submit(); submit(); diagnostic_failure_probe(); const auto overview = capture("overview");
         require(graphics.info().ui_vertices > 1000 && graphics.info().ui_draw_calls >= 3,"Dashboard emitted no meaningful UI draw data");

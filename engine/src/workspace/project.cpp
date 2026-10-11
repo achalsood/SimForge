@@ -73,6 +73,11 @@ bool has_workload(const Json& j)
     } else if(j.is_array()) for(const auto& child:j) if(has_workload(child)) return true;
     return false;
 }
+bool has_statistics(const Json& j)
+{
+    if(j.is_object()) {if(j.contains("statistical_report_version") || j.contains("statistics")) return true;for(const auto& child:j) if(has_statistics(child)) return true;}
+    else if(j.is_array()) for(const auto& child:j) if(has_statistics(child)) return true;return false;
+}
 double number(const Json& j,double minimum,double maximum,const char* label)
 {
     if(!j.is_number()) invalid(label,"expected numeric value");
@@ -142,14 +147,17 @@ std::optional<viewer::VisualKey> selection_value(const Json& j)
 }
 Json preferences_json(const ProjectPreferences& p)
 {
-    return {{"mode",p.application_mode},{"metrics",p.metrics},{"inspector",p.inspector},{"focus",p.focus},{"workspace",p.workspace},
+    Json j{{"mode",p.application_mode},{"metrics",p.metrics},{"inspector",p.inspector},{"focus",p.focus},{"workspace",p.workspace},
         {"metrics_explicit",p.metrics_explicit},{"comparison_mode",static_cast<int>(p.comparison_mode)},{"objective",static_cast<int>(p.objective)},
         {"current_checkpoint",p.current_checkpoint},{"checkpoint_seconds",p.checkpoint_seconds},{"selected_candidate",p.selected_candidate?Json(*p.selected_candidate):Json(nullptr)},
         {"notes",p.notes},{"result_name",p.result_name},{"editor_tab",p.editor_tab}};
+    if(p.statistical || p.replications!="20" || p.base_seed!="1001" || !p.seed_list.empty() || p.seed_policy || p.statistical_metric)
+        j["statistics"]={{"enabled",p.statistical},{"replications",p.replications},{"base_seed",p.base_seed},{"seed_list",p.seed_list},{"seed_policy",p.seed_policy},{"metric",p.statistical_metric}};
+    return j;
 }
 ProjectPreferences preferences_value(const Json& j)
 {
-    fields(j,{"mode","metrics","inspector","focus","workspace","metrics_explicit","comparison_mode","objective","current_checkpoint","checkpoint_seconds","selected_candidate","notes","result_name","editor_tab"},{},"preferences");
+    fields(j,{"mode","metrics","inspector","focus","workspace","metrics_explicit","comparison_mode","objective","current_checkpoint","checkpoint_seconds","selected_candidate","notes","result_name","editor_tab"},{"statistics"},"preferences");
     ProjectPreferences p;
     p.application_mode=static_cast<int>(integer(j.at("mode"),2,"mode")); p.metrics=boolean(j.at("metrics")); p.inspector=boolean(j.at("inspector"));
     p.focus=boolean(j.at("focus")); p.workspace=boolean(j.at("workspace")); p.metrics_explicit=boolean(j.at("metrics_explicit"));
@@ -158,7 +166,11 @@ ProjectPreferences preferences_value(const Json& j)
     p.checkpoint_seconds=bounded(j.at("checkpoint_seconds"),4096,"checkpoint text");
     if(!j.at("selected_candidate").is_null()) p.selected_candidate=id(j.at("selected_candidate"));
     p.notes=bounded(j.at("notes"),4096,"notes"); p.result_name=bounded(j.at("result_name"),256,"result name");
-    p.editor_tab=static_cast<int>(integer(j.at("editor_tab"),2,"editor tab")); return p;
+    p.editor_tab=static_cast<int>(integer(j.at("editor_tab"),2,"editor tab"));
+    if(j.contains("statistics")) {const auto& s=j.at("statistics");fields(s,{"enabled","replications","base_seed","seed_list","seed_policy","metric"},{},"statistical preferences");
+        p.statistical=boolean(s.at("enabled"));p.replications=bounded(s.at("replications"),4096,"replications");p.base_seed=bounded(s.at("base_seed"),4096,"base seed");p.seed_list=bounded(s.at("seed_list"),4096,"seed list");
+        p.seed_policy=static_cast<int>(integer(s.at("seed_policy"),1,"seed policy"));p.statistical_metric=static_cast<int>(integer(s.at("metric"),4,"metric"));}
+    return p;
 }
 void path_valid(const std::filesystem::path& path)
 {
@@ -269,6 +281,7 @@ struct ProjectCodec
     {
         if(!w.report_) return nullptr;
         const auto& r=*w.report_;
+        if(r.statistics) return {{"kind","paired_statistical"},{"statistics",Json::parse(analysis::serialize_statistical_report(*r.statistics))}};
         Json j{{"request_id",r.request_id},{"mode",static_cast<int>(r.mode)},{"objective",static_cast<int>(r.objective)},
             {"baseline",definition(r.baseline_definition)},{"candidate_ids",r.candidate_ids},{"definitions",Json::array()},
             {"changed_inputs",r.changed_inputs},{"executions",Json::array()},{"export",Json::parse(w.json())},
@@ -282,6 +295,14 @@ struct ProjectCodec
     static void report(ScenarioWorkspace& w,const Json& j)
     {
         if(j.is_null()) return;
+        if(j.contains("kind")) {
+            fields(j,{"kind","statistics"},{},"statistical project report");if(string(j.at("kind"),"report kind")!="paired_statistical") invalid("report","unsupported kind");
+            Comparison r;r.statistics=analysis::parse_statistical_report(j.at("statistics").dump());const auto& input=r.statistics->request;
+            r.request_id=input.id;r.baseline_definition=input.baseline;r.objective=input.objective;
+            if(!r.request_id || scenario::serialize_scenario(input.baseline)!=scenario::serialize_scenario(w.baseline())) invalid("report","statistical baseline provenance mismatch");
+            for(const auto& c:input.candidates) {if(c.id>=w.next_id_) invalid("report","invalid statistical historical candidate identity");r.candidate_ids.push_back(c.id);r.definitions.push_back(c.definition);r.changed_inputs.push_back(differences(input.baseline,c.definition));}
+            r.limitations=r.statistics->limitations;const auto request_id=r.request_id;w.report_=std::move(r);++w.report_generation_;w.execution().reserve_request_ids(request_id);return;
+        }
         fields(j,{"request_id","mode","objective","baseline","candidate_ids","definitions","changed_inputs","executions","export","final_snapshots","execution_ms","report_ms"},{},"comparison");
         Comparison r; r.request_id=id(j.at("request_id")); r.mode=static_cast<ComparisonMode>(integer(j.at("mode"),1,"comparison mode"));
         r.objective=static_cast<analysis::Objective>(integer(j.at("objective"),2,"objective")); r.baseline_definition=definition(j.at("baseline"));
@@ -355,7 +376,7 @@ struct ProjectCodec
         if(w.draft_origin_.workload!=WorkloadDraft{}) j["draft_origin_workload"]=workload_draft_json(w.draft_origin_.workload);
         for(const auto& c:w.candidates_) j["candidates"].push_back({{"id",c.id},{"definition",definition(c.definition)},{"notes",c.notes},{"changed_inputs",c.changed_inputs}});
         for(const auto& r:w.runs_) j["runs"].push_back(run(*r.controller,r.id));
-        if(w.preview_view_ && w.report_) {
+        if(w.preview_view_ && w.report_ && !w.report_->statistics) {
             const auto separator=w.viewed_identity_.find(": "); const auto name=w.viewed_identity_.substr(separator+2);
             j["preview"]=w.preview_report_generation_==w.report_generation_ ? Json(name) : Json{{"unavailable",true}};
         }
@@ -404,7 +425,8 @@ struct ProjectCodec
         if(prefs.selected_candidate && std::none_of(w.candidates_.begin(),w.candidates_.end(),[&](const auto& c){return c.id==*prefs.selected_candidate;})) prefs.selected_candidate.reset();
         report(w,j.at("report"));
         if(!w.report_ || (prefs.result_name!="Baseline" &&
-            std::none_of(w.report_->candidates.begin(),w.report_->candidates.end(),[&](const auto& c){return c.candidate.name==prefs.result_name;})))
+            (w.report_->statistics ? std::none_of(w.report_->statistics->candidates.begin(),w.report_->statistics->candidates.end(),[&](const auto& c){return c.name==prefs.result_name;}) :
+            std::none_of(w.report_->candidates.begin(),w.report_->candidates.end(),[&](const auto& c){return c.candidate.name==prefs.result_name;}))))
             prefs.result_name.clear();
         w.select_run(w.active_run_);
         w.baseline_view_->select(selection_value(j.at("baseline").at("selection")));
@@ -452,6 +474,7 @@ std::string Project::serialize() const
         {"features",Json::array({"warehouse_snapshots","clock_phase","historical_reports","independent_runs"})},
         {"payload_size",text.size()},{"crc32",checksum(text)},{"payload",std::move(payload)}};
     if(has_workload(envelope.at("payload"))) envelope["features"].push_back("workload_v1");
+    if(has_statistics(envelope.at("payload"))) envelope["features"].push_back("statistics_v1");
     auto bytes=envelope.dump();
     if(bytes.size()>project_max_bytes) throw std::length_error("Project exceeds 256 MiB limit");
     timings_.serialization_ms=ms(began); timings_.bytes=bytes.size(); return bytes;
@@ -480,8 +503,9 @@ void Project::load(const std::filesystem::path& path,bool recovery)
     if(integer(j.at("version"),std::numeric_limits<std::uint32_t>::max(),"version")!=project_format_version) invalid("version","unsupported project version");
     if(bounded(j.at("engine"),64,"engine")!=project_engine_version || integer(j.at("scenario_schema"),1,"scenario schema")!=1) invalid("engine","incompatible simulation/schema version");
     const auto legacy_features=Json::array({"warehouse_snapshots","clock_phase","historical_reports","independent_runs"});
-    auto workload_features=legacy_features;workload_features.push_back("workload_v1");
-    if(j.at("features")!=(has_workload(j.at("payload")) ? workload_features : legacy_features)) invalid("features","unsupported or missing persistence features");
+    auto expected_features=legacy_features;if(has_workload(j.at("payload"))) expected_features.push_back("workload_v1");
+    if(has_statistics(j.at("payload"))) expected_features.push_back("statistics_v1");
+    if(j.at("features")!=expected_features) invalid("features","unsupported or missing persistence features");
     const auto payload=j.at("payload").dump();
     if(integer(j.at("payload_size"),project_max_bytes,"payload size")!=payload.size() ||
         integer(j.at("crc32"),std::numeric_limits<std::uint32_t>::max(),"crc32")!=checksum(payload)) invalid("project","corrupt project payload");
