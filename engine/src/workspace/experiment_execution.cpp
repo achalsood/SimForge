@@ -32,6 +32,7 @@ std::uint64_t ExperimentExecution::start(ExperimentRequest request, Observer obs
     request.id = next_id_++;
     if(request.sensitivity)request.sensitivity->id=request.id;
     if(request.interaction)request.interaction->id=request.id;
+    if(request.confirmation)request.confirmation->paired.id=request.id;
     const auto id = request.id;
     {
         std::lock_guard lock{mutex_};
@@ -41,6 +42,7 @@ std::uint64_t ExperimentExecution::start(ExperimentRequest request, Observer obs
         if(request.replications) {progress_.total_replications=request.replications->count;progress_.total_candidates*=request.replications->count;}
         if(request.sensitivity) {progress_.sensitivity=true;progress_.parameter=analysis::parameter_name(request.sensitivity->parameter);progress_.total_replications=request.sensitivity->plan.count;progress_.candidates_per_replication=request.sensitivity->values.size();progress_.total_candidates=progress_.candidates_per_replication*progress_.total_replications;}
         if(request.interaction) {progress_.interaction=true;progress_.x_parameter=analysis::parameter_name(request.interaction->x);progress_.y_parameter=analysis::parameter_name(request.interaction->y);progress_.total_replications=request.interaction->plan.count;progress_.candidates_per_replication=request.interaction->x_values.size()*request.interaction->y_values.size();progress_.total_candidates=progress_.candidates_per_replication*progress_.total_replications;}
+        if(request.confirmation) {progress_.total_replications=request.confirmation->paired.plan.count;progress_.candidates_per_replication=1;progress_.total_candidates=progress_.total_replications;}
         progress_.phase = "Preparing"; started_ = std::chrono::steady_clock::now();
     }
     try {

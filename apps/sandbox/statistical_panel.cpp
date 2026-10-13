@@ -29,15 +29,17 @@ void draw_statistical_setup(workspace::ScenarioWorkspace& w,WorkspaceUI& ui,floa
             ImGui::TableNextColumn();ImGui::TextUnformatted("Seed policy");ImGui::SetNextItemWidth(-1);ImGui::Combo("##SeedPolicy",&ui.seed_policy,"Sequential base + index\0Explicit distinct seeds\0");
             ImGui::TableNextColumn();if(ui.seed_policy==0) input("Base seed",ui.base_seed);else input("Seed list (comma or space separated)",ui.seed_list);ui.statistical_seed=center();ImGui::EndTable();
         }
-        ImGui::TextUnformatted("Objective for point ranking");ImGui::SetNextItemWidth(-1);ImGui::Combo("##StatisticalObjective",&ui.objective,"Maximize completed shipments\0Minimize average queue wait\0Minimize remaining waiting shipments\0");
-        ImGui::TextUnformatted("Comparison mode");ImGui::SetNextItemWidth(-1);ImGui::Combo("##StatisticalComparisonMode",&ui.mode,"Fresh-start configurations\0Shared checkpoint (Single Seed only)\0");
-        ImGui::TextWrapped("95%% paired Student-t intervals. Fresh starts only; identical external workloads per seed. Uses all %zu validated candidates (maximum 20).",w.candidates().size());
-        ImGui::TextWrapped("One/two seeds: descriptive summaries only. Deterministic workloads: no stochastic interval. Work budget: 20 million conservative arrival executions including probes.");
+        if(ImGui::BeginTable("Statistical objective and mode",ImGui::GetContentRegionAvail().x/s<650?1:2,ImGuiTableFlags_SizingStretchSame)) {
+            ImGui::TableNextColumn();ImGui::TextUnformatted("Objective for point ranking");ImGui::SetNextItemWidth(-1);ImGui::Combo("##StatisticalObjective",&ui.objective,"Maximize completed shipments\0Minimize average queue wait\0Minimize remaining waiting shipments\0");
+            ImGui::TableNextColumn();ImGui::TextUnformatted("Comparison mode");ImGui::SetNextItemWidth(-1);ImGui::Combo("##StatisticalComparisonMode",&ui.mode,"Fresh-start configurations\0Shared checkpoint (Single Seed only)\0");ImGui::EndTable();
+        }
         ImGui::BeginDisabled(w.candidates().empty() || w.execution().progress().active());
         if(ImGui::Button("Run paired statistical experiment",{-1,32*s})) {
             try {WorkspaceCommand c{WorkspaceAction::Compare};c.mode=static_cast<workspace::ComparisonMode>(ui.mode);c.objective=static_cast<analysis::Objective>(ui.objective);c.replications=statistical_plan(ui);ui.pending.push_back(std::move(c));ui.close_statistical_settings=true;ui.error.clear();}
             catch(const std::exception& e) {ui.error=e.what();}
         }ui.statistical_start=center();ImGui::EndDisabled();
+        ImGui::TextWrapped("95%% paired Student-t intervals. Fresh starts only; identical external workloads per seed. Uses all %zu validated candidates (maximum 20).",w.candidates().size());
+        ImGui::TextWrapped("One/two seeds: descriptive summaries only. Deterministic workloads: no stochastic interval. Work budget: 20 million conservative arrival executions including probes.");
         if(ui.mode!=0) ImGui::TextWrapped("Select fresh-start comparison. Shared-checkpoint statistical experiments are deferred; use Single Seed for historical checkpoints.");
     }
 }

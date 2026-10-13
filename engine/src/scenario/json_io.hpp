@@ -8,7 +8,7 @@
 namespace simforge::scenario::detail
 {
 using Json = nlohmann::json;
-Json parse_json(std::string_view text, std::size_t limit);
+Json parse_json(std::string_view text, std::size_t limit,std::size_t max_events=4'000'000);
 void fields(const Json& value, std::initializer_list<std::string_view> required,
             std::initializer_list<std::string_view> optional, const std::string& path);
 std::uint64_t integer(const Json& value, std::uint64_t maximum, const std::string& path);

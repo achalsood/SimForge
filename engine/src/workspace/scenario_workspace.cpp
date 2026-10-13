@@ -108,7 +108,7 @@ void ScenarioWorkspace::load(const ScenarioDefinition& d, bool discard)
     // A completion from the prior baseline must not publish after a scenario replacement.
     (void)execution_->take_result(execution_->progress().request_id);
     auto draft = make_draft(d); baseline_ = d; baseline_view_ = std::move(prepared); preview_view_.reset(); runs_.clear(); active_run_ = 0;
-    ++persistent_generation_; ++draft_revision_; draft_ = draft_origin_ = std::move(draft); errors_.clear(); candidates_.clear(); report_.reset();
+    ++persistent_generation_; ++draft_revision_; draft_ = draft_origin_ = std::move(draft); errors_.clear(); candidates_.clear(); report_.reset(); selected_study_.clear();
     // IDs are never reused within the workspace, including after scenario replacement.
     viewed_identity_ = "LIVE SIMULATION - Original Baseline: "+d.name; status_ = Status::Ready; message_ = "Scenario loaded. Edit initial configuration; the running warehouse is unchanged by typing.";
 }
@@ -317,6 +317,10 @@ ExperimentRequest ScenarioWorkspace::capture_request(ComparisonMode mode, analys
 }
 void validate_experiment_request(const ExperimentRequest& request)
 {
+    if(request.confirmation) {
+        if(request.interaction || request.sensitivity || request.replications || request.checkpoint || request.checkpoint_tick || !request.candidates.empty() || request.mode!=ComparisonMode::Initial) throw std::invalid_argument("Confirmation cannot mix experiment inputs");
+        analysis::validate_confirmation_request(*request.confirmation);return;
+    }
     if(request.interaction) {if(request.sensitivity || request.replications || request.checkpoint || request.checkpoint_tick || !request.candidates.empty() || request.mode!=ComparisonMode::Initial)throw std::invalid_argument("Interaction request cannot mix comparison inputs");analysis::validate_interaction_request(*request.interaction);return;}
     if(request.sensitivity) {if(request.replications || request.checkpoint || request.checkpoint_tick || !request.candidates.empty() || request.mode!=ComparisonMode::Initial)throw std::invalid_argument("Sensitivity request cannot mix comparison inputs");analysis::validate_sensitivity_request(*request.sensitivity);return;}
     if(request.replications) {
@@ -351,18 +355,20 @@ void validate_experiment_request(const ExperimentRequest& request)
 }
 void ScenarioWorkspace::compare(ComparisonMode mode, analysis::Objective objective, std::optional<std::uint64_t> tick)
 {
+    if(pending_study_)throw std::logic_error("Resolve the pending completed study first");
     if (execution_->progress().active()) throw std::logic_error("An experiment is already active");
     auto prepared = execute_experiment(capture_request(mode,objective,tick));
     (void)execution_->take_result(execution_->progress().request_id);
-    ++persistent_generation_; ++report_generation_; report_ = std::move(prepared); status_ = Status::Results; message_ = "Comparison complete. Best among tested configurations; active baseline preserved.";
+    pending_study_=std::make_shared<const Comparison>(std::move(prepared));++persistent_generation_;retain_pending_study(); status_ = Status::Results; message_ = "Comparison complete. Best among tested configurations; active baseline preserved.";
 }
 ExperimentExecution& ScenarioWorkspace::execution() { return *execution_; }
 void ScenarioWorkspace::start_interaction(analysis::InteractionRequest input) {
+    if(pending_study_)throw std::logic_error("Resolve the pending completed study first");
     if(scenario::serialize_scenario(input.source)!=scenario::serialize_scenario(baseline()))throw std::invalid_argument("Interaction source must match immutable loaded baseline");
     ExperimentRequest request;request.baseline=input.source;request.interaction=std::move(input);execution_->start(std::move(request));
 }
 namespace {
-const analysis::InteractionCell& selected_interaction(const std::optional<Comparison>& report,std::uint64_t experiment,std::uint64_t cell,std::uint64_t seed) {
+const analysis::InteractionCell& selected_interaction(const std::shared_ptr<const Comparison>& report,std::uint64_t experiment,std::uint64_t cell,std::uint64_t seed) {
     if(!report||!report->interaction||report->request_id!=experiment)throw std::invalid_argument("Interaction report changed; select the tested cell again");
     const auto& r=*report->interaction;const auto found=std::find_if(r.cells.begin(),r.cells.end(),[&](const auto& c){return c.id==cell;});
     if(found==r.cells.end())throw std::invalid_argument("Unknown interaction cell");const auto seeds=analysis::replication_seeds(r.request.plan);
@@ -381,6 +387,7 @@ void ScenarioWorkspace::simulate_interaction(std::uint64_t experiment,std::uint6
     d.name="Interaction "+std::string(analysis::parameter_name(r.request.x))+" "+std::to_string(c.x)+" x "+std::string(analysis::parameter_name(r.request.y))+" "+std::to_string(c.y)+" seed "+std::to_string(seed);(void)create_run(d);
 }
 void ScenarioWorkspace::start_sensitivity(analysis::SensitivityRequest input) {
+    if(pending_study_)throw std::logic_error("Resolve the pending completed study first");
     if(scenario::serialize_scenario(input.source)!=scenario::serialize_scenario(baseline()))throw std::invalid_argument("Sensitivity source must match the immutable loaded baseline");
     ExperimentRequest request;request.baseline=input.source;request.sensitivity=std::move(input);execution_->start(std::move(request));
 }
@@ -401,10 +408,12 @@ void ScenarioWorkspace::simulate_sensitivity(std::uint64_t point,std::uint64_t s
 void ScenarioWorkspace::start_statistical_experiment(ComparisonMode mode,analysis::Objective objective,const analysis::ReplicationPlan& plan)
 {
     if(mode!=ComparisonMode::Initial) throw std::invalid_argument("Statistical experiments support fresh starts only; checkpoint comparisons remain single-seed");
+    if(pending_study_)throw std::logic_error("Resolve the pending completed study first");
     auto request=capture_request(mode,objective);request.replications=plan;validate_experiment_request(request);execution_->start(std::move(request));
 }
 void ScenarioWorkspace::start_experiment(ComparisonMode mode, analysis::Objective objective, std::optional<std::uint64_t> tick)
 {
+    if(pending_study_)throw std::logic_error("Resolve the pending completed study first");
     if (execution_->progress().active()) throw std::logic_error("An experiment is already active");
     execution_->start(capture_request(mode,objective,tick));
     message_ = "Experiment uses submitted inputs; edits apply to future requests.";
@@ -413,7 +422,7 @@ bool ScenarioWorkspace::poll_experiment()
 {
     const auto progress = execution_->progress();
     if (auto completed = execution_->take_result(progress.request_id)) {
-        ++persistent_generation_; ++report_generation_; report_ = std::move(completed); status_ = Status::Results;
+        pending_study_=std::make_shared<const Comparison>(std::move(*completed)); ++persistent_generation_; try {retain_pending_study();} catch(const std::exception& e) {message_=std::string("Completed but not retained: ")+e.what();return false;} status_ = Status::Results;
         // The preview owns its snapshot. Publication must not switch the active scene/camera.
         message_ = "Experiment complete. Report belongs to submitted inputs."; return true;
     }
@@ -422,6 +431,13 @@ bool ScenarioWorkspace::poll_experiment()
 Comparison execute_experiment(const ExperimentRequest& request, const simulation::ExecutionControl* control)
 {
     validate_experiment_request(request);
+    if(request.confirmation) {
+        auto input=*request.confirmation;input.paired.id=request.id;auto r=analysis::run_confirmation(input,control);
+        Comparison result;result.request_id=request.id;result.baseline_definition=input.paired.baseline;result.objective=input.paired.objective;
+        result.confirmation=std::move(r.request);result.statistics=std::move(r.paired);result.limitations=result.statistics->limitations;
+        for(const auto& c:result.statistics->request.candidates) {result.candidate_ids.push_back(c.id);result.definitions.push_back(c.definition);result.changed_inputs.push_back(differences(result.baseline_definition,c.definition));}
+        return result;
+    }
     if(request.interaction) {auto input=*request.interaction;input.id=request.id;Comparison result;result.request_id=request.id;result.baseline_definition=input.source;result.interaction=analysis::run_interaction(input,control);result.limitations=result.interaction->limitations;return result;}
     if(request.sensitivity) {auto input=*request.sensitivity;input.id=request.id;Comparison result;result.request_id=request.id;result.baseline_definition=input.source;
         result.sensitivity=analysis::run_sensitivity(input,control);result.limitations=result.sensitivity->limitations;return result;}
@@ -534,21 +550,24 @@ void ScenarioWorkspace::view_result(std::optional<std::string> name)
 }
 void ScenarioWorkspace::return_to_baseline()
 { select_run(0); }
-std::string ScenarioWorkspace::csv() const
-{ if(!report_) throw std::logic_error("No comparison report");if(report_->interaction)return analysis::serialize_interaction_csv(*report_->interaction);if(report_->sensitivity)return analysis::serialize_sensitivity_csv(*report_->sensitivity); if(report_->statistics) return analysis::serialize_statistical_csv(*report_->statistics);return analysis::serialize_comparison_csv(report_->baseline,report_->candidates); }
-std::string ScenarioWorkspace::json() const
+std::string comparison_csv(const Comparison& r)
+{ if(r.confirmation)return analysis::serialize_confirmation_csv({*r.confirmation,*r.statistics});if(r.interaction)return analysis::serialize_interaction_csv(*r.interaction);if(r.sensitivity)return analysis::serialize_sensitivity_csv(*r.sensitivity); if(r.statistics) return analysis::serialize_statistical_csv(*r.statistics);return analysis::serialize_comparison_csv(r.baseline,r.candidates); }
+std::string comparison_json(const Comparison& r)
 {
-    if(!report_) throw std::logic_error("No comparison report"); const auto& r = *report_;
+
+    if(r.confirmation)return analysis::serialize_confirmation_report({*r.confirmation,*r.statistics});
     if(r.interaction)return analysis::serialize_interaction_report(*r.interaction);
     if(r.sensitivity)return analysis::serialize_sensitivity_report(*r.sensitivity);
     if(r.statistics) return analysis::serialize_statistical_report(*r.statistics);
     if(r.mode == ComparisonMode::Checkpoint) return analysis::serialize_report(r.executions.front());
     using scenario::detail::Json;
     Json result{{"workspace_schema_version",1},{"mode","independent_initial_scenarios"},{"objective",analysis::objective_name(r.objective)},
-        {"executions",Json::array()},{"comparison_csv",csv()},{"ranking",r.ranking},{"warnings",r.warnings},{"limitations",r.limitations}};
+        {"executions",Json::array()},{"comparison_csv",comparison_csv(r)},{"ranking",r.ranking},{"warnings",r.warnings},{"limitations",r.limitations}};
     for(const auto& execution : r.executions) result["executions"].push_back(Json::parse(analysis::serialize_report(execution)));
     const auto bytes = result.dump(); if(bytes.size() > analysis::max_report_bytes) throw std::length_error("Workspace report exceeds byte limit"); return bytes;
 }
+std::string ScenarioWorkspace::json() const {if(!report_)throw std::logic_error("No comparison report");return comparison_json(*report_);}
+std::string ScenarioWorkspace::csv() const {if(!report_)throw std::logic_error("No comparison report");if(report_->confirmation)return analysis::serialize_confirmation_csv({*report_->confirmation,*report_->statistics},false,selected_study_);return comparison_csv(*report_);}
 void ScenarioWorkspace::export_json(const std::filesystem::path& path)
 {
     try { if(report_ && report_->mode == ComparisonMode::Checkpoint) analysis::save_report(path,report_->executions.front());
@@ -563,6 +582,7 @@ void ScenarioWorkspace::export_csv(const std::filesystem::path& path)
 }
 void ScenarioWorkspace::export_seed_csv(const std::filesystem::path& path)
 {
+    if(report_&&report_->confirmation) {analysis::detail::save_output(path,analysis::serialize_confirmation_csv({*report_->confirmation,*report_->statistics},true,selected_study_));return;}
     if(report_&&report_->interaction) {analysis::save_interaction_csv(path,*report_->interaction,analysis::InteractionCsv::Seeds);return;}
     if(report_&&report_->sensitivity) {analysis::detail::save_output(path,analysis::serialize_sensitivity_csv(*report_->sensitivity,analysis::SensitivityCsv::Seeds));return;}
     if(!report_ || !report_->statistics) throw std::logic_error("No statistical report");
@@ -575,6 +595,7 @@ void ScenarioWorkspace::export_interaction_csv(const std::filesystem::path& path
 }
 void ScenarioWorkspace::verify_export(std::string_view bytes)
 {
+    if(scenario::detail::parse_json(bytes,analysis::max_report_bytes).contains("confirmation_report_version")) {(void)analysis::parse_confirmation_report(bytes);return;}
     if(scenario::detail::parse_json(bytes,analysis::max_report_bytes).contains("interaction_report_version")) {(void)analysis::parse_interaction_report(bytes);return;}
     if(scenario::detail::parse_json(bytes,analysis::max_report_bytes).contains("sensitivity_report_version")) {(void)analysis::parse_sensitivity_report(bytes);return;}
     if(scenario::detail::Json::parse(bytes).contains("statistical_report_version")) {(void)analysis::replay_statistical_report(bytes);return;}

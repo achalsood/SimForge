@@ -2,6 +2,21 @@ add_executable(simforge_smoke_test
     smoke_test.cpp
 )
 
+add_executable(simforge_study_history_test study_history_test.cpp)
+target_link_libraries(simforge_study_history_test PRIVATE simforge_workspace nlohmann_json::nlohmann_json)
+foreach(case history switch types views metadata delete identity count_limit single_seed complete_source_seeds seeds duplicate overlap overflow frozen editor selection pairing execution no_leakage repeatable eligibility deterministic workload sensitivity interaction cancel cancelled_recovery deleted_reservations exports corrupt_report lineage repeated persistence recovery migration reorder corrupt_project future)
+    add_test(NAME simforge_study_${case} COMMAND simforge_study_history_test ${case})
+endforeach()
+
+if(WIN32)
+    add_test(NAME simforge_confirmation_cli_contract COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+        -File ${CMAKE_CURRENT_SOURCE_DIR}/confirmation_cli_test.ps1 -Executable $<TARGET_FILE:simforge_headless> -SourceRoot ${PROJECT_SOURCE_DIR})
+endif()
+foreach(example forklift sensitivity interaction inconclusive)
+    add_test(NAME simforge_confirmation_cli_${example} COMMAND simforge_headless --headless --experiment ${PROJECT_SOURCE_DIR}/examples/warehouse-confirmation-${example}.json)
+    set_tests_properties(simforge_confirmation_cli_${example} PROPERTIES PASS_REGULAR_EXPRESSION "Independent-seed confirmation study")
+endforeach()
+
 if(WIN32)
     find_program(SIMFORGE_POWERSHELL NAMES powershell REQUIRED)
     add_executable(simforge_capture_test capture_test.cpp)
@@ -231,6 +246,10 @@ if(SIMFORGE_BUILD_RENDERER)
                 -File ${PROJECT_SOURCE_DIR}/scripts/run-graphics-test.ps1 -Executable $<TARGET_FILE:simforge_sandbox>
                 -Scenario ${PROJECT_SOURCE_DIR}/examples/warehouse-statistical-workload.json -Live -Interaction -ArtifactRoot ${SIMFORGE_ARTIFACT_ROOT})
             set_tests_properties(simforge_interaction_graphics PROPERTIES LABELS graphics TIMEOUT 100 RUN_SERIAL TRUE)
+            add_test(NAME simforge_study_graphics COMMAND ${SIMFORGE_POWERSHELL} -NoProfile -ExecutionPolicy Bypass
+                -File ${PROJECT_SOURCE_DIR}/scripts/run-graphics-test.ps1 -Executable $<TARGET_FILE:simforge_sandbox>
+                -Scenario ${PROJECT_SOURCE_DIR}/examples/warehouse-statistical-workload.json -Live -StudyHistory -ArtifactRoot ${SIMFORGE_ARTIFACT_ROOT})
+            set_tests_properties(simforge_study_graphics PROPERTIES LABELS graphics TIMEOUT 120 RUN_SERIAL TRUE)
         endif()
         add_graphics_case(simforge_live_graphics ${PROJECT_SOURCE_DIR}/examples/warehouse-baseline.json live)
         add_graphics_case(simforge_custom_live_graphics ${PROJECT_SOURCE_DIR}/examples/warehouse-higher-capacity.json live)

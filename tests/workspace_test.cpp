@@ -64,7 +64,7 @@ void comparison(std::string_view c)
     else if(c=="bottleneck") { w.compare(ComparisonMode::Checkpoint,analysis::Objective::MaximizeCompleted); check(w.report()->bottlenecks[2].result->delta.completed==24); check(w.report()->bottlenecks[2].conclusion==analysis::BottleneckConclusion::LikelyBottleneck); }
     else if(c=="undefined") { w.view().reset(); w.revert(true); w.edit(Field::Forklifts,"0"); w.run_draft(); auto no=base(); std::get<scenario::WarehouseConfig>(no.domain).forklifts=0; ScenarioWorkspace blocked{no}; add(blocked,"Same",0); blocked.compare(ComparisonMode::Initial,analysis::Objective::MinimizeAverageWait); check(blocked.report()->ranking.empty() && !blocked.report()->baseline.metrics.average_wait_seconds); for(const auto& e:blocked.report()->bottlenecks) check(e.conclusion==analysis::BottleneckConclusion::Inconclusive); }
     else if(c=="checkpoint_zero") { ScenarioWorkspace zero{base()}; const auto initial=zero.view().runtime().capture_snapshot(); add(zero,"Forklift"); zero.compare(ComparisonMode::Checkpoint,analysis::Objective::MaximizeCompleted); check(zero.baseline_viewer().runtime().capture_snapshot()==initial); }
-    else if(c=="cache") { w.compare(ComparisonMode::Initial,analysis::Objective::MaximizeCompleted); w.edit_candidate(a); w.edit(Field::Forklifts,"4"); check(w.report().has_value()); w.update_candidate(a); check(w.report().has_value()); }
+    else if(c=="cache") { w.compare(ComparisonMode::Initial,analysis::Objective::MaximizeCompleted); w.edit_candidate(a); w.edit(Field::Forklifts,"4"); check(bool(w.report())); w.update_candidate(a); check(bool(w.report())); }
     else throw std::invalid_argument("Unknown workspace test case");
     if(c!="undefined") check(w.baseline_viewer().runtime().capture_snapshot()==saved);
 }
@@ -80,7 +80,7 @@ void visual_switch()
         w.return_to_baseline(); check(w.view().runtime().capture_snapshot()==saved && !w.view().selection()); check(w.view().orbit_camera().camera().position==camera);
     }
     w.view_result("Forklift"); w.restore_candidate(w.candidates().front().id);
-    check(w.report().has_value() && !w.viewing_baseline()); w.return_to_baseline(); check(w.view().runtime().capture_snapshot()==saved);
+    check(bool(w.report()) && !w.viewing_baseline()); w.return_to_baseline(); check(w.view().runtime().capture_snapshot()==saved);
     warehouse::WarehouseSimulation completed{base()}; completed.run(); auto incompatible=base(); incompatible.simulation.tick_rate=30;
     rejects([&]{ viewer::ViewerController invalid{incompatible,completed.capture_snapshot()}; });
 }

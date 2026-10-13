@@ -13,7 +13,7 @@ void invalid(const std::string& path, const std::string& reason)
     throw std::invalid_argument(path + ": " + reason);
 }
 
-Json parse_json(std::string_view text, std::size_t limit)
+Json parse_json(std::string_view text, std::size_t limit,std::size_t max_events)
 {
     if (text.size() > limit) throw std::length_error("JSON input exceeds byte limit");
     if (text.find('\0') != std::string_view::npos) invalid("JSON", "raw NUL bytes are not permitted");
@@ -21,7 +21,7 @@ Json parse_json(std::string_view text, std::size_t limit)
     std::size_t events = 0;
     const auto callback = [&](int depth, Json::parse_event_t event, Json& parsed)
     {
-        if (depth > 32 || ++events > 4'000'000) throw std::length_error("JSON nesting/event limit exceeded");
+        if (depth > 32 || ++events > max_events) throw std::length_error("JSON nesting/event limit exceeded");
         if (event == Json::parse_event_t::object_start) objects.emplace_back();
         else if (event == Json::parse_event_t::object_end) objects.pop_back();
         else if (event == Json::parse_event_t::key)

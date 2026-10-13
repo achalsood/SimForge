@@ -144,6 +144,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         << " | Format: " << initial_info.surface_format << " | Present: " << initial_info.present_mode << " | ImGui: " << IMGUI_VERSION << '\n';
     const auto id = SDL_GetWindowID(window.native_handle());
     DashboardFrame dashboard; DashboardState ui_state; std::vector<ViewerCommand> pending; Measurements measurements;
+    bool measure_confirmation_frames=false;double confirmation_frame_ms=0;std::uint64_t confirmation_frames=0;
     WorkspaceUI workspace_ui; ProjectUI project_ui;
     if(!smoke_frames) {
         if(const auto* pref=SDL_GetPrefPath("SimForge","SimForge")) {project_ui.recovery_path=std::filesystem::path(pref)/"session.recovery";
@@ -167,6 +168,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
     const auto frame = [&](std::chrono::nanoseconds elapsed)
     {
         const auto frame_started = Clock::now();
+        const bool confirmation_active=measure_confirmation_frames && workspace.execution().progress().active();
         std::vector<viewer::InputEvent> events;
         window.poll_events([&](const SDL_Event& e){ graphics.process_ui_event(e); if (const auto converted = input(e,id)) events.push_back(*converted); },[&] {
             if(smoke_frames || project_ui.close_requested) return true;
@@ -260,7 +262,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         if (controller.selection() != ui_state.last_selection)
         { if (controller.selection()) { ui_state.panels.inspector = true; ui_state.select_inspector_tab = true; } ui_state.last_selection = controller.selection(); }
         controller.set_viewport(dashboard_viewport(controller,ui_state),ui_state.panel_changed); ui_state.panel_changed = false;
-        ui_state.results_available=workspace.report().has_value();
+        ui_state.results_available=bool(workspace.report());
         ui_state.viewing_baseline=workspace.viewing_baseline();
         ui_state.statistical_report=workspace.report() && (workspace.report()->statistics.has_value() || workspace.report()->sensitivity.has_value() || workspace.report()->interaction.has_value());
         ui_state.run_identity=workspace.viewed_identity(); ui_state.active_run=workspace.active_run_id();
@@ -296,6 +298,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         const bool presented = graphics.render_frame(controller.present());
         measurements.present_ms += std::chrono::duration<double,std::milli>{Clock::now()-present_started}.count();
         measurements.total_ms += std::chrono::duration<double,std::milli>{Clock::now()-frame_started}.count(); ++measurements.frames;
+        if(confirmation_active){confirmation_frame_ms+=std::chrono::duration<double,std::milli>{Clock::now()-frame_started}.count();++confirmation_frames;}
         return presented;
     };
     const auto submit = [&]
@@ -327,6 +330,44 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         }
         window.resize(1280,720); submit(); submit();
     };
+    if(smoke_frames && project_path && std::getenv("SIMFORGE_STUDY_TEST_PATH")) {
+        require(workspace.studies().size()==4 && workspace.report() && workspace.report()->confirmation,"Study history/lineage not restored");
+        require(workspace.execution().progress().state==workspace::ExecutionState::Idle,"Study restore reran an experiment");
+        require(workspace.report()->confirmation->additional_analysis,"Cancelled seed reservation was lost");
+        require(workspace.runs().size()==1,"Confirmation playback did not restore");
+        submit();submit();click(dashboard.analysis_mode);submit();workspace_ui.scroll_target=60;submit();submit();capture("study-restored");
+        const auto confirmation_id=workspace.selected_study_id(),source_id=workspace.report()->confirmation->source_study_id;
+        bool blocked=false;try{workspace.delete_study(source_id,true);}catch(const std::invalid_argument&){blocked=true;}require(blocked,"Deleted source with dependent confirmation");
+        workspace.delete_study(confirmation_id,true);workspace.delete_study(source_id,true);require(workspace.studies().size()==2,"Explicit dependency deletion failed");
+        window.resize(640,480);submit();window.resize(1280,720);submit();SDL_MinimizeWindow(window.native_handle());frame(std::chrono::nanoseconds{0});SDL_RestoreWindow(window.native_handle());submit();
+        std::cout<<"Study fresh process: immutable history, titles/notes, lineage, reserved seeds, playback, idle restoration and explicit deletion verified.\n";
+    }
+    if(smoke_frames && !project_path && std::getenv("SIMFORGE_STUDY_TEST_PATH")) {
+        submit();submit();diagnostic_failure_probe();window.resize(1600,1100);submit();click(dashboard.analysis_mode);submit();
+        workspace.edit(workspace::Field::Name,"Promising forklifts");workspace.edit(workspace::Field::Forklifts,"3");workspace.add_candidate();
+        analysis::ReplicationPlan plan;plan.count=20;plan.base_seed=1001;
+        const auto wait_study=[&](bool confirmation=false){const auto deadline=Clock::now()+std::chrono::seconds(45);while(workspace.execution().progress().active()){require(Clock::now()<deadline,"Study execution timed out");submit();}submit();require(!workspace.has_pending_study() && workspace.report(),"Study publication failed");if(confirmation && confirmation_frames)std::cout<<"Confirmation ungated active frames: "<<confirmation_frames<<" | mean CPU frame including present "<<confirmation_frame_ms/confirmation_frames<<" ms\n";};
+        workspace.start_statistical_experiment(workspace::ComparisonMode::Initial,analysis::Objective::MaximizeCompleted,plan);wait_study();const auto statistical_id=workspace.selected_study_id();
+        analysis::SensitivityRequest sweep;sweep.source=workspace.baseline();sweep.values={1,2,3,4};sweep.multi_seed=true;sweep.plan=plan;workspace.start_sensitivity(sweep);wait_study();
+        analysis::InteractionRequest grid;grid.source=workspace.baseline();grid.x_values={1,2,3};grid.y_values={8,10,12};grid.multi_seed=true;grid.plan=plan;workspace.start_interaction(grid);wait_study();const auto grid_id=workspace.selected_study_id();require(workspace.studies().size()==3,"History overwrote earlier studies");
+        click(workspace_ui.history_header);submit();require(workspace_ui.history_open_controls.size()==3,"Study history UI missing records");capture("study-history");
+        click(workspace_ui.history_open_controls[0]);submit();require(workspace.report()->statistics.has_value(),"History did not restore statistical view");workspace_ui.study_title="Exploratory capacity comparison";workspace_ui.study_notes="Preserved original evidence";click(workspace_ui.study_rename);submit();require(workspace.studies()[0].title==workspace_ui.study_title,"Rename did not persist");
+        click(workspace_ui.history_open_controls[1]);submit();require(workspace.report()->sensitivity.has_value(),"History did not restore sweep view");click(workspace_ui.history_open_controls[2]);submit();require(workspace.report()->interaction.has_value(),"History did not restore interaction view");
+        click(workspace_ui.history_header);submit();workspace_ui.grid_selected=8;workspace_ui.scroll_target=60;submit();submit();click(workspace_ui.confirmation_prepare);submit();require(workspace_ui.frozen_confirmation.has_value(),"Confirm selected configuration did not freeze grid cell");
+        workspace_ui.scroll_target=62;submit();submit();capture("study-confirmation-setup");workspace_ui.confirmation_base="1001";submit();capture("study-seed-overlap");workspace_ui.confirmation_base="50001";submit();
+        // Exercise the same submission lifecycle with a deterministic test-only phase gate.
+        auto frozen=*workspace_ui.frozen_confirmation;ExperimentGate gate;gate.target_phase="Simulating";
+        workspace.start_confirmation(frozen,[&](auto phase,auto,auto,auto){gate.checkpoint(phase);});gate.wait();submit();capture("study-confirmation-progress");workspace.execution().cancel();gate.release();while(workspace.execution().progress().active())submit();submit();require(workspace.studies().size()==3 && workspace.selected_study_id()==grid_id,"Cancellation changed completed history");
+        workspace_ui.frozen_confirmation.reset();workspace_ui.confirmation_base="60001";workspace_ui.scroll_target=60;submit();submit();click(workspace_ui.confirmation_prepare);submit();require(workspace_ui.frozen_confirmation && workspace_ui.frozen_confirmation->additional_analysis,"Cancelled seeds were reused or audit was lost");workspace_ui.scroll_target=62;submit();submit();measure_confirmation_frames=true;click(workspace_ui.confirmation_start);submit();wait_study(true);measure_confirmation_frames=false;require(workspace.studies().size()==4 && workspace.report()->confirmation,"Confirmation not retained separately");
+        const auto& confirmation=*workspace.report()->confirmation;for(auto seed:analysis::replication_seeds(confirmation.paired.plan))require(std::find(confirmation.exploratory_seeds.begin(),confirmation.exploratory_seeds.end(),seed)==confirmation.exploratory_seeds.end(),"Confirmation seed overlap");
+        workspace_ui.scroll_target=60;submit();submit();capture("study-confirmation-results");
+        auto playable=confirmation.paired.candidates.front().definition;playable.simulation.random_seed=analysis::replication_seeds(confirmation.paired.plan).front();workspace.create_run(playable);workspace.view().seek(workspace.view().observation().horizon);require(workspace.view().runtime().metrics()==workspace.report()->statistics->replications.front().candidates.front(),"Frozen seeded playback differs from confirmation evidence");
+        click(dashboard.simulation_mode);submit();capture("study-playback");click(dashboard.analysis_mode);submit();workspace_ui.scroll_target=60;submit();submit();window.resize(1280,720);submit();workspace_ui.scroll_target=60;submit();submit();capture("study-compact");window.resize(1600,900);submit();
+        const auto directory=std::filesystem::path(std::getenv("SIMFORGE_STUDY_TEST_PATH")).parent_path();workspace.export_history_json(directory/"history.json");workspace.export_json(directory/"confirmation.json");workspace.export_csv(directory/"confirmation.csv");workspace.export_seed_csv(directory/"confirmation-seeds.csv");
+        project_ui.test_path=std::filesystem::u8path(std::getenv("SIMFORGE_STUDY_TEST_PATH"));click(dashboard.file_menu);submit();click(project_ui.save_button);submit();require(std::filesystem::exists(project_ui.test_path)&&project_ui.error.empty(),"Study project save failed");
+        require(workspace.studies()[0].id==statistical_id && workspace.studies()[0].notes=="Preserved original evidence","History identity or metadata changed");
+        std::cout<<"Study graphics: three exploratory types, history switching, rename/notes, frozen cell, overlap diagnostics, progress, cancellation, independent confirmation, paired evidence, seeded playback, exports and Save verified.\n";
+    }
     if(smoke_frames && project_path && std::getenv("SIMFORGE_INTERACTION_TEST_PATH")) {
         require(workspace.report()&&workspace.report()->interaction&&workspace.report()->final_snapshots.empty(),"Interaction restoration fabricated or lost report");
         require(workspace.active_run_id()!=0&&workspace.runs().size()==1&&workspace.candidates().size()==1,"Interaction candidate/playback restoration failed");
@@ -357,7 +398,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         require(workspace.view().runtime().capture_snapshot()==saved && workspace.view().orbit_camera().pose()==camera,"Aggregate analysis changed restored live state or camera");
         std::cout<<"Statistical fresh process: exact raw pairs, intervals, settings and live state restored without running an experiment or creating an average snapshot.\n";
     }
-    if(smoke_frames && project_path && !std::getenv("SIMFORGE_STATISTICAL_TEST_PATH") && !std::getenv("SIMFORGE_SENSITIVITY_TEST_PATH") && !std::getenv("SIMFORGE_INTERACTION_TEST_PATH")) {
+    if(smoke_frames && project_path && !std::getenv("SIMFORGE_STATISTICAL_TEST_PATH") && !std::getenv("SIMFORGE_SENSITIVITY_TEST_PATH") && !std::getenv("SIMFORGE_INTERACTION_TEST_PATH") && !std::getenv("SIMFORGE_STUDY_TEST_PATH")) {
         const auto saved=workspace.view().runtime().capture_snapshot();const auto saved_clock=workspace.view().runtime().clock().capture_snapshot();
         const auto saved_camera=workspace.view().orbit_camera().pose();const auto active=workspace.active_run_id();
         submit();submit();diagnostic_failure_probe();capture("project-restored");
@@ -365,14 +406,14 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         require(workspace.view().orbit_camera().pose()==saved_camera,"Fresh process changed restored camera");
         require(workspace.view().speed()==saved_clock.time_scale && workspace.view().runtime().clock().paused()==saved_clock.paused,"Fresh process lost playback state");
         if(std::getenv("SIMFORGE_WORKLOAD_TEST_PATH")) {
-            require(workspace.runs().size()==1 && workspace.candidates().size()==1 && workspace.report().has_value(),"Workload project lost independent run or report");
+            require(workspace.runs().size()==1 && workspace.candidates().size()==1 && bool(workspace.report()),"Workload project lost independent run or report");
             const auto& workload=std::get<scenario::WarehouseConfig>(workspace.view().definition().domain).workload;
             require(workload.arrivals==scenario::ArrivalMode::Uniform && workload.processing==scenario::ProcessingMode::Uniform,"Workload project lost its random configuration");
         } else if(std::getenv("SIMFORGE_LANGUAGE_TEST_PATH")) {
-            require(workspace.runs().size()==4 && workspace.candidates().size()==2 && workspace.report().has_value(),"Language project lost runs/candidates/report");
+            require(workspace.runs().size()==4 && workspace.candidates().size()==2 && bool(workspace.report()),"Language project lost runs/candidates/report");
             require(workspace.draft().values[1]=="6"&&workspace.draft().values[2]=="20"&&workspace.draft().values[3]=="3"&&workspace.draft().values[5]=="900","Approved language configuration did not persist");
             require(!workspace_ui.language.proposal && !workspace_ui.language.visible,"Reopen restored or reapplied an old proposal");
-        } else require(workspace.runs().size()==3 && workspace.candidates().size()==1 && workspace.report().has_value(),"Fresh process lost workspace analyses or runs");
+        } else require(workspace.runs().size()==3 && workspace.candidates().size()==1 && bool(workspace.report()),"Fresh process lost workspace analyses or runs");
         require(workspace.view().scene().resources().size()>0 && workspace.view().observation().capacity.forklifts==3,"Restored geometry mismatch");
         auto uninterrupted=warehouse::WarehouseSimulation::create_from(saved);uninterrupted.run();
         if(std::getenv("SIMFORGE_WORKLOAD_TEST_PATH")) {
@@ -441,7 +482,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         workspace.add_candidate();workspace_ui.pending.push_back({WorkspaceAction::Compare});submit();
         const auto deadline=Clock::now()+std::chrono::seconds{15};
         while(workspace.execution().progress().active()) {require(Clock::now()<deadline,"Workload comparison timed out");submit();}
-        submit();require(workspace.report().has_value() && workspace.execution().progress().state==workspace::ExecutionState::Completed,"Workload async comparison failed");
+        submit();require(bool(workspace.report()) && workspace.execution().progress().state==workspace::ExecutionState::Completed,"Workload async comparison failed");
         require(workspace.view().runtime().capture_snapshot()==mid,"Async workload comparison changed active random playback");
         workspace::ScenarioWorkspace::verify_export(workspace.json());capture("workload-analysis");
         window.resize(640,480);submit();window.resize(1600,900);submit();SDL_MinimizeWindow(window.native_handle());frame(std::chrono::nanoseconds{0});SDL_RestoreWindow(window.native_handle());submit();
@@ -555,7 +596,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         require(std::filesystem::exists(project_ui.test_path) && project_ui.error.empty(),"Statistical project save failed");capture("statistical-project");
         std::cout<<"Statistical graphics: native setup, real progress, camera navigation, cancellation preservation, paired intervals/raw details, exports, save, resize and aggregate-only semantics verified.\n";
     }
-    if (smoke_frames && !project_path && !std::getenv("SIMFORGE_WORKLOAD_TEST_PATH") && !std::getenv("SIMFORGE_STATISTICAL_TEST_PATH") && !std::getenv("SIMFORGE_SENSITIVITY_TEST_PATH") && !std::getenv("SIMFORGE_INTERACTION_TEST_PATH"))
+    if (smoke_frames && !project_path && !std::getenv("SIMFORGE_WORKLOAD_TEST_PATH") && !std::getenv("SIMFORGE_STATISTICAL_TEST_PATH") && !std::getenv("SIMFORGE_SENSITIVITY_TEST_PATH") && !std::getenv("SIMFORGE_INTERACTION_TEST_PATH") && !std::getenv("SIMFORGE_STUDY_TEST_PATH"))
     {
         submit(); submit(); diagnostic_failure_probe(); const auto overview = capture("overview");
         require(graphics.info().ui_vertices > 1000 && graphics.info().ui_draw_calls >= 3,"Dashboard emitted no meaningful UI draw data");
@@ -818,7 +859,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
             workspace_ui.scroll_target=15; submit(); submit();
             enter_text(workspace_ui.export_field,json.string().c_str()); click(workspace_ui.export_json);
             require(std::filesystem::exists(json) && workspace_ui.error.empty(),"Graphical JSON export failed");
-            click(workspace_ui.export_json); require(!workspace_ui.error.empty() && workspace.report().has_value(),"Existing-file export did not preserve the report and show failure");
+            click(workspace_ui.export_json); require(!workspace_ui.error.empty() && bool(workspace.report()),"Existing-file export did not preserve the report and show failure");
             workspace_ui.scroll_target=15; submit(); submit();
             enter_text(workspace_ui.export_field,csv.string().c_str()); click(workspace_ui.export_csv);
             require(std::filesystem::exists(csv) && workspace_ui.error.empty(),"Graphical CSV export failed");

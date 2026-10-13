@@ -12,6 +12,7 @@
 #include <simforge/analysis/statistical_experiment.hpp>
 #include <simforge/analysis/sensitivity.hpp>
 #include <simforge/analysis/interaction.hpp>
+#include <simforge/analysis/confirmation.hpp>
 #include <nlohmann/json.hpp>
 #include <fstream>
 
@@ -186,6 +187,19 @@ int experiment_workflow(const Options& options)
     {
         if(std::filesystem::file_size(*options.experiment)>max_experiment_bytes) throw std::length_error("Experiment specification exceeds byte budget");
         std::ifstream input(*options.experiment);nlohmann::json specification;input>>specification;
+        if(specification.is_object() && specification.value("schema_version",0)==5) {
+            if(options.export_marginal || options.export_interactions || options.export_interaction_seeds)throw std::invalid_argument("Confirmation supports JSON, summary CSV and per-seed CSV exports");
+            const auto request=parse_confirmation_request(specification.dump());const auto report=run_confirmation(request);
+            const auto& result=report.paired.candidates.front().metrics[static_cast<std::size_t>(request.objective)];
+            std::cout<<"Independent-seed confirmation study | Source: "<<request.source_study_id<<" | "<<request.paired.plan.count<<" new distinct seeds | Disjointness validated\n";
+            std::cout<<"Estimated mean difference: ";if(result.mean_difference)std::cout<<*result.mean_difference;else std::cout<<"undefined";
+            std::cout<<" | Nominal 95% confidence interval: ";if(result.lower)std::cout<<'['<<*result.lower<<", "<<*result.upper<<']';else std::cout<<"unavailable";std::cout<<'\n';
+            if(result.lower && *result.lower<=0 && *result.upper>=0)std::cout<<"The confirmation interval includes zero.\n";
+            std::cout<<"Disjoint PRNG seeds do not guarantee statistical independence; confirmation does not prove optimality.\n";
+            if(options.export_json) save_confirmation_report(*options.export_json,report);
+            if(options.export_csv) save_confirmation_csv(*options.export_csv,report);
+            if(options.export_seeds) save_confirmation_csv(*options.export_seeds,report,true);return 0;
+        }
         if(specification.is_object()&&specification.contains("schema_version")&&specification.at("schema_version").is_number_integer()&&specification.at("schema_version")==4) {
             if(!specification.contains("mode")||specification.at("mode")!="interaction"){std::cerr<<"Unsupported interaction mode\n";return 3;}
             try {if(options.export_marginal)throw std::invalid_argument("Marginal CSV belongs to sensitivity experiments");

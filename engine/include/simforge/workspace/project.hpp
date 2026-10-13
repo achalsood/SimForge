@@ -5,8 +5,11 @@
 
 namespace simforge::workspace
 {
-inline constexpr std::uint32_t project_format_version=1;
+inline constexpr std::uint32_t project_format_version=2;
 inline constexpr std::size_t project_max_bytes=256*1024*1024;
+// 32 retained studies * 10,100 observations * approximately 100 JSON events,
+// plus report summaries and viewer state. Individual evidence keeps the 4M limit.
+inline constexpr std::size_t project_max_json_events=36'000'000;
 inline constexpr const char* project_engine_version="warehouse-2-analysis-1";
 struct ProjectPreferences
 {

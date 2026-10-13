@@ -82,7 +82,7 @@ void test(std::string_view name)
                 while(w.execution().progress().active()) { check(std::chrono::steady_clock::now()<deadline); std::this_thread::sleep_for(1ms); }
                 check(w.poll_experiment());
             }
-            check(w.report().has_value() && w.view().runtime().capture_snapshot()==saved);
+            check(bool(w.report()) && w.view().runtime().capture_snapshot()==saved);
             const auto finals=w.report()->final_snapshots; const auto report=w.json(); w.view_result(d.name); check(w.view().result_preview());
             w.resume_live_view(); check(w.active_run_id()==id && w.view().runtime().capture_snapshot()==saved);
             w.edit(Field::Forklifts,"0"); w.update_candidate(candidate); w.simulate_result(d.name); check(w.view().observation().tick==0 && w.view().observation().capacity.forklifts==3);

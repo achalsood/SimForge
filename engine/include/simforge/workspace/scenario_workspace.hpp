@@ -3,6 +3,7 @@
 #include <simforge/analysis/statistical_experiment.hpp>
 #include <simforge/analysis/sensitivity.hpp>
 #include <simforge/analysis/interaction.hpp>
+#include <simforge/analysis/confirmation.hpp>
 #include <simforge/viewer/viewer.hpp>
 #include <simforge/scenario/scenario_language.hpp>
 #include <array>
@@ -36,6 +37,7 @@ enum class ComparisonMode { Initial, Checkpoint };
 enum class Status { Empty, Ready, Modified, Invalid, ComparisonReady, Results, ExportFailed };
 struct Comparison
 {
+    std::optional<analysis::ConfirmationRequest> confirmation;
     std::optional<analysis::SensitivityReport> sensitivity;
     std::optional<analysis::InteractionReport> interaction;
     std::optional<analysis::StatisticalReport> statistics;
@@ -56,6 +58,28 @@ struct Comparison
     std::vector<std::string> changed_inputs;
     double execution_ms{0}, report_ms{0};
 };
+inline constexpr std::size_t max_studies=32, max_study_bytes=32*1024*1024,
+    max_history_bytes=192*1024*1024, max_study_observations=10'100;
+enum class StudyType { SingleSeed, Statistical, Sensitivity, Interaction, Confirmation };
+const char* study_type_name(StudyType);
+const char* study_type_label(StudyType);
+StudyType study_type(const Comparison&);
+struct StudyViewState {
+    std::uint64_t configuration{0},seed{0};
+    int metric{0};
+    std::array<std::uint32_t,4> rectangle{}; // x0, x1, y0, y1; never a UI row index.
+    bool operator==(const StudyViewState&) const = default;
+};
+struct StudyRecord {
+    std::string id,title,notes,completed;
+    StudyType type{StudyType::SingleSeed};
+    std::shared_ptr<const Comparison> evidence;
+    std::size_t serialized_bytes{0};
+    StudyViewState view;
+    std::vector<std::vector<std::uint64_t>> reserved_confirmation_seeds;
+};
+std::string comparison_json(const Comparison&);
+std::string comparison_csv(const Comparison&);
 struct ExperimentRequest
 {
     std::uint64_t id{0};
@@ -68,6 +92,7 @@ struct ExperimentRequest
     std::optional<analysis::ReplicationPlan> replications;
     std::optional<analysis::SensitivityRequest> sensitivity;
     std::optional<analysis::InteractionRequest> interaction;
+    std::optional<analysis::ConfirmationRequest> confirmation;
 };
 void validate_experiment_request(const ExperimentRequest& request);
 [[nodiscard]] Comparison execute_experiment(const ExperimentRequest& request,
@@ -136,7 +161,26 @@ public:
     [[nodiscard]] const Draft& draft() const noexcept { return draft_; }
     [[nodiscard]] const std::vector<ValidationError>& errors() const noexcept { return errors_; }
     [[nodiscard]] const std::vector<Candidate>& candidates() const noexcept { return candidates_; }
-    [[nodiscard]] const std::optional<Comparison>& report() const noexcept { return report_; }
+    [[nodiscard]] const std::shared_ptr<const Comparison>& report() const noexcept { return report_; }
+    [[nodiscard]] const std::vector<StudyRecord>& studies() const noexcept {return studies_;}
+    [[nodiscard]] const std::string& selected_study_id() const noexcept {return selected_study_;}
+    [[nodiscard]] std::size_t history_bytes() const noexcept;
+    void select_study(std::string_view id);
+    void rename_study(std::string_view id,std::string title,std::string notes);
+    void delete_study(std::string_view id,bool confirmed);
+    void study_view(StudyViewState view);
+    // Ownership transfers only after validation and retention checks succeed.
+    void retain_study(Comparison report,std::string title={});
+    bool retain_pending_study();
+    [[nodiscard]] bool has_pending_study() const noexcept {return bool(pending_study_);}
+    void discard_pending_study(bool confirmed);
+    void export_pending_json(const std::filesystem::path&);
+    [[nodiscard]] analysis::ConfirmationRequest freeze_confirmation(std::uint64_t selection,const analysis::ReplicationPlan&) const;
+    void start_confirmation(analysis::ConfirmationRequest,
+        std::function<void(std::string_view,std::string_view,std::uint64_t,std::uint64_t)> observer={});
+    [[nodiscard]] std::string history_json() const;
+    void export_history_json(const std::filesystem::path&);
+    void export_study_json(const std::filesystem::path&);
     [[nodiscard]] Status status() const noexcept { return status_; }
     [[nodiscard]] const std::string& message() const noexcept { return message_; }
     [[nodiscard]] const std::string& viewed_identity() const noexcept { return viewed_identity_; }
@@ -144,6 +188,7 @@ public:
 private:
     friend class Project;
     friend struct ProjectCodec;
+    friend std::shared_ptr<const Comparison> parse_comparison_storage_json(std::string_view,std::uint64_t);
     std::uint64_t persistent_generation_{0};
     std::uint64_t language_epoch_{0}, draft_revision_{0}; // Runtime source context; no project-schema change.
     std::uint64_t report_generation_{0}, preview_report_generation_{0};
@@ -156,7 +201,12 @@ private:
     Draft draft_, draft_origin_;
     std::vector<ValidationError> errors_;
     std::vector<Candidate> candidates_;
-    std::optional<Comparison> report_;
+    std::shared_ptr<const Comparison> report_;
+    std::vector<StudyRecord> studies_;
+    std::string selected_study_;
+    std::uint64_t next_study_id_{1};
+    std::shared_ptr<const Comparison> pending_study_;
+    void publish_study(std::shared_ptr<const Comparison>,std::string title={});
     std::unique_ptr<viewer::ViewerController> baseline_view_, preview_view_;
     std::vector<PlayableRun> runs_;
     std::uint64_t active_run_{0}, next_run_id_{1};

@@ -67,7 +67,7 @@ void equivalence(ComparisonMode mode, analysis::Objective objective, bool explic
         const auto m=branch.metrics(); check(m.arrived==m.completed+m.waiting+m.in_progress);
     }
     check(w.baseline_viewer().runtime().capture_snapshot()==viewer);
-    w.execution().start(request); check(finish(w.execution()).state==ExecutionState::Completed); check(w.poll_experiment());
+    w.execution().start(request); check(finish(w.execution()).state==ExecutionState::Completed); if(!w.poll_experiment()) throw std::runtime_error(w.message());
     w.view_result({}); check(w.view().observation().metrics==expected.baseline.metrics);
     w.view_result("Alpha"); check(w.view().observation().metrics==expected.candidates.front().metrics);
     w.return_to_baseline(); check(w.view().runtime().capture_snapshot()==viewer);
@@ -99,18 +99,18 @@ void run(std::string_view test) {
         return;
     }
     if (test=="retention") {
-        w.start_experiment(ComparisonMode::Initial,analysis::Objective::MaximizeCompleted); finish(w.execution()); check(w.poll_experiment()); const auto json=w.json();
+        w.start_experiment(ComparisonMode::Initial,analysis::Objective::MaximizeCompleted); finish(w.execution()); if(!w.poll_experiment()) throw std::runtime_error(w.message()); const auto json=w.json();
         w.update_candidate(w.candidates()[0].id); check(w.json()==json);
         Gate gate; auto id=w.execution().start(w.capture_request(ComparisonMode::Initial,analysis::Objective::MaximizeCompleted),gate.observer("Publishing"));
         gate.wait(); w.execution().cancel(); gate.release(); check(finish(w.execution()).state==ExecutionState::Cancelled);
         check(!w.poll_experiment() && w.json()==json && !w.execution().take_result(id));
         Gate failure; w.execution().start(w.capture_request(ComparisonMode::Initial,analysis::Objective::MaximizeCompleted),failure.observer("Evaluating candidate",true));
         failure.wait(); failure.release(); check(finish(w.execution()).state==ExecutionState::Failed); check(!w.poll_experiment() && w.json()==json);
-        w.start_experiment(ComparisonMode::Initial,analysis::Objective::MaximizeCompleted); finish(w.execution()); check(w.poll_experiment());
+        w.start_experiment(ComparisonMode::Initial,analysis::Objective::MaximizeCompleted); finish(w.execution()); if(!w.poll_experiment()) throw std::runtime_error(w.message());
         w.view_result("Candidate"); check(w.view().observation().metrics==w.report()->candidates.front().metrics);
         const auto preview=w.view().runtime().capture_snapshot();
         const auto camera=w.view().orbit_camera().camera().view_projection();
-        w.start_experiment(ComparisonMode::Initial,analysis::Objective::MaximizeCompleted); finish(w.execution()); check(w.poll_experiment());
+        w.start_experiment(ComparisonMode::Initial,analysis::Objective::MaximizeCompleted); finish(w.execution()); if(!w.poll_experiment()) throw std::runtime_error(w.message());
         check(w.view().result_preview() && w.view().runtime().capture_snapshot()==preview && w.view().orbit_camera().camera().view_projection()==camera);
         w.start_experiment(ComparisonMode::Initial,analysis::Objective::MaximizeCompleted); finish(w.execution());
         auto replacement=definition(); replacement.name="Replacement baseline"; w.load(replacement,true);

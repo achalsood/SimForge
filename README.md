@@ -1,5 +1,20 @@
 # SimForge
 
+### Find a promising warehouse configuration and verify it on new demand conditions
+
+1. Open `examples/warehouse-statistical-workload.json` and choose **Analysis**. Run a paired comparison, forklift sensitivity sweep, or forklift × worker interaction grid.
+2. Open **Study History** to revisit completed studies. Give them titles and notes; switching restores the stored evidence without simulation reruns.
+3. Select a tested capacity configuration and choose **Confirm Selected Configuration**. Review the frozen baseline, candidate and changed parameters.
+4. Choose new seeds. SimForge rejects duplicates, exploratory overlap and seeds reserved by earlier attempts. Run independent confirmation; cancellation preserves history and keeps the reserved set in the audit.
+5. Compare the exploratory and confirmation estimates, per-seed outcomes and nominal 95% confidence interval. An interval including zero does not establish an improvement; confirmation does not prove global optimality.
+6. Play the frozen configuration using a measured seed. Save the `.simforge` project to preserve all completed studies, metadata and links. Source deletion is blocked until dependent confirmations are handled explicitly.
+
+History retains up to 32 studies, 32 MiB per study and 192 MiB total, with explicit deletion and no silent eviction. See [study history, confirmation, headless examples and measured limits](docs/study-history-and-confirmation.md).
+
+![Study History](docs/artifacts/study-history.png)
+![Freeze a tested configuration and reserve new seeds](docs/artifacts/study-confirmation-setup.png)
+![Compare exploratory and confirmation evidence](docs/artifacts/study-confirmation-results.png)
+
 ### Do more workers help when forklift capacity changes?
 
 Open the variable-demand warehouse (`examples/warehouse-statistical-workload.json`), choose Analysis → Two-Factor Interaction, and test forklifts 1..3 against workers 1..3. Run a single seed first, then enable 20 paired seeds starting at 1001. Click outcome cells, switch to the interaction heatmap, and inspect the four matched observations for each seed before creating a candidate or explicitly seeded playback.

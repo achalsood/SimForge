@@ -24,6 +24,7 @@ std::string read(const std::filesystem::path& path) {std::ifstream in(path,std::
 void write(const std::filesystem::path& path,std::string_view bytes) {std::ofstream out(path,std::ios::binary);out<<bytes;}
 void seal(Json& j)
 {
+    if(j["payload"].contains("study_history"))for(auto& study:j["payload"]["study_history"])study["bytes"]=study["evidence"].dump().size();
     const auto bytes=j["payload"].dump(); std::uint32_t crc=0xffffffff;
     for(unsigned char c:bytes) {crc^=c;for(int bit=0;bit<8;++bit) crc=(crc>>1)^((crc&1)?0xedb88320:0);}
     j["payload_size"]=bytes.size();j["crc32"]=~crc;
@@ -176,7 +177,7 @@ void test(std::string name)
     }
     // Each malformed input is resealed so field validation is exercised independently of integrity.
     candidate(w);w.create_run(definition("Run"));project.save(path);auto j=Json::parse(read(path));
-    if(name=="version") j["version"]=2;
+    if(name=="version") j["version"]=workspace::project_format_version+1;
     else if(name=="truncated") {write(path,read(path).substr(0,80));}
     else if(name=="corrupt") j["payload"]["draft"][1]="999";
     else if(name=="oversized") {
@@ -191,12 +192,12 @@ void test(std::string name)
     else if(name=="enum") {j["payload"]["preferences"]["mode"]=99;seal(j);}
     else if(name=="provenance") {
         w.compare(workspace::ComparisonMode::Initial,analysis::Objective::MaximizeCompleted);project.save();j=Json::parse(read(path));
-        j["payload"]["report"]["candidate_ids"][0]=0;seal(j);
+        j["payload"]["study_history"][0]["evidence"]["candidate_ids"][0]=0;seal(j);
     }
     else if(name=="report_values" || name=="report_definitions") {
         w.compare(workspace::ComparisonMode::Initial,analysis::Objective::MaximizeCompleted);project.save();j=Json::parse(read(path));
-        if(name=="report_values") j["payload"]["report"]["executions"][0]["baseline"]["metrics"]["completed"]=1;
-        else j["payload"]["report"]["definitions"][0]["warehouse"]["forklifts"]=99;
+        if(name=="report_values") j["payload"]["study_history"][0]["evidence"]["executions"][0]["baseline"]["metrics"]["completed"]=1;
+        else j["payload"]["study_history"][0]["evidence"]["definitions"][0]["warehouse"]["forklifts"]=99;
         seal(j);
     }
     else if(name=="future_commands") {j["payload"]["runs"][0]["commands"].push_back(Json::array({1000,99999,2,2}));seal(j);}

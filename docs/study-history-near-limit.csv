@@ -1,0 +1,2 @@
+case,studies,history_serialized_bytes,project_bytes,insertion_or_submit_ms,switch_ms,save_or_execution_ms,load_ms,recovery_ms,recovery_bytes,deletion_ms,peak_working_set_bytes
+near_storage_limit,20,201183117,201181771,21215.3040,0.0000,12743.0789,18259.6594,12858.9800,201181797,0.7141,1866362880

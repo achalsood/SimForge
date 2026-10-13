@@ -27,6 +27,12 @@ struct WorkspaceUI
     std::vector<std::string> result_order; // Cached authoritative ranks, rebuilt after comparison.
     std::optional<std::uint64_t> editing;
     std::optional<WorkspaceCommand> confirmation;
+    std::optional<simforge::analysis::ConfirmationRequest> frozen_confirmation;
+    std::string history_observed,study_title,study_notes,delete_study_id;
+    std::string confirmation_count{"30"},confirmation_base{"50001"},confirmation_seeds;
+    int confirmation_policy{0};
+    glm::vec2 history_header{},confirmation_prepare{},confirmation_start{},study_rename{};
+    std::vector<glm::vec2> history_open_controls;
     int objective{0}, mode{0};
     bool statistical{false};std::string replications{"20"},base_seed{"1001"},seed_list;
     int seed_policy{0},statistical_metric{0};

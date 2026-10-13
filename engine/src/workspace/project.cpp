@@ -2,6 +2,7 @@
 #include <simforge/workspace/experiment_execution.hpp>
 #include "../scenario/json_io.hpp"
 #include <algorithm>
+#include <charconv>
 #include <chrono>
 #include <cwctype>
 #include <cmath>
@@ -298,16 +299,16 @@ struct ProjectCodec
         const auto restoring=Timer::now(); v->restore_session(state,clock,camera_value(j.at("camera")),selection_value(j.at("selection")),std::move(history));
         timings.restoration_ms+=ms(restoring); return v;
     }
-    static Json report(const ScenarioWorkspace& w)
+    static Json report(const Comparison& r)
     {
-        if(!w.report_) return nullptr;
-        const auto& r=*w.report_;
+
+        if(r.confirmation)return {{"kind","confirmation"},{"confirmation",Json::parse(analysis::serialize_confirmation_report({*r.confirmation,*r.statistics}))}};
         if(r.interaction)return {{"kind","interaction"},{"interaction",Json::parse(analysis::serialize_interaction_report(*r.interaction))}};
         if(r.sensitivity)return {{"kind","sensitivity"},{"sensitivity",Json::parse(analysis::serialize_sensitivity_report(*r.sensitivity))}};
         if(r.statistics) return {{"kind","paired_statistical"},{"statistics",Json::parse(analysis::serialize_statistical_report(*r.statistics))}};
         Json j{{"request_id",r.request_id},{"mode",static_cast<int>(r.mode)},{"objective",static_cast<int>(r.objective)},
             {"baseline",definition(r.baseline_definition)},{"candidate_ids",r.candidate_ids},{"definitions",Json::array()},
-            {"changed_inputs",r.changed_inputs},{"executions",Json::array()},{"export",Json::parse(w.json())},
+            {"changed_inputs",r.changed_inputs},{"executions",Json::array()},{"export",Json::parse(comparison_json(r))},
             {"final_snapshots",Json::array()},{"execution_ms",r.execution_ms},{"report_ms",r.report_ms}};
         if(r.mode==ComparisonMode::Initial) j["export"].erase("executions"); else j["export"]=nullptr;
         for(const auto& d:r.definitions) j["definitions"].push_back(definition(d));
@@ -319,22 +320,29 @@ struct ProjectCodec
     {
         if(j.is_null()) return;
         if(j.contains("kind")) {
-            if(j.at("kind")=="interaction") {fields(j,{"kind","interaction"},{},"interaction project report");Comparison r;r.interaction=analysis::parse_interaction_report(j.at("interaction").dump());const auto& input=r.interaction->request;r.request_id=input.id;r.baseline_definition=input.source;if(!r.request_id||scenario::serialize_scenario(input.source)!=scenario::serialize_scenario(w.baseline()))invalid("report","interaction source provenance mismatch");r.limitations=r.interaction->limitations;const auto request_id=r.request_id;w.report_=std::move(r);++w.report_generation_;w.execution().reserve_request_ids(request_id);return;}
+            if(j.at("kind")=="confirmation") {
+                fields(j,{"kind","confirmation"},{},"confirmation project report");
+                auto c=analysis::parse_confirmation_report(j.at("confirmation").dump());Comparison r;r.confirmation=std::move(c.request);r.statistics=std::move(c.paired);
+                r.request_id=r.statistics->request.id;r.baseline_definition=r.statistics->request.baseline;r.objective=r.statistics->request.objective;r.limitations=r.statistics->limitations;
+                for(const auto& candidate:r.statistics->request.candidates) {r.candidate_ids.push_back(candidate.id);r.definitions.push_back(candidate.definition);r.changed_inputs.push_back(differences(r.baseline_definition,candidate.definition));}
+                w.report_=std::make_shared<const Comparison>(std::move(r));w.execution().reserve_request_ids(w.report_->request_id);return;
+            }
+            if(j.at("kind")=="interaction") {fields(j,{"kind","interaction"},{},"interaction project report");Comparison r;r.interaction=analysis::parse_interaction_report(j.at("interaction").dump());const auto& input=r.interaction->request;r.request_id=input.id;r.baseline_definition=input.source;r.limitations=r.interaction->limitations;const auto request_id=r.request_id;w.report_=std::make_shared<const Comparison>(std::move(r));++w.report_generation_;w.execution().reserve_request_ids(request_id);return;}
             if(j.at("kind")=="sensitivity") {fields(j,{"kind","sensitivity"},{},"sensitivity project report");Comparison r;r.sensitivity=analysis::parse_sensitivity_report(j.at("sensitivity").dump());const auto& input=r.sensitivity->request;
-                r.request_id=input.id;r.baseline_definition=input.source;if(!r.request_id||scenario::serialize_scenario(input.source)!=scenario::serialize_scenario(w.baseline()))invalid("report","sensitivity source provenance mismatch");
-                r.limitations=r.sensitivity->limitations;const auto request_id=r.request_id;w.report_=std::move(r);++w.report_generation_;w.execution().reserve_request_ids(request_id);return;}
+                r.request_id=input.id;r.baseline_definition=input.source;
+                r.limitations=r.sensitivity->limitations;const auto request_id=r.request_id;w.report_=std::make_shared<const Comparison>(std::move(r));++w.report_generation_;w.execution().reserve_request_ids(request_id);return;}
             fields(j,{"kind","statistics"},{},"statistical project report");if(string(j.at("kind"),"report kind")!="paired_statistical") invalid("report","unsupported kind");
             Comparison r;r.statistics=analysis::parse_statistical_report(j.at("statistics").dump());const auto& input=r.statistics->request;
             r.request_id=input.id;r.baseline_definition=input.baseline;r.objective=input.objective;
-            if(!r.request_id || scenario::serialize_scenario(input.baseline)!=scenario::serialize_scenario(w.baseline())) invalid("report","statistical baseline provenance mismatch");
+
             for(const auto& c:input.candidates) {if(c.id>=w.next_id_) invalid("report","invalid statistical historical candidate identity");r.candidate_ids.push_back(c.id);r.definitions.push_back(c.definition);r.changed_inputs.push_back(differences(input.baseline,c.definition));}
-            r.limitations=r.statistics->limitations;const auto request_id=r.request_id;w.report_=std::move(r);++w.report_generation_;w.execution().reserve_request_ids(request_id);return;
+            r.limitations=r.statistics->limitations;const auto request_id=r.request_id;w.report_=std::make_shared<const Comparison>(std::move(r));++w.report_generation_;w.execution().reserve_request_ids(request_id);return;
         }
         fields(j,{"request_id","mode","objective","baseline","candidate_ids","definitions","changed_inputs","executions","export","final_snapshots","execution_ms","report_ms"},{},"comparison");
         Comparison r; r.request_id=id(j.at("request_id")); r.mode=static_cast<ComparisonMode>(integer(j.at("mode"),1,"comparison mode"));
         r.objective=static_cast<analysis::Objective>(integer(j.at("objective"),2,"objective")); r.baseline_definition=definition(j.at("baseline"));
         r.execution_ms=number(j.at("execution_ms"),0,1e12,"execution time");r.report_ms=number(j.at("report_ms"),0,1e12,"report time");
-        if(scenario::serialize_scenario(r.baseline_definition)!=scenario::serialize_scenario(w.baseline())) invalid("report","baseline provenance mismatch");
+
         const auto& definitions=j.at("definitions"); const auto& ids=j.at("candidate_ids"); const auto& executions=j.at("executions");
         if(!definitions.is_array() || definitions.empty() || definitions.size()>analysis::max_candidates ||
             !ids.is_array() || ids.size()!=definitions.size() || !executions.is_array() ||
@@ -381,15 +389,15 @@ struct ProjectCodec
         if(!finals.is_array() || (!finals.empty() && finals.size()!=r.definitions.size()+1)) invalid("report","invalid preview count");
         for(std::size_t i=0;i<finals.size();++i) {
             auto state=snapshot(finals[i]); const auto& d=i?r.definitions[i-1]:r.baseline_definition;
-            viewer::ViewerController preview(d,state);
-            if(preview.observation().metrics!=(i?r.candidates[i-1].metrics:r.baseline.metrics)) invalid("report","preview metrics mismatch");
+            auto preview=warehouse::WarehouseSimulation::create_from(state);
+            if(preview.metrics()!=(i?r.candidates[i-1].metrics:r.baseline.metrics)) invalid("report","preview metrics mismatch");
             if(r.mode==ComparisonMode::Initial && state.scenario_identity!=scenario::serialize_scenario(d)) invalid("report","preview scenario mismatch");
             r.final_snapshots.push_back(std::move(state));
         }
-        w.report_=std::move(r);
+        w.report_=std::make_shared<const Comparison>(std::move(r));
         ++w.report_generation_;
         w.execution().reserve_request_ids(w.report_->request_id);
-        auto summary=Json::parse(w.json());
+        auto summary=Json::parse(comparison_json(*w.report_));
         if(w.report_->mode==ComparisonMode::Initial) summary.erase("executions"); else summary=nullptr;
         if(summary!=j.at("export")) invalid("report","saved summary mismatch");
     }
@@ -398,7 +406,15 @@ struct ProjectCodec
         Json j{{"identity",{{"id",info.id},{"name",info.name},{"created",info.created},{"saved",info.saved}}},
             {"baseline",run(*w.baseline_view_,0)},{"draft",w.draft_.values},{"draft_origin",w.draft_origin_.values},
             {"candidates",Json::array()},{"runs",Json::array()},{"active_run",w.active_run_},{"next_run_id",w.next_run_id_},
-            {"next_candidate_id",w.next_id_},{"default_speed",w.speed_},{"preferences",preferences_json(prefs)},{"report",report(w)},{"preview",nullptr}};
+            {"next_candidate_id",w.next_id_},{"default_speed",w.speed_},{"preferences",preferences_json(prefs)},{"report",nullptr},{"study_history",Json::array()},{"selected_study",w.selected_study_},{"next_study_id",w.next_study_id_},{"preview",nullptr}};
+        for(const auto& study:w.studies_) {
+            auto evidence=report(*study.evidence);const auto size=evidence.dump().size();
+            if(size!=study.serialized_bytes || size>max_study_bytes) invalid("study","evidence size mismatch");
+            j["study_history"].push_back({{"id",study.id},{"type",study_type_name(study.type)},{"title",study.title},{"notes",study.notes},{"completed",study.completed},
+                {"bytes",size},{"engine",project_engine_version},{"generator_version",scenario::workload_generator_version},{"evidence",std::move(evidence)},
+                {"reserved_confirmation_seeds",study.reserved_confirmation_seeds},{"view",{{"configuration",study.view.configuration},{"seed",study.view.seed},{"metric",study.view.metric},{"rectangle",study.view.rectangle}}}});
+        }
+        if(w.history_bytes()>max_history_bytes) invalid("history","exceeds 192 MiB");
         if(w.draft_.workload!=WorkloadDraft{}) j["draft_workload"]=workload_draft_json(w.draft_.workload);
         if(w.draft_origin_.workload!=WorkloadDraft{}) j["draft_origin_workload"]=workload_draft_json(w.draft_origin_.workload);
         for(const auto& c:w.candidates_) j["candidates"].push_back({{"id",c.id},{"definition",definition(c.definition)},{"notes",c.notes},{"changed_inputs",c.changed_inputs}});
@@ -411,7 +427,7 @@ struct ProjectCodec
     }
     static ScenarioWorkspace payload(const Json& j,ProjectInfo& info,ProjectPreferences& prefs,ProjectTimings& timings)
     {
-        fields(j,{"identity","baseline","draft","draft_origin","candidates","runs","active_run","next_run_id","next_candidate_id","default_speed","preferences","report","preview"},{"draft_workload","draft_origin_workload"},"payload");
+        fields(j,{"identity","baseline","draft","draft_origin","candidates","runs","active_run","next_run_id","next_candidate_id","default_speed","preferences","report","preview"},{"draft_workload","draft_origin_workload","study_history","selected_study","next_study_id"},"payload");
         const auto& identity=j.at("identity"); fields(identity,{"id","name","created","saved"},{},"project identity");
         info.id=bounded(identity.at("id"),32,"project ID");
         if(info.id.size()!=32 || info.id.find_first_not_of("0123456789abcdef")!=std::string::npos) invalid("project ID","invalid identity");
@@ -450,7 +466,66 @@ struct ProjectCodec
         if(w.active_run_ && !ids.contains(w.active_run_)) invalid("active run","missing run");
         prefs=preferences_value(j.at("preferences"));
         if(prefs.selected_candidate && std::none_of(w.candidates_.begin(),w.candidates_.end(),[&](const auto& c){return c.id==*prefs.selected_candidate;})) prefs.selected_candidate.reset();
-        report(w,j.at("report"));
+        if(j.contains("study_history")) {
+            if(!j.at("report").is_null()) invalid("history","v2 must use a single evidence collection");
+            const auto& history=j.at("study_history");if(!history.is_array() || history.size()>max_studies) invalid("history","too many studies");
+            w.next_study_id_=id(j.at("next_study_id"));if(!w.next_study_id_ || w.next_study_id_==UINT64_MAX) invalid("history","invalid next ID");
+            std::set<std::string> study_ids;
+            for(const auto& entry:history) {
+                fields(entry,{"id","type","title","notes","completed","bytes","engine","generator_version","evidence","view","reserved_confirmation_seeds"},{},"study");
+                StudyRecord study;study.id=bounded(entry.at("id"),64,"study ID");
+                if(!study.id.starts_with("study-") || !study_ids.insert(study.id).second) invalid("study","invalid or duplicate ID");
+                const auto suffix=study.id.substr(6);std::uint64_t numeric=0;const auto parsed=std::from_chars(suffix.data(),suffix.data()+suffix.size(),numeric);
+                if(parsed.ec!=std::errc{} || parsed.ptr!=suffix.data()+suffix.size() || !numeric || numeric>=w.next_study_id_ || study.id!="study-"+std::to_string(numeric)) invalid("study","noncanonical ID");
+                study.title=bounded(entry.at("title"),256,"study title");if(study.title.empty())invalid("study","empty title");
+                study.notes=bounded(entry.at("notes"),4096,"study notes");study.completed=bounded(entry.at("completed"),32,"completed");
+                if(bounded(entry.at("engine"),64,"study engine")!=project_engine_version || integer(entry.at("generator_version"),1,"study generator")!=scenario::workload_generator_version) invalid("study","unsupported provenance");
+                const auto& reserved=entry.at("reserved_confirmation_seeds");if(!reserved.is_array() || reserved.size()>32)invalid("reservations","too many confirmation attempts");
+                std::set<std::uint64_t> used_confirmation_seeds;
+                for(const auto& seed_set:reserved) {
+                    if(!seed_set.is_array() || seed_set.empty() || seed_set.size()>analysis::max_replications)invalid("reservations","invalid seed set");
+                    std::vector<std::uint64_t> seeds;for(const auto& value:seed_set) {auto seed=id(value);if(!used_confirmation_seeds.insert(seed).second)invalid("reservations","reused confirmation seed");seeds.push_back(seed);}study.reserved_confirmation_seeds.push_back(std::move(seeds));
+                }
+                const auto evidence=entry.at("evidence").dump();study.serialized_bytes=integer(entry.at("bytes"),max_study_bytes,"study bytes");
+                if(study.serialized_bytes!=evidence.size()) invalid("study","evidence size mismatch");
+                report(w,entry.at("evidence"));study.evidence=w.report_;if(!study.evidence) invalid("study","missing evidence");
+                study.type=study_type(*study.evidence);if(entry.at("type")!=study_type_name(study.type))invalid("study","type mismatch");
+                const auto& view=entry.at("view");fields(view,{"configuration","seed","metric","rectangle"},{},"study view");
+                study.view.configuration=id(view.at("configuration"));study.view.seed=id(view.at("seed"));
+                study.view.metric=static_cast<int>(integer(view.at("metric"),4,"metric"));const auto& rectangle=view.at("rectangle");if(!rectangle.is_array() || rectangle.size()!=4)invalid("view","expected four rectangle endpoints");for(std::size_t i=0;i<4;++i)study.view.rectangle[i]=static_cast<std::uint32_t>(integer(rectangle[i],100000,"rectangle endpoint"));
+                w.studies_.push_back(std::move(study));if(w.history_bytes()>max_history_bytes)invalid("history","exceeds 192 MiB");
+            }
+            for(const auto& study:w.studies_) if(!study.reserved_confirmation_seeds.empty()) {
+                if(study.type==StudyType::Confirmation)invalid("reservations","confirmation cannot be an exploratory source");
+                const auto& r=*study.evidence;
+                auto exploration=r.interaction?analysis::replication_seeds(r.interaction->request.plan):r.sensitivity?analysis::replication_seeds(r.sensitivity->request.plan):r.statistics?analysis::replication_seeds(r.statistics->request.plan):std::vector<std::uint64_t>{r.baseline_definition.simulation.random_seed};
+                if(!r.interaction && !r.sensitivity && !r.statistics)for(const auto& d:r.definitions)if(std::find(exploration.begin(),exploration.end(),d.simulation.random_seed)==exploration.end())exploration.push_back(d.simulation.random_seed);
+                for(const auto& seeds:study.reserved_confirmation_seeds)for(auto seed:seeds)if(std::find(exploration.begin(),exploration.end(),seed)!=exploration.end())invalid("reservations","exploratory seed overlap");
+            }
+            std::set<std::pair<std::string,std::uint32_t>> completed_attempts;
+            for(const auto& study:w.studies_) if(study.evidence->confirmation) {
+                const auto& c=*study.evidence->confirmation;
+                if(!completed_attempts.insert({c.source_study_id,c.confirmation_number}).second)invalid("lineage","duplicate completed confirmation attempt");
+                auto source=std::find_if(w.studies_.begin(),w.studies_.end(),[&](const auto& x){return x.id==c.source_study_id;});
+                if(source==w.studies_.end() || source->type==StudyType::Confirmation) invalid("lineage","missing exploratory source");
+                // Freeze again from preserved source inputs, without simulation, then compare all immutable lineage.
+                auto previous=w.report_;auto previous_id=w.selected_study_;w.report_=source->evidence;w.selected_study_=source->id;
+                ScenarioWorkspace source_only;source_only.studies_={*source};source_only.studies_[0].reserved_confirmation_seeds.clear();source_only.report_=source->evidence;source_only.selected_study_=source->id;
+                auto expected=source_only.freeze_confirmation(c.selection_id,c.paired.plan);
+                expected.source_title=c.source_title;expected.source_completed=c.source_completed;expected.additional_analysis=c.additional_analysis;expected.confirmation_number=c.confirmation_number;expected.paired.id=c.paired.id;
+                if(c.confirmation_number>source->reserved_confirmation_seeds.size() || source->reserved_confirmation_seeds[c.confirmation_number-1]!=analysis::replication_seeds(c.paired.plan))invalid("lineage","missing reserved confirmation seeds");
+                if(analysis::serialize_confirmation_request(expected)!=analysis::serialize_confirmation_request(c))invalid("lineage","frozen configuration or exploratory evidence mismatch");
+                w.report_=std::move(previous);w.selected_study_=std::move(previous_id);
+            }
+            w.report_.reset();w.selected_study_.clear();const auto selected=bounded(j.at("selected_study"),64,"selected study");
+            if(!selected.empty())w.select_study(selected);else if(!w.studies_.empty())w.select_study(w.studies_.back().id);
+        } else {
+            report(w,j.at("report"));
+            if(w.report_) {
+                const auto bytes=report(*w.report_).dump().size();
+                w.studies_.push_back({"study-1","Legacy retained study",{},info.saved,study_type(*w.report_),w.report_,bytes,{}});w.selected_study_="study-1";w.next_study_id_=2;
+            }
+        }
         if(!w.report_ || (prefs.result_name!="Baseline" &&
             (w.report_->statistics ? std::none_of(w.report_->statistics->candidates.begin(),w.report_->statistics->candidates.end(),[&](const auto& c){return c.name==prefs.result_name;}) :
             std::none_of(w.report_->candidates.begin(),w.report_->candidates.end(),[&](const auto& c){return c.candidate.name==prefs.result_name;}))))
@@ -474,6 +549,10 @@ struct ProjectCodec
         return w;
     }
 };
+std::string comparison_storage_json(const Comparison& r) {return ProjectCodec::report(r).dump();}
+std::shared_ptr<const Comparison> parse_comparison_storage_json(std::string_view bytes,std::uint64_t next_candidate) {
+    ScenarioWorkspace w;w.next_id_=next_candidate;ProjectCodec::report(w,parse_json(bytes,max_study_bytes));return w.report();
+}
 Project::Project(ScenarioWorkspace& workspace):workspace_(workspace)
 {
     info_={identity(),"Untitled project",timestamp(),{},{}};
@@ -490,6 +569,7 @@ std::string Project::marker() const {return ProjectCodec::marker(workspace_,info
 bool Project::dirty() const {return marker()!=saved_marker_;}
 std::string Project::serialize() const
 {
+    if(workspace_.has_pending_study())throw std::logic_error("Resolve the unretained completed study before saving or recovering the project");
     const auto began=Timer::now();
     (void)workspace_.baseline();
     for(const auto* draft:{&workspace_.draft_,&workspace_.draft_origin_})
@@ -525,11 +605,12 @@ void Project::load(const std::filesystem::path& path,bool recovery)
 {
     path_valid(path); const auto total=Timer::now(); timings_={};
     const auto bytes=load_text(path,project_max_bytes); timings_.bytes=bytes.size();
-    const auto parsing=Timer::now(); const auto j=parse_json(bytes,project_max_bytes); timings_.parsing_ms=ms(parsing);
+    const auto parsing=Timer::now(); const auto j=parse_json(bytes,project_max_bytes,project_max_json_events); timings_.parsing_ms=ms(parsing);
     const auto validation=Timer::now();
     fields(j,{"format","version","engine","scenario_schema","features","payload_size","crc32","payload"},{},"project");
     if(bounded(j.at("format"),16,"format")!="SimForge") invalid("format","not a SimForge project");
-    if(integer(j.at("version"),std::numeric_limits<std::uint32_t>::max(),"version")!=project_format_version) invalid("version","unsupported project version");
+    const auto version=integer(j.at("version"),std::numeric_limits<std::uint32_t>::max(),"version");if(version!=1 && version!=project_format_version) invalid("version","unsupported project version");
+    if((version==2)!=j.at("payload").contains("study_history")) invalid("history","version and history representation disagree");
     if(bounded(j.at("engine"),64,"engine")!=project_engine_version || integer(j.at("scenario_schema"),1,"scenario schema")!=1) invalid("engine","incompatible simulation/schema version");
     const auto legacy_features=Json::array({"warehouse_snapshots","clock_phase","historical_reports","independent_runs"});
     auto expected_features=legacy_features;if(has_workload(j.at("payload"))) expected_features.push_back("workload_v1");
@@ -584,7 +665,7 @@ void Project::discard_recovery(const std::filesystem::path& path)
 void Project::discard_own_recovery(const std::filesystem::path& path) const
 {
     if(!recovery_available(path)) return;
-    const auto j=parse_json(load_text(path,project_max_bytes),project_max_bytes);
+    const auto j=parse_json(load_text(path,project_max_bytes),project_max_bytes,project_max_json_events);
     if(j.at("payload").at("identity").at("id")==info_.id) discard_recovery(path);
 }
 }

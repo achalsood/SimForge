@@ -97,7 +97,7 @@ void run(std::string_view test) {
             workspace::Project project(w);auto prefs=project.preferences();prefs.statistical=true;prefs.replications="invalid raw count";prefs.base_seed="17";prefs.result_name="Capacity 0";prefs.statistical_metric=4;project.preferences(prefs);
             project.save(root/"statistical.simforge",true);workspace::ScenarioWorkspace restored;workspace::Project opened(restored);opened.open(root/"statistical.simforge");
             check(restored.json()==previous && restored.report()->final_snapshots.empty() && restored.execution().progress().state==workspace::ExecutionState::Idle && opened.preferences()==prefs);
-            Json damaged=Json::parse(project.serialize());damaged["payload"]["report"]["statistics"]["summaries"][0]["metrics"]["completed"]["mean_difference"]=999;
+            Json damaged=Json::parse(project.serialize());damaged["payload"]["study_history"][0]["evidence"]["statistics"]["summaries"][0]["metrics"]["completed"]["mean_difference"]=999;
             const auto text=damaged["payload"].dump();std::uint32_t crc=0xffffffff;for(unsigned char byte:text) {crc^=byte;for(int bit=0;bit<8;++bit) crc=(crc>>1)^((crc&1)?0xedb88320:0);}damaged["crc32"]=~crc;damaged["payload_size"]=text.size();
             {std::ofstream file(root/"invalid.simforge");file<<damaged.dump();}const auto intact=restored.view().runtime().capture_snapshot();rejects([&]{opened.open(root/"invalid.simforge");});check(restored.json()==previous && restored.view().runtime().capture_snapshot()==intact);return;
         }

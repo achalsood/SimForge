@@ -9,6 +9,7 @@
 #include "statistical_panel.hpp"
 #include "sensitivity_panel.hpp"
 #include "interaction_panel.hpp"
+#include "study_history_panel.hpp"
 
 using namespace simforge;
 void apply_workspace(workspace::ScenarioWorkspace& w, const WorkspaceCommand& c)
@@ -155,6 +156,7 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
         }
         else { queue(std::move(c)); ui.requested_tab=2; }
     };
+    if(ui.analysis_page)draw_study_history(w,ui,s);
     const auto progress = w.execution().progress();
     if(ui.analysis_page) {draw_interaction_setup(w,ui,s);if(!ui.interaction){if(ImGui::GetContentRegionAvail().x/s>500)ImGui::SameLine();draw_sensitivity_setup(w,ui,s);if(!ui.sensitivity)draw_statistical_setup(w,ui,s);}}
     if (progress.request_id != 0 && ui.analysis_page && !(progress.total_replications && !progress.active()))
@@ -213,7 +215,7 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
     }
     if(ImGui::BeginPopupModal("Discard edits?",nullptr,ImGuiWindowFlags_AlwaysAutoResize))
     {
-        ImGui::TextWrapped("This action discards unsaved draft edits. Opening replaces the original baseline and removes retained runs, candidates and results. Load file as playable run preserves them.");
+        ImGui::TextWrapped("This action discards unsaved draft edits. Opening replaces the original baseline and removes runs and candidates. Completed Study History stays available. Load file as playable run preserves the current workspace.");
         if(ImGui::Button("Discard and continue") && ui.confirmation) { ui.confirmation->discard=true; ui.pending.push_back(*ui.confirmation); ui.confirmation.reset(); ImGui::CloseCurrentPopup(); }
         ImGui::SameLine(); if(ImGui::Button("Keep editing")) { ui.confirmation.reset(); ImGui::CloseCurrentPopup(); } ImGui::EndPopup();
     }
@@ -514,6 +516,7 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
                 if(ImGui::Button("Export CSV to path")) queue({WorkspaceAction::Csv,ui.export_path}); ui.export_csv=center(); scroll(15);
                 ImGui::TextWrapped("Choose a new .json or .csv filename. Existing files are never overwritten. JSON can be replay-verified; CSV is a summary of that report.");
             }
+            if(w.report()) {draw_confirmation(w,ui,s);save_study_view(w,ui);}
             ui.results_ui_us+=std::chrono::duration<double,std::micro>{std::chrono::steady_clock::now()-start}.count(); ++ui.results_frames;
             ImGui::TextWrapped("%s",w.message().c_str());
             ImGui::EndChild(); if(!ui.analysis_page) ImGui::EndTabItem();
