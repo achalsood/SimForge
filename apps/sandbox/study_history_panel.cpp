@@ -58,7 +58,18 @@ void save_study_view(workspace::ScenarioWorkspace& w,const WorkspaceUI& ui) {
 void draw_study_history(workspace::ScenarioWorkspace& w,WorkspaceUI& ui,float s) {
     restore_view(w,ui);const bool open=ImGui::CollapsingHeader("Study History");ui.history_header=center();
     if(!open)return;
-    ImGui::Text("%zu / 32 studies | %.2f / 192 MiB",w.studies().size(),w.history_bytes()/1048576.0);
+    ImGui::Text("%zu / 32 studies | %.2f / 192 MiB",w.studies().size()+w.calibrations().size(),w.history_bytes()/1048576.0);
+    for(const auto& calibration:w.calibrations()) {
+        const auto& evidence=*calibration.evidence;ImGui::PushID(evidence.id.c_str());
+        const auto label="Demand calibration: "+evidence.provenance.source_filename+" ("+(evidence.settings.model==analysis::demand::Model::Constant?"constant":"UTC daily")+")";
+        if(ImGui::Selectable(label.c_str(),w.calibration_report()==calibration.evidence)){w.select_calibration(evidence.id);ui.calibration.open=true;ui.calibration.tab=2;}
+        if(ImGui::Button("Delete calibration..."))ImGui::OpenPopup("Delete calibration?");
+        if(ImGui::BeginPopupModal("Delete calibration?",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){
+            ImGui::TextWrapped("Permanently delete this calibration evidence? Existing playable runs remain available.");
+            if(ImGui::Button("Delete")){ui.delete_study_id=evidence.id;ImGui::CloseCurrentPopup();}ImGui::SameLine();if(ImGui::Button("Keep"))ImGui::CloseCurrentPopup();ImGui::EndPopup();
+        }ImGui::PopID();
+    }
+    if(ui.delete_study_id.starts_with("calibration-")){try{w.delete_calibration(ui.delete_study_id,true);ui.delete_study_id.clear();}catch(const std::exception& e){ui.error=e.what();ui.delete_study_id.clear();}}
     ImGui::TextDisabled("32 MiB per study; explicit deletion only. Evidence is immutable.");
     std::string next;
     const auto list_height=std::min(180.0f,28.0f+24.0f*static_cast<float>(w.studies().size()))*s;

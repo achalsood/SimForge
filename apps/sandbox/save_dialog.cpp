@@ -6,6 +6,13 @@
 #include <array>
 #include <algorithm>
 #include <SDL3/SDL.h>
+std::optional<std::filesystem::path> open_arrival_csv_dialog(const std::string&,std::string& error) {
+    std::array<wchar_t,32768> buffer{};OPENFILENAMEW dialog{};dialog.lStructSize=sizeof(dialog);dialog.lpstrFile=buffer.data();dialog.nMaxFile=static_cast<DWORD>(buffer.size());
+    if(auto* window=SDL_GetKeyboardFocus())dialog.hwndOwner=static_cast<HWND>(SDL_GetPointerProperty(SDL_GetWindowProperties(window),SDL_PROP_WINDOW_WIN32_HWND_POINTER,nullptr));
+    dialog.lpstrFilter=L"Shipment arrival CSV (*.csv)\0*.csv\0\0";dialog.lpstrTitle=L"Import local shipment arrivals";dialog.Flags=OFN_EXPLORER|OFN_NOCHANGEDIR|OFN_PATHMUSTEXIST|OFN_FILEMUSTEXIST;
+    if(!GetOpenFileNameW(&dialog)){if(CommDlgExtendedError())error="Arrival CSV dialog failed";return {};}
+    error.clear();return std::filesystem::path(buffer.data());
+}
 std::optional<std::filesystem::path> project_dialog(bool open,const std::string& suggested,std::string& error)
 {
     std::array<wchar_t,32768> buffer{};
@@ -51,6 +58,7 @@ std::optional<std::filesystem::path> save_report_dialog(bool csv,const std::stri
 }
 
 #else
+std::optional<std::filesystem::path> open_arrival_csv_dialog(const std::string&,std::string& error){error="Enter a local CSV path; native dialog is Windows-only";return {};}
 std::optional<std::filesystem::path> project_dialog(bool,const std::string&,std::string& error)
 {error="Enter a project path; native dialogs are available on Windows.";return {};}
 std::optional<std::filesystem::path> save_report_dialog(bool,const std::string&,std::string& error)

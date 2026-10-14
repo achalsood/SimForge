@@ -1,5 +1,32 @@
 # SimForge
 
+## Calibrate warehouse demand from historical shipment-arrival records
+
+Open **Analysis → Demand Calibration**. Select a local CSV with one `timestamp` column of UTC second timestamps, declare the continuous `[start,end)` observation window, and import it. Inspect coverage, accepted records, simultaneous arrivals, ordering and the dataset fingerprint before fitting.
+
+![Local CSV import](docs/artifacts/demand-import.png)
+![Validated data quality and observed counts](docs/artifacts/demand-quality.png)
+
+Choose an explicit chronological split in **Model & split**. Fit a constant intensity or a predefined repeating UTC daily profile. Training records estimate rates; the later holdout records only evaluate predictions. View count errors, uncertainty, the constant baseline and interval diagnostics in **Validation**. Scroll to inspect the fitted-rate, observed-versus-expected and residual charts.
+
+![Model and split setup](docs/artifacts/demand-model.png)
+![Holdout observed versus expected and residuals](docs/artifacts/demand-holdout.png)
+![Fitted daily demand profile](docs/artifacts/demand-profile.png)
+
+Save the calibration study, then preview a new scenario with preserved service/resource settings and an explicit seed. Existing arrival generators are periodic or uniform; creating a calibrated **periodic surrogate** requires explicit acceptance of its semantics and displayed rate rounding. It does not reproduce Poisson arrival variability. The resulting validated scenario uses normal simulation playback and authoritative metrics, and the evidence survives project Save/Open.
+
+![Actual calibrated simulation state](docs/artifacts/demand-simulation.png)
+
+Headless example:
+
+```powershell
+build/windows-release/apps/sandbox/simforge_headless.exe --headless `
+  --calibrate-demand examples/demand-calibration/morning-surge.json `
+  --export-json build/demand-report.json --export-csv build/demand-report.csv
+```
+
+Read the [calibration contracts, statistical assumptions, conversion policy and examples](docs/demand-calibration.md), [validation report](docs/commit-30-validation.md), and [measured benchmarks](docs/demand-calibration-benchmarks.csv). Existing output files are never implicitly overwritten. All calibration stays local.
+
 ### Find a promising warehouse configuration and verify it on new demand conditions
 
 1. Open `examples/warehouse-statistical-workload.json` and choose **Analysis**. Run a paired comparison, forklift sensitivity sweep, or forklift × worker interaction grid.

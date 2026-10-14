@@ -37,6 +37,10 @@ struct Options
 {
     bool headless{false};
     bool live{false};
+    std::optional<std::filesystem::path> calibration,calibration_source,export_scenario;
+    std::optional<std::string> calibration_start;
+    std::optional<std::uint64_t> calibration_seed;
+    bool accept_periodic{false};
     std::optional<double> speed;
     std::uint64_t entities{10'000};
     std::uint64_t ticks{600};
@@ -67,6 +71,13 @@ Options parse_options(int argc, char* argv[])
     for (int i = 1; i < argc; ++i)
     {
         const std::string_view argument{argv[i]};
+        if(argument=="--calibrate-demand" || argument=="--calibration-source" || argument=="--export-scenario") {
+            auto& destination=argument=="--calibrate-demand"?options.calibration:argument=="--calibration-source"?options.calibration_source:options.export_scenario;
+            if(destination || ++i==argc)throw std::invalid_argument("Missing or duplicate calibration path");destination=argv[i];continue;
+        }
+        if(argument=="--calibration-start" && !options.calibration_start){if(++i==argc)throw std::invalid_argument("Missing calibration UTC start");options.calibration_start=argv[i];continue;}
+        if(argument=="--calibration-seed" && !options.calibration_seed){if(++i==argc)throw std::invalid_argument("Missing calibration seed");options.calibration_seed=parse_count(argv[i]);continue;}
+        if(argument=="--accept-periodic-approximation" && !options.accept_periodic){options.accept_periodic=true;continue;}
         if(argument=="--project" && !options.project) { if(++i==argc) throw std::invalid_argument("Missing project path"); options.project=argv[i]; }
         else if(argument=="--verify-project" && !options.verify_project) {if(++i==argc)throw std::invalid_argument("Missing verification path");options.verify_project=argv[i];}
         else if (argument == "--live" && !options.live) options.live = true;
@@ -141,6 +152,15 @@ Options parse_options(int argc, char* argv[])
         throw std::invalid_argument("--verify-project requires --headless and conflicts with other workflows");
     if(options.project && (options.headless || options.live || options.scenario || options.speed || options.record || options.replay || options.warehouse_replay || options.experiment || options.compare_forklifts || options.checkpoint_seconds || entities_seen || ticks_seen))
         throw std::invalid_argument("--project requires graphical project playback and conflicts with scenario workflows");
+    if(options.calibration) {
+        if(!options.headless || options.live || options.speed || options.scenario || options.project || options.verify_project || options.record || options.replay || options.warehouse_replay || options.experiment || options.compare_forklifts || options.checkpoint_seconds || entities_seen || ticks_seen || options.graphics_smoke || options.graphics_capture || options.export_seeds || options.export_marginal || options.export_interactions || options.export_interaction_seeds)
+            throw std::invalid_argument("--calibrate-demand requires --headless and conflicts with other workflows");
+        const bool conversion=options.calibration_source || options.export_scenario || options.calibration_start || options.calibration_seed || options.accept_periodic;
+        if(conversion && !(options.calibration_source && options.export_scenario && options.calibration_start && options.calibration_seed && options.accept_periodic))
+            throw std::invalid_argument("Periodic scenario conversion requires source, output, UTC start, explicit seed and --accept-periodic-approximation");
+        return options;
+    }
+    if(options.calibration_source || options.export_scenario || options.calibration_start || options.calibration_seed || options.accept_periodic)throw std::invalid_argument("Calibration conversion options require --calibrate-demand");
     if ((options.live && (!options.scenario || options.headless || options.record || options.replay || options.warehouse_replay || options.experiment ||
             options.compare_forklifts || options.checkpoint_seconds || entities_seen || ticks_seen)) || (options.speed && !options.live))
         throw std::invalid_argument("--live requires a graphical --scenario; --speed requires --live; simulation workflows conflict");
@@ -451,6 +471,28 @@ void populate(simforge::world::World& world, std::uint64_t count)
 
 int run(const Options& options)
 {
+    if(options.calibration) {
+        namespace demand=simforge::analysis::demand;
+        const std::array outputs{&options.export_json,&options.export_csv,&options.export_scenario};
+        for(std::size_t i=0;i<outputs.size();++i)if(*outputs[i]) {
+            if(std::filesystem::exists(**outputs[i]))throw std::invalid_argument("Calibration output already exists");
+            for(std::size_t j=0;j<i;++j)if(*outputs[j] && std::filesystem::absolute(**outputs[i]).lexically_normal()==std::filesystem::absolute(**outputs[j]).lexically_normal())throw std::invalid_argument("Calibration outputs must differ");
+        }
+        auto report=demand::calibrate(demand::load_request(*options.calibration));
+        if(options.export_scenario) {
+            auto converted=demand::convert(*report,simforge::scenario::load_scenario(*options.calibration_source),"Calibrated periodic demand",*options.calibration_seed,demand::parse_timestamp(*options.calibration_start),options.accept_periodic);
+            auto evidence=std::make_shared<demand::Report>(*report);evidence->conversions.push_back(converted);report=std::move(evidence);
+            simforge::scenario::save_scenario(*options.export_scenario,converted.scenario);
+            std::cout<<converted.semantics<<'\n';
+            for(std::size_t i=0;i<converted.fitted_per_second.size();++i)std::cout<<"Rate bin "<<i<<" fitted="<<converted.fitted_per_second[i]<<" represented="<<converted.represented_per_second[i]<<" arrivals/second\n";
+        }
+        if(options.export_json)demand::save_export(*options.export_json,demand::report_json(*report));
+        if(options.export_csv)demand::save_export(*options.export_csv,demand::report_csv(*report));
+        std::cout<<"SimForge Demand Calibration | "<<report->id<<" | dataset="<<report->provenance.dataset_id<<'\n'
+            <<"Training: "<<report->training.observed<<" arrivals / "<<report->training.exposure_seconds<<" seconds | Holdout actual="<<report->holdout.observed<<" expected="<<report->holdout.expected<<" signed_error="<<report->holdout.signed_error<<'\n'
+            <<"Import_ms="<<report->timings.import_ms<<" fit_ms="<<report->timings.fit_ms<<" validation_ms="<<report->timings.validation_ms<<'\n';
+        for(const auto& warning:report->warnings)std::cout<<warning<<'\n';return 0;
+    }
     if(options.verify_project){simforge::workspace::ScenarioWorkspace workspace;simforge::workspace::Project project(workspace);project.open(*options.verify_project);
         std::cout<<"SimForge project verified: "<<project.info().name<<" | studies="<<workspace.studies().size()<<" | bytes="<<project.timings().bytes<<" | open_ms="<<project.timings().total_ms<<'\n';return 0;}
     if (options.experiment) return experiment_workflow(options);
@@ -510,6 +552,8 @@ int main(int argc, char* argv[])
                   << "    Sensitivity: [--export-marginal NEW_FILE] | Interaction: [--export-interactions NEW_FILE] [--export-interaction-seeds NEW_FILE]\n"
                   << "  --graphics-smoke FRAMES (120..10000; display/GPU/validation required)\n";
         std::cerr << "  --project PROJECT.simforge (restore saved workspace)\n";
+        std::cerr << "  --headless --calibrate-demand REQUEST.json [--export-json NEW_FILE] [--export-csv NEW_FILE]\n"
+                  << "    [--calibration-source SCENARIO --export-scenario NEW_FILE --calibration-start UTC_TIMESTAMP --calibration-seed N --accept-periodic-approximation]\n";
         std::cerr << "  --headless --verify-project PROJECT.simforge (bounded validation; no experiment reruns)\n";
         std::cerr << "  --scenario WAREHOUSE_FILE [--graphics-smoke FRAMES] [--graphics-capture NEW_FILE.png]\n";
         std::cerr << "  --scenario WAREHOUSE_FILE --live [--speed 0.01..3600] (default 300; interactive dashboard)\n";

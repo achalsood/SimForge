@@ -1,5 +1,6 @@
 param([string]$Executable,[string]$SourceRoot)
 $ErrorActionPreference='Stop'
+New-Item -ItemType Directory -Path (Join-Path $SourceRoot 'build/test-artifacts/logs') -Force|Out-Null
 $root=Join-Path $SourceRoot ('build/test-artifacts/fixtures/failure-'+[guid]::NewGuid().ToString('N'))
 & powershell -NoProfile -ExecutionPolicy Bypass -File "$SourceRoot/scripts/run-graphics-test.ps1" -Executable $Executable -ArtifactRoot $root -ForceFailure > "$SourceRoot/build/test-artifacts/logs/failure-test.log" 2>&1
 if($LASTEXITCODE -ne 1) { throw 'Expected deliberate failed graphics run' }

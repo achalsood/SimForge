@@ -1,0 +1,12 @@
+{
+    "calibration_request_version":  1,
+    "csv":  "morning-surge.csv",
+    "timestamp_format":  "iso8601_utc_seconds",
+    "observation_start":  "2026-01-05T00:00:00Z",
+    "observation_end":  "2026-01-08T00:00:00Z",
+    "continuous":  true,
+    "split":  "2026-01-07T00:00:00Z",
+    "model":  "daily_profile",
+    "daily_bin_seconds":  3600,
+    "diagnostic_bin_seconds":  3600
+}

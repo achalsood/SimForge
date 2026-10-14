@@ -104,6 +104,7 @@ void ScenarioWorkspace::load(const ScenarioDefinition& d, bool discard)
 {
     if (baseline_.has_value() && !discard) throw std::logic_error("Confirm replacing baseline and discarding runs/draft/candidates/results before opening another scenario");
     if (execution_->progress().active()) throw std::logic_error("Cancel the active experiment before replacing the baseline");
+    if (calibration_execution_->progress().active) throw std::logic_error("Cancel demand calibration before replacing the baseline");
     warehouse_only(d); auto prepared = std::make_unique<viewer::ViewerController>(d,speed_);
     // A completion from the prior baseline must not publish after a scenario replacement.
     (void)execution_->take_result(execution_->progress().request_id);

@@ -221,6 +221,10 @@ if(SIMFORGE_BUILD_RENDERER)
             add_test(NAME simforge_project_graphics COMMAND ${SIMFORGE_POWERSHELL} -NoProfile -ExecutionPolicy Bypass
                 -File ${PROJECT_SOURCE_DIR}/scripts/run-graphics-test.ps1 -Executable $<TARGET_FILE:simforge_sandbox>
                 -Scenario ${PROJECT_SOURCE_DIR}/examples/warehouse-baseline.json -Live -ProjectRoundTrip -ArtifactRoot ${SIMFORGE_ARTIFACT_ROOT})
+            add_test(NAME simforge_demand_graphics COMMAND ${SIMFORGE_POWERSHELL} -NoProfile -ExecutionPolicy Bypass
+                -File ${PROJECT_SOURCE_DIR}/scripts/run-graphics-test.ps1 -Executable $<TARGET_FILE:simforge_sandbox>
+                -Scenario ${PROJECT_SOURCE_DIR}/examples/warehouse-baseline.json -Live -Calibration -ArtifactRoot ${SIMFORGE_ARTIFACT_ROOT})
+            set_tests_properties(simforge_demand_graphics PROPERTIES LABELS graphics TIMEOUT 120 RUN_SERIAL TRUE)
             set_tests_properties(simforge_project_graphics PROPERTIES LABELS graphics TIMEOUT 80 RUN_SERIAL TRUE)
             add_test(NAME simforge_language_graphics COMMAND ${SIMFORGE_POWERSHELL} -NoProfile -ExecutionPolicy Bypass
                 -File ${PROJECT_SOURCE_DIR}/scripts/run-graphics-test.ps1 -Executable $<TARGET_FILE:simforge_sandbox>
@@ -361,6 +365,21 @@ foreach(case requests operations timing compound rejections)
     add_test(NAME simforge_language_coverage_${case} COMMAND simforge_scenario_language_coverage_test ${case})
 endforeach()
 add_executable(simforge_workload_test workload_test.cpp)
+add_executable(simforge_demand_calibration_test demand_calibration_test.cpp)
+target_link_libraries(simforge_demand_calibration_test PRIVATE simforge_workspace nlohmann_json::nlohmann_json)
+target_compile_definitions(simforge_demand_calibration_test PRIVATE SIMFORGE_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+foreach(case hash timestamps bad_dates timezone_precision csv sorting malformed_csv encoding limits coverage boundary rate uncertainty interval_coverage zero metrics zero_prediction split_invalid profile partial_days sparse_profile bin_invalid leakage_constant leakage_profile partition conversion processing replay rounding profile_conversion exports tamper persistence conversion_persistence dirty streaming async failure import_snapshot cancellation history_limit examples request_schema maximum_valid conversion_limits history_export retained_conversion corrupt_project async_save capture_revision async_open selection)
+    add_test(NAME simforge_demand_${case} COMMAND simforge_demand_calibration_test ${case})
+    set_tests_properties(simforge_demand_${case} PROPERTIES TIMEOUT 60)
+endforeach()
+foreach(example constant morning-surge sparse distribution-shift)
+    add_test(NAME simforge_demand_cli_${example} COMMAND simforge_headless --headless --calibrate-demand ${PROJECT_SOURCE_DIR}/examples/demand-calibration/${example}.json)
+    set_tests_properties(simforge_demand_cli_${example} PROPERTIES PASS_REGULAR_EXPRESSION "SimForge Demand Calibration")
+endforeach()
+if(WIN32)
+    add_test(NAME simforge_demand_cli_contract COMMAND ${SIMFORGE_POWERSHELL} -NoProfile -ExecutionPolicy Bypass -File ${PROJECT_SOURCE_DIR}/tests/demand_calibration_cli_test.ps1 -Executable $<TARGET_FILE:simforge_headless> -SourceRoot ${PROJECT_SOURCE_DIR})
+    set_tests_properties(simforge_demand_cli_contract PROPERTIES TIMEOUT 30)
+endif()
 target_link_libraries(simforge_workload_test PRIVATE simforge_workspace nlohmann_json::nlohmann_json)
 target_compile_definitions(simforge_workload_test PRIVATE SIMFORGE_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 foreach(case legacy profile gaps vectors uniform processing streams validation snapshots recording comparisons async cancellation observation persistence editor language statistical)

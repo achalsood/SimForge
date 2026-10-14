@@ -6,6 +6,7 @@
 #include <simforge/analysis/confirmation.hpp>
 #include <simforge/viewer/viewer.hpp>
 #include <simforge/scenario/scenario_language.hpp>
+#include <simforge/workspace/calibration_execution.hpp>
 #include <array>
 
 namespace simforge::workspace
@@ -79,6 +80,10 @@ struct StudyRecord {
     std::vector<std::vector<std::uint64_t>> reserved_confirmation_seeds;
 };
 std::string comparison_json(const Comparison&);
+struct CalibrationStudy {
+    std::shared_ptr<const analysis::demand::Report> evidence;
+    std::size_t serialized_bytes{0};
+};
 std::string comparison_csv(const Comparison&);
 struct ExperimentRequest
 {
@@ -163,6 +168,20 @@ public:
     [[nodiscard]] const std::vector<Candidate>& candidates() const noexcept { return candidates_; }
     [[nodiscard]] const std::shared_ptr<const Comparison>& report() const noexcept { return report_; }
     [[nodiscard]] const std::vector<StudyRecord>& studies() const noexcept {return studies_;}
+    CalibrationExecution& calibration_execution();
+    void start_calibration(analysis::demand::FileRequest,CalibrationExecution::Observer={});
+    bool poll_calibration();
+    void import_calibration(analysis::demand::FileRequest);
+    void fit_calibration(analysis::demand::FitSettings);
+    [[nodiscard]] const std::shared_ptr<const analysis::demand::Dataset>& calibration_dataset()const noexcept{return calibration_dataset_;}
+    [[nodiscard]] const std::shared_ptr<const analysis::demand::Report>& calibration_report()const noexcept{return calibration_report_;}
+    [[nodiscard]] const std::vector<CalibrationStudy>& calibrations()const noexcept{return calibrations_;}
+    void retain_calibration(std::shared_ptr<const analysis::demand::Report>);
+    void select_calibration(std::string_view);
+    void delete_calibration(std::string_view,bool confirmed);
+    void discard_calibration(bool confirmed);
+    bool has_pending_calibration()const;
+    void record_calibration_conversion(analysis::demand::Conversion);
     [[nodiscard]] const std::string& selected_study_id() const noexcept {return selected_study_;}
     [[nodiscard]] std::size_t history_bytes() const noexcept;
     void select_study(std::string_view id);
@@ -215,6 +234,10 @@ private:
     Status status_{Status::Empty};
     std::string message_, viewed_identity_;
     std::unique_ptr<ExperimentExecution> execution_;
+    std::unique_ptr<CalibrationExecution> calibration_execution_{std::make_unique<CalibrationExecution>()};
+    std::vector<CalibrationStudy> calibrations_;
+    std::shared_ptr<const analysis::demand::Report> calibration_report_;
+    std::shared_ptr<const analysis::demand::Dataset> calibration_dataset_;
 };
 [[nodiscard]] std::string differences(const scenario::ScenarioDefinition& baseline, const scenario::ScenarioDefinition& candidate);
 [[nodiscard]] const char* objective_label(analysis::Objective objective);

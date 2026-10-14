@@ -137,6 +137,7 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
     if(r.size.x/s>=500) ImGui::SameLine();
     ImGui::TextDisabled("%s",status);
     if(ImGui::IsItemHovered()) ImGui::SetTooltip("%s",w.message().c_str());
+    if(ui.analysis_page){ImGui::SameLine();if(ImGui::SmallButton(ui.calibration.open?"Close calibration":"Demand Calibration"))ui.calibration.open=!ui.calibration.open;ui.calibration.toggle=center();}
     const auto queue=[&](WorkspaceCommand c)
     {
         if((w.dirty() && (c.action==WorkspaceAction::Revert || c.action==WorkspaceAction::Edit)) ||
@@ -157,6 +158,9 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
         else { queue(std::move(c)); ui.requested_tab=2; }
     };
     if(ui.analysis_page)draw_study_history(w,ui,s);
+    if(ui.analysis_page) {
+        if(ui.calibration.open){draw_calibration(w,ui.calibration,s);ImGui::End();return;}
+    }
     const auto progress = w.execution().progress();
     if(ui.analysis_page) {draw_interaction_setup(w,ui,s);if(!ui.interaction){if(ImGui::GetContentRegionAvail().x/s>500)ImGui::SameLine();draw_sensitivity_setup(w,ui,s);if(!ui.sensitivity)draw_statistical_setup(w,ui,s);}}
     if (progress.request_id != 0 && ui.analysis_page && !(progress.total_replications && !progress.active()))
