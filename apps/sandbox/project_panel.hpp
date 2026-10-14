@@ -4,13 +4,13 @@
 enum class ProjectAction { New, Open, Save, SaveAs, Recover, DiscardRecovery, Close };
 struct ProjectUI
 {
-    std::optional<ProjectAction> pending, confirmation;
+    std::optional<ProjectAction> pending, confirmation, after_save;
     std::filesystem::path test_path, recovery_path;
     bool show_recovery{false}, changed_workspace{false}, dialog_used{false};
-    bool close_requested{false};
+    bool close_requested{false}, operation_finished{false};
     bool recovery_deferred{false};
     std::string notice, error;
-    glm::vec2 new_button{}, open_button{}, save_button{}, save_as_button{}, discard{}, cancel{}, confirm_save{};
+    glm::vec2 new_button{}, open_button{}, save_button{}, save_as_button{}, discard{}, cancel{}, confirm_save{}, operation_cancel{};
 };
 void process_project(simforge::workspace::Project& project,simforge::workspace::ScenarioWorkspace& workspace,
     ProjectUI& ui,DashboardState& dashboard,WorkspaceUI& editor);

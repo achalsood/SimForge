@@ -250,6 +250,10 @@ if(SIMFORGE_BUILD_RENDERER)
                 -File ${PROJECT_SOURCE_DIR}/scripts/run-graphics-test.ps1 -Executable $<TARGET_FILE:simforge_sandbox>
                 -Scenario ${PROJECT_SOURCE_DIR}/examples/warehouse-statistical-workload.json -Live -StudyHistory -ArtifactRoot ${SIMFORGE_ARTIFACT_ROOT})
             set_tests_properties(simforge_study_graphics PROPERTIES LABELS graphics TIMEOUT 120 RUN_SERIAL TRUE)
+            add_test(NAME simforge_persistence_graphics COMMAND ${SIMFORGE_POWERSHELL} -NoProfile -ExecutionPolicy Bypass
+                -File ${PROJECT_SOURCE_DIR}/scripts/run-graphics-test.ps1 -Executable $<TARGET_FILE:simforge_sandbox>
+                -Scenario ${PROJECT_SOURCE_DIR}/examples/warehouse-statistical-workload.json -Live -Persistence -ArtifactRoot ${SIMFORGE_ARTIFACT_ROOT})
+            set_tests_properties(simforge_persistence_graphics PROPERTIES LABELS graphics TIMEOUT 600 RUN_SERIAL TRUE)
         endif()
         add_graphics_case(simforge_live_graphics ${PROJECT_SOURCE_DIR}/examples/warehouse-baseline.json live)
         add_graphics_case(simforge_custom_live_graphics ${PROJECT_SOURCE_DIR}/examples/warehouse-higher-capacity.json live)
@@ -383,6 +387,20 @@ if(WIN32)
     set_tests_properties(simforge_statistical_cli_contract PROPERTIES TIMEOUT 30)
 endif()
 # Tool executables retain full Debug symbols, but do not need incremental-link databases.
+add_executable(simforge_persistence_stream_test persistence_stream_test.cpp)
+add_test(NAME simforge_persistence_cli_v1 COMMAND simforge_headless --headless --verify-project ${PROJECT_SOURCE_DIR}/tests/fixtures/project-v1.simforge)
+set_tests_properties(simforge_persistence_cli_v1 PROPERTIES PASS_REGULAR_EXPRESSION "SimForge project verified")
+add_test(NAME simforge_persistence_cli_v2 COMMAND simforge_headless --headless --verify-project ${PROJECT_SOURCE_DIR}/tests/fixtures/project-v2.simforge)
+set_tests_properties(simforge_persistence_cli_v2 PROPERTIES PASS_REGULAR_EXPRESSION "SimForge project verified")
+target_link_libraries(simforge_persistence_stream_test PRIVATE simforge_workspace nlohmann_json::nlohmann_json)
+foreach(case crc roundtrip canonical revision ownership conflicts late_cancel shutdown recovery save_as_race shutdown_open analysis_save locked_save locked_open
+    cancel_save_study_serialization cancel_save_file_writing cancel_save_integrity_finalization cancel_save_before_replace
+    cancel_open_file_reading cancel_open_parsing cancel_open_run_reconstruction cancel_open_study_reconstruction cancel_open_validation cancel_open_workspace_reconstruction cancel_open_ready_to_publish
+    fault_before_write fault_file_writing fault_file_flush fault_after_write fault_before_replace
+    truncated trailing duplicate nul depth nested_runs oversized_project integrity version type history_id candidate_id oversized_study lineage scenario seeds report io allocation)
+    add_test(NAME simforge_persistence_${case} COMMAND simforge_persistence_stream_test ${case})
+    set_tests_properties(simforge_persistence_${case} PROPERTIES TIMEOUT 60)
+endforeach()
 add_executable(simforge_interaction_test interaction_test.cpp)
 if(WIN32)
     add_test(NAME simforge_interaction_cli_contract COMMAND ${SIMFORGE_POWERSHELL} -NoProfile -ExecutionPolicy Bypass

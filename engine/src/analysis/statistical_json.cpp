@@ -1,3 +1,4 @@
+#include "report_value.hpp"
 #include <simforge/analysis/statistical_experiment.hpp>
 #include "comparison_json.hpp"
 #include "statistical_json_shared.hpp"
@@ -145,8 +146,9 @@ void validate_statistical_metrics(const warehouse::WarehouseMetrics& m,const sce
 std::string serialize_statistical_request(const StatisticalRequest& r) {return request_json(r).dump();}
 StatisticalRequest parse_statistical_request(std::string_view text) {return request_value(parse_json(text,max_report_bytes));}
 std::string serialize_statistical_report(const StatisticalReport& r) {auto text=report_json(r).dump();if(text.size()>max_report_bytes) throw std::length_error("Statistical report exceeds byte budget");return text;}
-StatisticalReport parse_statistical_report(std::string_view text) {
-    const auto j=parse_json(text,max_report_bytes);fields(j,{"statistical_report_version","status","engine_version","experiment_identity","method","request","replication_seeds","simulation_executions","replications","summaries","probe_summaries","limitations"},{},"statistical report");
+StatisticalReport parse_statistical_report(std::string_view text) {return detail::statistical_report_value(parse_json(text,max_report_bytes));}
+StatisticalReport detail::statistical_report_value(const Json& j) {
+    fields(j,{"statistical_report_version","status","engine_version","experiment_identity","method","request","replication_seeds","simulation_executions","replications","summaries","probe_summaries","limitations"},{},"statistical report");
     if(integer(j.at("statistical_report_version"),1,"report version")!=1 || string(j.at("status"),"status")!="completed") invalid("report","only completed version 1 reports supported");
     StatisticalReport r;r.request=request_value(j.at("request"));r.simulation_executions=integer(j.at("simulation_executions"),2400,"simulation executions");
     const auto& rows=j.at("replications");if(!rows.is_array() || rows.size()!=r.request.plan.count) invalid("replications","missing paired runs");

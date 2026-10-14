@@ -207,8 +207,7 @@ int run_graphics(std::optional<std::uint64_t> smoke_frames, const std::optional<
                         }
                         if(ImGui::Button("Open Project...",{-1,36*scale})) {
                             if(auto path=project_dialog(true,"project.simforge",launcher_error)) {
-                                try {workspace::ScenarioWorkspace prepared;workspace::Project project(prepared);project.open(*path);open_project=*path;}
-                                catch(const std::exception& e) {launcher_error=e.what();}
+                                open_project=*path;
                             }
                         }
                     }

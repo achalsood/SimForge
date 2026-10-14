@@ -1,3 +1,4 @@
+#include "report_value.hpp"
 #include <simforge/analysis/interaction.hpp>
 #include "statistical_json_shared.hpp"
 #include <charconv>
@@ -26,34 +27,35 @@ InteractionRequest request_value(const Json& j) {
     const auto& limits=j.at("limits");fields(limits,{"axis","cells","executions","arrival_work"},{},"interaction limits");r.limits.axis=static_cast<std::uint32_t>(integer(limits.at("axis"),10,"axis"));r.limits.cells=static_cast<std::uint32_t>(integer(limits.at("cells"),100,"cells"));r.limits.executions=integer(limits.at("executions"),max_interaction_executions,"executions");r.limits.arrival_work=integer(limits.at("arrival_work"),max_statistical_arrival_work,"arrival_work");
     validate_interaction_request(r);if(request_json(r)!=j)invalid("request","unsupported provenance, baseline values or direction");return r;
 }
-Json report_json(const InteractionReport& input) {
-    auto r=input;aggregate_interaction_report(r);Json rows=Json::array(),cells=Json::array(),rectangles=Json::array();
+Json report_json(const InteractionReport& input,bool aggregated=false) {
+    std::optional<InteractionReport> computed;if(!aggregated){computed=input;aggregate_interaction_report(*computed);}const auto& r=aggregated?input:*computed;Json rows=Json::array(),cells=Json::array(),rectangles=Json::array();
     if(r.simulation_executions!=interaction_execution_count(r.request))invalid("executions","inconsistent with distinct configurations and baseline reuse");
     for(const auto& row:r.replications) {
         auto baseline=r.request.source;baseline.simulation.random_seed=row.seed;detail::validate_statistical_metrics(row.baseline,baseline);Json outcomes=Json::array(),deltas=Json::array();
         for(std::size_t i=0;i<r.cells.size();++i) {const auto& c=r.cells[i];detail::validate_statistical_metrics(row.cells[i],tested_definition(r.request,c.x,c.y,row.seed));outcomes.push_back(detail::statistical_metrics_json(row.cells[i]));Json delta=Json::object();
             for(std::size_t m=0;m<statistical_metric_count;++m) {auto metric=static_cast<StatisticalMetric>(m);auto a=metric_value(row.baseline,metric),b=metric_value(row.cells[i],metric);delta[metric_name(metric)]=opt(a&&b?std::optional<double>{*b-*a}:std::nullopt);}deltas.push_back(delta);}
-        rows.push_back({{"seed",row.seed},{"baseline",detail::statistical_metrics_json(row.baseline)},{"cells",outcomes},{"paired_differences",deltas}});
+        rows.push_back({{"seed",row.seed},{"baseline",detail::statistical_metrics_json(row.baseline)},{"cells",std::move(outcomes)},{"paired_differences",std::move(deltas)}});
     }
     Json baseline=Json::object();for(std::size_t m=0;m<statistical_metric_count;++m)baseline[metric_name(static_cast<StatisticalMetric>(m))]=opt(r.baseline_means[m]);
     for(const auto& c:r.cells) {Json means=Json::object(),effects=Json::object();for(std::size_t m=0;m<statistical_metric_count;++m){const auto name=metric_name(static_cast<StatisticalMetric>(m));means[name]=opt(c.means[m]);effects[name]=detail::statistical_summary_json(c.effects[m]);}
-        cells.push_back({{"id",c.id},{"x_index",c.x_index},{"y_index",c.y_index},{"x",c.x},{"y",c.y},{"is_baseline",c.baseline},{"means",means},{"baseline_effects",effects}});}
+        cells.push_back({{"id",c.id},{"x_index",c.x_index},{"y_index",c.y_index},{"x",c.x},{"y",c.y},{"is_baseline",c.baseline},{"means",std::move(means)},{"baseline_effects",std::move(effects)}});}
     for(const auto& rectangle:r.interactions) {Json summaries=Json::object(),contrasts=Json::array();for(std::size_t m=0;m<statistical_metric_count;++m)summaries[metric_name(static_cast<StatisticalMetric>(m))]=detail::statistical_summary_json(rectangle.effects[m]);
         for(std::size_t s=0;s<r.replications.size();++s) {Json raw=Json::object(),values=Json::object();for(std::size_t m=0;m<statistical_metric_count;++m){const auto metric=static_cast<StatisticalMetric>(m);raw[metric_name(metric)]=opt(rectangle.per_seed[s][m]);Json four=Json::array();for(auto index:rectangle.cells)four.push_back(opt(metric_value(r.replications[s].cells[index],metric)));values[metric_name(metric)]=four;}
-            contrasts.push_back({{"seed",r.replications[s].seed},{"four_values_00_10_01_11",values},{"contrasts",raw}});}
-        rectangles.push_back({{"x_index",rectangle.x_index},{"y_index",rectangle.y_index},{"x0",rectangle.x0},{"x1",rectangle.x1},{"y0",rectangle.y0},{"y1",rectangle.y1},{"source_cells",rectangle.cells},{"effects",summaries},{"per_seed",contrasts},{"interpretation",rectangle.interpretation}});}
-    return {{"interaction_report_version",1},{"status","completed"},{"request",request_json(r.request)},{"grid_order","y-major-x-first"},{"simulation_executions",r.simulation_executions},{"replications",rows},{"baseline_means",baseline},{"cells",cells},{"interactions",rectangles},{"best_cells",r.best_cells},{"limitations",r.limitations}};
+            contrasts.push_back({{"seed",r.replications[s].seed},{"four_values_00_10_01_11",std::move(values)},{"contrasts",std::move(raw)}});}
+        rectangles.push_back({{"x_index",rectangle.x_index},{"y_index",rectangle.y_index},{"x0",rectangle.x0},{"x1",rectangle.x1},{"y0",rectangle.y0},{"y1",rectangle.y1},{"source_cells",rectangle.cells},{"effects",std::move(summaries)},{"per_seed",std::move(contrasts)},{"interpretation",rectangle.interpretation}});}
+    return {{"interaction_report_version",1},{"status","completed"},{"request",request_json(r.request)},{"grid_order","y-major-x-first"},{"simulation_executions",r.simulation_executions},{"replications",std::move(rows)},{"baseline_means",std::move(baseline)},{"cells",std::move(cells)},{"interactions",std::move(rectangles)},{"best_cells",r.best_cells},{"limitations",r.limitations}};
 }
 std::string number(std::optional<double> v) {if(!v)return {};char b[64];const auto result=std::to_chars(b,b+64,*v,std::chars_format::general,std::numeric_limits<double>::max_digits10);if(result.ec!=std::errc{})throw std::runtime_error("CSV conversion failed");return {b,result.ptr};}
 }
 std::string serialize_interaction_request(const InteractionRequest& r) {return request_json(r).dump();}
 InteractionRequest parse_interaction_request(std::string_view text) {return request_value(parse_json(text,max_report_bytes));}
 std::string serialize_interaction_report(const InteractionReport& r) {auto text=report_json(r).dump();if(text.size()>max_report_bytes)throw std::length_error("Interaction report byte budget exceeded");return text;}
-InteractionReport parse_interaction_report(std::string_view text) {
-    const auto j=parse_json(text,max_report_bytes);fields(j,{"interaction_report_version","status","request","grid_order","simulation_executions","replications","baseline_means","cells","interactions","best_cells","limitations"},{},"interaction report");
+InteractionReport parse_interaction_report(std::string_view text) {return detail::interaction_report_value(parse_json(text,max_report_bytes));}
+InteractionReport detail::interaction_report_value(const Json& j) {
+    fields(j,{"interaction_report_version","status","request","grid_order","simulation_executions","replications","baseline_means","cells","interactions","best_cells","limitations"},{},"interaction report");
     InteractionReport r;r.request=request_value(j.at("request"));r.simulation_executions=integer(j.at("simulation_executions"),max_interaction_executions,"executions");const auto& rows=j.at("replications");if(!rows.is_array()||rows.size()!=r.request.plan.count)invalid("replications","invalid count");
     for(const auto& row:rows){fields(row,{"seed","baseline","cells","paired_differences"},{},"interaction replication");InteractionReplication out;out.seed=integer(row.at("seed"),UINT64_MAX,"seed");out.baseline=detail::statistical_metrics_value(row.at("baseline"));const auto& cells=row.at("cells");if(!cells.is_array()||cells.size()!=r.request.x_values.size()*r.request.y_values.size())invalid("cells","invalid grid shape");for(const auto& c:cells)out.cells.push_back(detail::statistical_metrics_value(c));r.replications.push_back(std::move(out));}
-    aggregate_interaction_report(r);if(report_json(r)!=j)invalid("interaction report","raw metrics, provenance or derived data mismatch");return r;
+    aggregate_interaction_report(r);if(report_json(r,true)!=j)invalid("interaction report","raw metrics, provenance or derived data mismatch");return r;
 }
 InteractionRequest load_interaction_experiment(const std::filesystem::path& path) {
     auto j=parse_json(load_text(path,max_experiment_bytes),max_experiment_bytes);

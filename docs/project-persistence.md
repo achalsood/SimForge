@@ -1,6 +1,6 @@
 # Project persistence
 
-SimForge project format **1**, extension **.simforge**, saves a complete local warehouse workspace. It uses the existing scenario schema 1, warehouse snapshot versions 1/2, clock snapshot version 1 and analysis report schema 1. The compatibility identifier is `warehouse-2-analysis-1`. There are no migrations yet: unknown project, engine, scenario or snapshot versions fail explicitly. Standalone scenario JSON, snapshot and recording formats are unchanged.
+SimForge writes project format **2**, extension **.simforge**, and reads formats **1 and 2**. Version 1 migrates its retained report to a stable history entry. The existing scenario/snapshot/clock/report schemas and compatibility identifier `warehouse-2-analysis-1` remain unchanged; unknown versions fail explicitly. Study history and independent confirmation are documented in [study-history-and-confirmation.md](study-history-and-confirmation.md). Commit #29 streaming, background operations, cancellation, ownership, bounds and current measurements are documented in [persistence-performance.md](persistence-performance.md).
 
 ## Saved data
 
@@ -18,14 +18,14 @@ Vulkan resources, SDL windows, ImGui pointers and mesh data are never serialized
 
 The UTF-8 JSON envelope contains:
 
-- `format: "SimForge"`, `version: 1`, `engine`, `scenario_schema`;
+- `format: "SimForge"`, `version: 2` (legacy 1 accepted), `engine`, `scenario_schema`;
 - the exact supported feature list (warehouse snapshots, clock phase, historical reports, independent runs);
 - `payload_size` and `crc32` over the canonical compact JSON payload;
 - `payload`: identity, baseline session, draft/origin, candidates, custom sessions, active/next identities, preferences, report and preview provenance.
 
 JSON is inspectable; operational snapshots reuse the documented [warehouse binary format](warehouse-snapshots.md). Hex encoding costs two characters per binary byte but avoids a custom archive/dependency, ambiguous binary containers or extraction paths. CRC32 detects accidental damage; it is not authentication. Embedded snapshots also retain their existing integrity and structural checks. Timestamps and project IDs are metadata, outside authoritative simulation-state equality.
 
-Total input/output is bounded at 256 MiB. Each binary warehouse snapshot is bounded at 32 MiB, scenario parsing at 4 MiB, draft fields/notes/checkpoint text at 4,096 bytes and project/candidate names at 256 bytes. Existing shipment, execution tick, event, report and command limits apply. JSON depth is bounded at 32 and parse events at four million. Counts are checked before reserving/constructing runs and candidates. Numeric types, booleans, enums, next IDs, duplicate identities, clock consistency, required/unknown fields and snapshot provenance are validated. No assets or external scenario references are followed from inside a project.
+Total input/output is bounded at 256 MiB. Each binary warehouse snapshot is bounded at 32 MiB, scenario parsing at 4 MiB, draft fields/notes/checkpoint text at 4,096 bytes and project/candidate names at 256 bytes. Existing shipment, execution tick, event, report and command limits apply. JSON depth is bounded at 32, project parse events at 36 million and per-study events at four million. History is bounded at 32 studies/32 MiB each/192 MiB total; supported objects have at most 64 fields. Counts are checked before reserving/constructing runs and candidates. Numeric types, booleans, enums, next IDs, duplicate identities, clock consistency, required/unknown fields and snapshot provenance are validated. No assets or external scenario references are followed from inside a project.
 
 ## Save and Save As
 
@@ -43,15 +43,15 @@ A workspace generation tracks editor/candidate/report changes. A small in-memory
 
 ## Transactional write and load
 
-Save serializes the complete consistent main-thread workspace before touching the destination. It creates an exclusively owned, randomly named temporary file in the same directory. On Windows, it checks WriteFile, FlushFileBuffers and CloseHandle, then uses MoveFileExW with MOVEFILE_WRITE_THROUGH and, only for associated Save/recovery, MOVEFILE_REPLACE_EXISTING. A new/Save As destination omits replacement, so a file appearing between dialog and rename cannot be overwritten. Failure removes only the temporary file owned by that save. There is no in-place rewrite.
+Save captures a coherent main-thread revision, shares immutable evidence and streams it on a bounded worker. It creates an exclusively owned, randomly named temporary file in the same directory. On Windows, it checks WriteFile, FlushFileBuffers and CloseHandle, then uses MoveFileExW with MOVEFILE_WRITE_THROUGH and, only for associated Save/recovery, MOVEFILE_REPLACE_EXISTING. A new/Save As destination omits replacement, so a file appearing between dialog and rename cannot be overwritten. Failure removes only the temporary file owned by that save. There is no in-place rewrite.
 
 See Microsoft's [MoveFileExW contract](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexw) and [file replacement overview](https://learn.microsoft.com/en-us/windows/win32/fileio/moving-and-replacing-files). Flushing the payload and requesting replacement improves failure safety; this implementation does **not** claim power-loss atomicity or directory/storage-device durability on all filesystems, removable drives or network shares. POSIX uses a flushed temporary file and rename; directory fsync is not implemented.
 
-Loading reads with a size bound, parses bounded JSON, checks compatibility/features/CRC/length, validates definitions/identities/preferences/reports and restores every session into temporary controllers. Only after the complete workspace succeeds does it cancel/join the prior experiment and move the replacement into the application. Failures leave the active project unchanged. No GPU resource is part of the transaction.
+Loading reads incrementally with a size bound, releases each validated study/run JSON subtree, checks compatibility/features/CRC/length, validates definitions/identities/preferences/reports and restores every session into temporary controllers. Only after the complete workspace succeeds does it cancel/join the prior experiment and move the replacement into the application. Failures leave the active project unchanged. No GPU resource is part of the transaction.
 
 ## Reports and async work
 
-The last published successful comparison persists with its exact submitted baseline, candidate IDs/definitions, objective, mode, checkpoint snapshot/tick/horizon, schema versions, executions, bottleneck evidence, ranking, warnings, limitations and completed execution/report timings. Report parsing validates operational ratios, deltas, eligibility/ranking and structural/provenance relationships using the same compatible analysis implementation; it never starts a simulation experiment. Duplicate export copies of execution/checkpoint payloads are omitted.
+All retained completed studies persist with its exact submitted baseline, candidate IDs/definitions, objective, mode, checkpoint snapshot/tick/horizon, schema versions, executions, bottleneck evidence, ranking, warnings, limitations and completed execution/report timings. Report parsing validates operational ratios, deltas, eligibility/ranking and structural/provenance relationships using the same compatible analysis implementation; it never starts a simulation experiment. Duplicate export copies of execution/checkpoint payloads are omitted.
 
 Editing or deleting a current candidate does not relabel historical report inputs. The Analysis page identifies the original report request and explicitly separates submitted inputs from current edits. Future async request IDs start above the restored report ID.
 
@@ -65,9 +65,9 @@ A conservative single recovery slot lives at SDL's per-user SimForge preference 
 
 Launch offers Restore recovery, Discard recovery or Later. Restore opens an unsaved project and requires Save As to establish a primary path; it does not automatically write any path embedded in the recovery. Discard removes only the .recovery slot. Later retains it and suspends new autosaves until it is explicitly resolved from File. Clearing recovery on clean/discarded shutdown checks ownership, so another project's recovery is preserved.
 
-Recovery is synchronous at a safe main-thread point. It is a bounded, local last-recovery mechanism, not a complete crash journal: changes since the last interval can be lost on abrupt termination; multiple concurrent application instances do not have isolated recovery slots. Explicit saves remain the reliable persistence boundary. There is no background scheduler, cloud service or account.
+Recovery is synchronous at a safe main-thread point. It is a bounded, local last-recovery mechanism, not a complete crash journal: changes since the last interval can be lost on abrupt termination; multiple concurrent application instances do not have isolated recovery slots. Explicit saves remain the reliable persistence boundary. There is one bounded persistence worker shared by Save/Open/recovery, with cooperative cancellation; no cloud service or account is involved.
 
-## Measurements
+## Earlier synchronous measurements
 
 Measured with the Release benchmark on the development Windows machine, single samples with filesystem/cache variability; 96, 10,000 and 100,000 shipments, rate 1 Hz, snapshots at independent intermediate times. Save timings below update an existing associated project. Times are milliseconds; sizes are bytes.
 
@@ -87,7 +87,7 @@ One completed comparison containing 1/3/8 candidate executions occupied 20,827 /
 
 Peak process working set during the combined save/load benchmark reached 70,529,024 bytes (67.3 MiB). This is the cumulative Windows process high-water mark, including runtime/scene construction and allocator caching, not a per-stage allocation profiler. Parse/restoration/scene timings are instrumented CPU phases; total Open also includes disk read, canonical integrity checking and workspace commit. Scene timing measures CPU adapter construction, not GPU presentation.
 
-Normal projects save in about 1–8 ms here. The largest tested nine-session workload pauses the main thread for about 150–165 ms. Serialization and validation dominate; do not infer responsiveness at the 256 MiB hard limit. A background save system/compression is deferred until larger real workloads justify its ownership and dependency costs.
+These measurements describe the earlier synchronous implementation. Current streaming/background performance, repeated near-limit comparisons and native responsiveness are in [persistence-performance.md](persistence-performance.md).
 
 The [full CSV measurements](project-persistence-benchmarks.csv) retain all instrumented stages and process memory samples. Reproduce with `build/windows-release/benchmarks/simforge_project_benchmark.exe`. It uses a temporary directory and cleans its outputs.
 
@@ -105,4 +105,4 @@ Curated real Vulkan readbacks:
 - [Restored custom run](artifacts/project-restored.png)
 - [Continued restored simulation](artifacts/project-continued.png)
 
-Known limits: one current report, no recent-project list, one recovery slot, synchronous large saves, no power-loss guarantee or older-format migration. Preview camera/scroll positions are temporary; per-playable-run cameras and editor/panel selections are persistent. No external asset/GPU data, database, AI integration or publishing is added.
+The original milestone had one current report and synchronous saves. Current v2 study history, v1 migration, background Save/Open and measured limits are documented in [persistence-performance.md](persistence-performance.md). Remaining limits include no recent-project list, one recovery slot and no universal power-loss guarantee. Preview camera/scroll positions are temporary; per-playable-run cameras and editor/panel selections are persistent. No external asset/GPU data, database, AI integration or publishing is added.

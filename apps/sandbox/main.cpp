@@ -13,6 +13,7 @@
 #include <simforge/analysis/sensitivity.hpp>
 #include <simforge/analysis/interaction.hpp>
 #include <simforge/analysis/confirmation.hpp>
+#include <simforge/workspace/project.hpp>
 #include <nlohmann/json.hpp>
 #include <fstream>
 
@@ -39,7 +40,7 @@ struct Options
     std::optional<double> speed;
     std::uint64_t entities{10'000};
     std::uint64_t ticks{600};
-    std::optional<std::filesystem::path> scenario, record, replay, project;
+    std::optional<std::filesystem::path> scenario, record, replay, project, verify_project;
     std::optional<std::filesystem::path> warehouse_replay;
     std::optional<std::pair<std::uint32_t, std::uint32_t>> compare_forklifts;
     std::optional<std::uint64_t> checkpoint_seconds;
@@ -67,6 +68,7 @@ Options parse_options(int argc, char* argv[])
     {
         const std::string_view argument{argv[i]};
         if(argument=="--project" && !options.project) { if(++i==argc) throw std::invalid_argument("Missing project path"); options.project=argv[i]; }
+        else if(argument=="--verify-project" && !options.verify_project) {if(++i==argc)throw std::invalid_argument("Missing verification path");options.verify_project=argv[i];}
         else if (argument == "--live" && !options.live) options.live = true;
         else if (argument == "--speed" && !options.speed)
         {
@@ -135,6 +137,8 @@ Options parse_options(int argc, char* argv[])
         }
         else throw std::invalid_argument("Unknown or duplicate argument");
     }
+    if(options.verify_project && (!options.headless || options.project || options.live || options.scenario || options.speed || options.record || options.replay || options.warehouse_replay || options.experiment || options.compare_forklifts || options.checkpoint_seconds || entities_seen || ticks_seen || options.graphics_smoke || options.graphics_capture || options.export_json || options.export_csv || options.export_seeds || options.export_marginal || options.export_interactions || options.export_interaction_seeds))
+        throw std::invalid_argument("--verify-project requires --headless and conflicts with other workflows");
     if(options.project && (options.headless || options.live || options.scenario || options.speed || options.record || options.replay || options.warehouse_replay || options.experiment || options.compare_forklifts || options.checkpoint_seconds || entities_seen || ticks_seen))
         throw std::invalid_argument("--project requires graphical project playback and conflicts with scenario workflows");
     if ((options.live && (!options.scenario || options.headless || options.record || options.replay || options.warehouse_replay || options.experiment ||
@@ -447,6 +451,8 @@ void populate(simforge::world::World& world, std::uint64_t count)
 
 int run(const Options& options)
 {
+    if(options.verify_project){simforge::workspace::ScenarioWorkspace workspace;simforge::workspace::Project project(workspace);project.open(*options.verify_project);
+        std::cout<<"SimForge project verified: "<<project.info().name<<" | studies="<<workspace.studies().size()<<" | bytes="<<project.timings().bytes<<" | open_ms="<<project.timings().total_ms<<'\n';return 0;}
     if (options.experiment) return experiment_workflow(options);
     if (options.warehouse_replay) return warehouse_replay_workflow(options);
     if ((options.headless && options.scenario) || options.replay) return scenario_workflow(options);
@@ -504,6 +510,7 @@ int main(int argc, char* argv[])
                   << "    Sensitivity: [--export-marginal NEW_FILE] | Interaction: [--export-interactions NEW_FILE] [--export-interaction-seeds NEW_FILE]\n"
                   << "  --graphics-smoke FRAMES (120..10000; display/GPU/validation required)\n";
         std::cerr << "  --project PROJECT.simforge (restore saved workspace)\n";
+        std::cerr << "  --headless --verify-project PROJECT.simforge (bounded validation; no experiment reruns)\n";
         std::cerr << "  --scenario WAREHOUSE_FILE [--graphics-smoke FRAMES] [--graphics-capture NEW_FILE.png]\n";
         std::cerr << "  --scenario WAREHOUSE_FILE --live [--speed 0.01..3600] (default 300; interactive dashboard)\n";
         return 1;

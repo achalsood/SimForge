@@ -7,6 +7,7 @@ target_link_libraries(simforge_sandbox
     PRIVATE
         simforge_engine
         simforge_analysis
+        simforge_workspace
         nlohmann_json::nlohmann_json
 )
 
@@ -39,5 +40,5 @@ endif()
 
 add_executable(simforge_headless main.cpp)
 target_compile_definitions(simforge_headless PRIVATE SIMFORGE_HAS_RENDERER=0)
-target_link_libraries(simforge_headless PRIVATE simforge_engine simforge_analysis nlohmann_json::nlohmann_json)
+target_link_libraries(simforge_headless PRIVATE simforge_engine simforge_analysis simforge_workspace nlohmann_json::nlohmann_json)
 target_compile_features(simforge_headless PRIVATE cxx_std_23)

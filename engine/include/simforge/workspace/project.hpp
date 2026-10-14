@@ -2,6 +2,7 @@
 #include <simforge/workspace/scenario_workspace.hpp>
 #include <simforge/viewer/presentation.hpp>
 #include <functional>
+#include <memory>
 
 namespace simforge::workspace
 {
@@ -42,16 +43,35 @@ struct ProjectInfo
 };
 struct ProjectTimings
 {
+    double snapshot_ms{0}, integrity_ms{0}, publication_ms{0};
     double serialization_ms{0}, write_ms{0}, replacement_ms{0};
     double parsing_ms{0}, validation_ms{0}, restoration_ms{0}, scene_ms{0}, total_ms{0};
     std::size_t bytes{0};
 };
 // Optional fault hook supports tests without changing real user files.
 using ProjectWriteHook=std::function<void(std::string_view)>;
+enum class ProjectOperation { Save, Open, RecoverySave, RecoveryOpen };
+struct ProjectProgress {
+    ProjectOperation operation{ProjectOperation::Save};
+    std::filesystem::path path;
+    std::string phase;
+    std::size_t bytes{0}, studies{0};
+    bool active{false}, cancellable{false};
+};
+struct ProjectCompletion {
+    ProjectOperation operation;
+    bool success{false}, cancelled{false};
+    std::string error;
+};
 class Project
 {
 public:
+    // Control, capture, preferences and publication belong to the workspace's
+    // owning thread. Workers read only owned captures or private staged state.
     explicit Project(ScenarioWorkspace& workspace);
+    ~Project();
+    Project(const Project&)=delete;
+    Project& operator=(const Project&)=delete;
     [[nodiscard]] const ProjectInfo& info() const noexcept { return info_; }
     [[nodiscard]] const ProjectPreferences& preferences() const noexcept { return preferences_; }
     void preferences(ProjectPreferences value);
@@ -61,6 +81,18 @@ public:
     void save(const std::filesystem::path& path={}, bool save_as=false, const ProjectWriteHook& hook={});
     // Caller confirms destructive intent; validation completes before the worker is joined.
     void open(const std::filesystem::path& path);
+    void start_save(const std::filesystem::path& path={},bool save_as=false,const ProjectWriteHook& hook={});
+    void start_open(const std::filesystem::path& path,bool recovery=false,const ProjectWriteHook& hook={});
+    bool start_recovery_if_due(const std::filesystem::path&,std::chrono::steady_clock::time_point);
+    [[nodiscard]] bool busy() const noexcept;
+    [[nodiscard]] bool opening() const noexcept;
+    [[nodiscard]] ProjectProgress progress() const;
+    // Returns false once file publication has begun; cancellation never rolls it back.
+    bool cancel();
+    std::optional<ProjectCompletion> poll();
+    // Cooperative stop/join for application teardown; completed file publication
+    // is accounted for, and a cancelled staged Open never replaces the workspace.
+    void shutdown();
     void create(const scenario::ScenarioDefinition& baseline, std::string name="Untitled project");
     [[nodiscard]] const ProjectTimings& timings() const noexcept { return timings_; }
     // One local recovery slot; primary saves are never used as recovery destinations.
@@ -70,6 +102,11 @@ public:
     static void discard_recovery(const std::filesystem::path& recovery);
     void discard_own_recovery(const std::filesystem::path& recovery) const;
 private:
+    struct Operation;
+    std::unique_ptr<Operation> operation_;
+    void require_idle() const;
+    void submit_save(const std::filesystem::path&,bool,bool,const ProjectWriteHook&);
+    [[nodiscard]] std::filesystem::path save_destination(const std::filesystem::path&,bool) const;
     void load(const std::filesystem::path& path, bool recovery);
     [[nodiscard]] std::string marker() const;
     ScenarioWorkspace& workspace_;

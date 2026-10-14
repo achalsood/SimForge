@@ -1,3 +1,4 @@
+#include "report_value.hpp"
 #include <simforge/analysis/confirmation.hpp>
 #include "../scenario/json_io.hpp"
 #include "comparison_json.hpp"
@@ -88,10 +89,11 @@ std::string serialize_confirmation_report(const ConfirmationReport& r) {
         "Additional confirmations are additional analyses, not automatic validation of a revised choice. No exploratory observations are pooled."})}};
     auto bytes=j.dump();if(bytes.size()>max_report_bytes) throw std::length_error("Confirmation report exceeds byte limit");return bytes;
 }
-ConfirmationReport parse_confirmation_report(std::string_view bytes) {
-    auto j=parse_json(bytes,max_report_bytes);fields(j,{"confirmation_report_version","request","paired","caveats"},{},"confirmation report");
+ConfirmationReport parse_confirmation_report(std::string_view bytes) {return detail::confirmation_report_value(parse_json(bytes,max_report_bytes));}
+ConfirmationReport detail::confirmation_report_value(const Json& j) {
+    fields(j,{"confirmation_report_version","request","paired","caveats"},{},"confirmation report");
     if(integer(j.at("confirmation_report_version"),1,"version")!=1) invalid("confirmation","unsupported version");
-    ConfirmationReport r{parse_confirmation_request(j.at("request").dump()),parse_statistical_report(j.at("paired").dump())};
+    ConfirmationReport r{parse_confirmation_request(j.at("request").dump()),detail::statistical_report_value(j.at("paired"))};
     if(Json::parse(serialize_confirmation_report(r))!=j) invalid("confirmation","report provenance mismatch");return r;
 }
 std::string serialize_confirmation_csv(const ConfirmationReport& r,bool seeds,std::string_view study) {

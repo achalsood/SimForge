@@ -39,6 +39,8 @@ The goal is to let users describe systems, simulate them, compare alternatives, 
 
 **Save** updates the associated file; **Save As** creates a new file and leaves the earlier one intact. `File *` indicates unsaved work. On launch, explicitly restore or discard any offered local recovery copy. See [project format, failure safety, recovery and measurements](docs/project-persistence.md).
 
+Save, Open and recovery now run through one bounded persistence worker. The activity panel shows the current phase, processed bytes and studies, with safe cancellation before publication. Saving captures the submitted revision; later edits/playback remain dirty. Open keeps rendering and camera navigation available while the replacement validates. See [streaming architecture, compatibility and measured performance](docs/persistence-performance.md). For renderer-free verification, run `simforge_headless.exe --headless --verify-project "study.simforge"`.
+
 ## Vision
 
 SimForge will combine:

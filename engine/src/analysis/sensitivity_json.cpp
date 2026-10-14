@@ -1,3 +1,4 @@
+#include "report_value.hpp"
 #include <simforge/analysis/sensitivity.hpp>
 #include "statistical_json_shared.hpp"
 #include <algorithm>
@@ -22,8 +23,8 @@ SensitivityRequest request_value(const Json& j) {
     r.objective=metric(string(j.at("objective"),"objective"));if(!j.at("multi_seed").is_boolean())invalid("multi_seed","expected boolean");r.multi_seed=j.at("multi_seed").get<bool>();
     r.plan=detail::statistical_plan_value(j.at("replications"));if(!j.at("practical_threshold").is_number())invalid("threshold","expected number");r.practical_threshold=j.at("practical_threshold").get<double>();validate_sensitivity_request(r);return r;
 }
-Json report_json(const SensitivityReport& input) {
-    auto r=input;aggregate_sensitivity_report(r);Json rows=Json::array(),points=Json::array(),probes=Json::array();std::uint64_t executions=0;
+Json report_json(const SensitivityReport& input,bool aggregated=false) {
+    std::optional<SensitivityReport> computed;if(!aggregated){computed=input;aggregate_sensitivity_report(*computed);}const auto& r=aggregated?input:*computed;Json rows=Json::array(),points=Json::array(),probes=Json::array();std::uint64_t executions=0;
     for(const auto& row:r.replications) {
         auto source=r.request.source;source.simulation.random_seed=row.seed;detail::validate_statistical_metrics(row.baseline,source);++executions;
         Json outcomes=Json::array(),probe_values=Json::array();
@@ -40,17 +41,17 @@ Json report_json(const SensitivityReport& input) {
                 if(parameter==r.request.parameter&&existing!=r.request.values.end()) {if(*row.probes[p]!=row.points[static_cast<std::size_t>(existing-r.request.values.begin())])invalid("probe","reused point mismatch");}else ++executions;
                 probe_values.push_back(detail::statistical_metrics_json(*row.probes[p]));}else probe_values.push_back(nullptr);
         }
-        rows.push_back({{"seed",row.seed},{"baseline",detail::statistical_metrics_json(row.baseline)},{"points",outcomes},{"probes",probe_values}});
+        rows.push_back({{"seed",row.seed},{"baseline",detail::statistical_metrics_json(row.baseline)},{"points",std::move(outcomes)},{"probes",std::move(probe_values)}});
     }
     if(executions!=r.simulation_executions)invalid("execution count","inconsistent with distinct configurations");
     Json baseline_means=Json::object();for(std::size_t m=0;m<statistical_metric_count;++m)baseline_means[metric_name(static_cast<StatisticalMetric>(m))]=opt(r.baseline_means[m]);
     for(const auto& p:r.points) {Json baseline=Json::object(),adjacent=Json::object(),means=Json::object(),mean_intervals=Json::object();for(std::size_t m=0;m<statistical_metric_count;++m) {
         means[metric_name(static_cast<StatisticalMetric>(m))]=opt(p.means[m]);mean_intervals[metric_name(static_cast<StatisticalMetric>(m))]={{"lower_95",opt(p.mean_lower[m])},{"upper_95",opt(p.mean_upper[m])}};
         baseline[metric_name(static_cast<StatisticalMetric>(m))]=detail::statistical_summary_json(p.against_baseline[m]);if(p.value!=r.points.front().value)adjacent[metric_name(static_cast<StatisticalMetric>(m))]=detail::statistical_summary_json(p.adjacent[m]);}
-        points.push_back({{"id",p.id},{"value",p.value},{"is_baseline",p.baseline},{"means",means},{"mean_intervals",mean_intervals},{"baseline_effects",baseline},{"adjacent_effects",adjacent},{"marginal_per_unit",opt(p.marginal_per_unit)},{"interpretation",p.marginal_interpretation}});}
-    for(const auto& p:r.probes) {Json summaries=Json::object();for(std::size_t m=0;m<statistical_metric_count;++m)summaries[metric_name(static_cast<StatisticalMetric>(m))]=detail::statistical_summary_json(p[m]);probes.push_back(summaries);}
+        points.push_back({{"id",p.id},{"value",p.value},{"is_baseline",p.baseline},{"means",std::move(means)},{"mean_intervals",std::move(mean_intervals)},{"baseline_effects",std::move(baseline)},{"adjacent_effects",std::move(adjacent)},{"marginal_per_unit",opt(p.marginal_per_unit)},{"interpretation",p.marginal_interpretation}});}
+    for(const auto& p:r.probes) {Json summaries=Json::object();for(std::size_t m=0;m<statistical_metric_count;++m)summaries[metric_name(static_cast<StatisticalMetric>(m))]=detail::statistical_summary_json(p[m]);probes.push_back(std::move(summaries));}
     return {{"sensitivity_report_version",1},{"status","completed"},{"engine_version","warehouse-workload-v1"},{"request",request_json(r.request)},
-        {"simulation_executions",r.simulation_executions},{"replications",rows},{"baseline_means",baseline_means},{"points",points},{"probes",probes},{"best_point",r.best_point?Json(*r.best_point):Json(nullptr)},{"limitations",r.limitations}};
+        {"simulation_executions",r.simulation_executions},{"replications",std::move(rows)},{"baseline_means",std::move(baseline_means)},{"points",std::move(points)},{"probes",std::move(probes)},{"best_point",r.best_point?Json(*r.best_point):Json(nullptr)},{"limitations",r.limitations}};
 }
 std::string number(std::optional<double> x) {if(!x)return {};char b[64];auto result=std::to_chars(b,b+64,*x,std::chars_format::general,std::numeric_limits<double>::max_digits10);if(result.ec!=std::errc{})throw std::runtime_error("CSV conversion failed");return {b,result.ptr};}
 }
@@ -59,14 +60,15 @@ void save_sensitivity_report(const std::filesystem::path& path,const Sensitivity
 void save_sensitivity_csv(const std::filesystem::path& path,const SensitivityReport& r,SensitivityCsv kind) {detail::save_output(path,serialize_sensitivity_csv(r,kind));}
 SensitivityRequest parse_sensitivity_request(std::string_view text) {return request_value(parse_json(text,max_report_bytes));}
 std::string serialize_sensitivity_report(const SensitivityReport& r) {auto text=report_json(r).dump();if(text.size()>max_report_bytes)throw std::length_error("Sensitivity report byte limit");return text;}
-SensitivityReport parse_sensitivity_report(std::string_view text) {
-    const auto j=parse_json(text,max_report_bytes);fields(j,{"sensitivity_report_version","status","engine_version","request","simulation_executions","replications","baseline_means","points","probes","best_point","limitations"},{},"sensitivity report");
+SensitivityReport parse_sensitivity_report(std::string_view text) {return detail::sensitivity_report_value(parse_json(text,max_report_bytes));}
+SensitivityReport detail::sensitivity_report_value(const Json& j) {
+    fields(j,{"sensitivity_report_version","status","engine_version","request","simulation_executions","replications","baseline_means","points","probes","best_point","limitations"},{},"sensitivity report");
     SensitivityReport r;r.request=request_value(j.at("request"));r.simulation_executions=integer(j.at("simulation_executions"),100000,"executions");
     const auto& rows=j.at("replications");if(!rows.is_array()||rows.size()!=r.request.plan.count)invalid("replications","incomplete report");
     for(const auto& row:rows) {fields(row,{"seed","baseline","points","probes"},{},"sensitivity replication");SensitivityReplication out;out.seed=integer(row.at("seed"),UINT64_MAX,"seed");out.baseline=detail::statistical_metrics_value(row.at("baseline"));
         if(!row.at("points").is_array()||row.at("points").size()!=r.request.values.size()||!row.at("probes").is_array()||row.at("probes").size()!=3)invalid("outcomes","invalid shape");
         for(const auto& p:row.at("points"))out.points.push_back(detail::statistical_metrics_value(p));for(std::size_t p=0;p<3;++p)if(!row.at("probes")[p].is_null())out.probes[p]=detail::statistical_metrics_value(row.at("probes")[p]);r.replications.push_back(std::move(out));}
-    aggregate_sensitivity_report(r);if(report_json(r)!=j)invalid("sensitivity report","provenance or derived data mismatch");return r;
+    aggregate_sensitivity_report(r);if(report_json(r,true)!=j)invalid("sensitivity report","provenance or derived data mismatch");return r;
 }
 SensitivityRequest load_sensitivity_experiment(const std::filesystem::path& path) {
     auto j=parse_json(load_text(path,max_experiment_bytes),max_experiment_bytes);

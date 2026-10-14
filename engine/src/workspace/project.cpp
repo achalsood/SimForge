@@ -1,6 +1,10 @@
 #include <simforge/workspace/project.hpp>
 #include <simforge/workspace/experiment_execution.hpp>
 #include "../scenario/json_io.hpp"
+#include "../analysis/report_value.hpp"
+#include "persistence_stream.hpp"
+#include <mutex>
+#include <thread>
 #include <algorithm>
 #include <charconv>
 #include <chrono>
@@ -93,12 +97,6 @@ double number(const Json& j,double minimum,double maximum,const char* label)
     return value;
 }
 std::uint64_t id(const Json& j) { return integer(j,std::numeric_limits<std::uint64_t>::max()-1,"identity"); }
-std::uint32_t checksum(std::string_view text)
-{
-    std::uint32_t crc=0xffffffff;
-    for(unsigned char c:text) {crc^=c; for(int bit=0;bit<8;++bit) crc=(crc>>1)^((crc&1)?0xedb88320:0);}
-    return ~crc;
-}
 Json definition(const scenario::ScenarioDefinition& d) { return Json::parse(scenario::serialize_scenario(d)); }
 scenario::ScenarioDefinition definition(const Json& j)
 {
@@ -211,47 +209,6 @@ void path_valid(const std::filesystem::path& path)
         throw std::invalid_argument("Unsupported project path");
 #endif
 }
-void transactional_write(const std::filesystem::path& destination,std::string_view bytes,bool replace,
-    ProjectTimings& timings,const ProjectWriteHook& hook)
-{
-    path_valid(destination);
-    auto temporary=destination; temporary+=L".tmp-"+std::filesystem::path(identity()).wstring();
-    const auto began=Timer::now();
-    bool owned=false;
-    try {
-        if(hook) hook("before_write");
-#ifdef _WIN32
-        HANDLE file=CreateFileW(temporary.c_str(),GENERIC_WRITE,0,nullptr,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,nullptr);
-        if(file==INVALID_HANDLE_VALUE) throw std::runtime_error("Cannot create project temporary file");
-        owned=true; DWORD written=0;
-        bool success=WriteFile(file,bytes.data(),static_cast<DWORD>(bytes.size()),&written,nullptr) && written==bytes.size();
-        if(success) success=FlushFileBuffers(file)!=0;
-        if(!CloseHandle(file)) success=false;
-        if(!success) throw std::runtime_error("Project write or flush failed");
-#else
-        std::ofstream file(temporary,std::ios::binary|std::ios::noreplace);
-        if(!file) throw std::runtime_error("Cannot create project temporary file");
-        owned=true; file.write(bytes.data(),static_cast<std::streamsize>(bytes.size())); file.close();
-        if(!file) throw std::runtime_error("Project write failed");
-        const int descriptor=::open(temporary.c_str(),O_RDONLY);
-        if(descriptor<0) throw std::runtime_error("Project flush open failed");
-        const auto flushed=::fsync(descriptor); ::close(descriptor);
-        if(flushed) throw std::runtime_error("Project flush failed");
-#endif
-        if(hook) hook("after_write");
-        timings.write_ms=ms(began); const auto replacing=Timer::now();
-        if(hook) hook("before_replace");
-#ifdef _WIN32
-        // Same-volume rename; replacement only for an associated explicit Save or recovery slot.
-        if(!MoveFileExW(temporary.c_str(),destination.c_str(),MOVEFILE_WRITE_THROUGH|(replace?MOVEFILE_REPLACE_EXISTING:0)))
-            throw std::runtime_error("Project replacement failed; previous save retained");
-#else
-        if(replace) std::filesystem::rename(temporary,destination);
-        else { std::filesystem::create_hard_link(temporary,destination); std::filesystem::remove(temporary); }
-#endif
-        owned=false; timings.replacement_ms=ms(replacing);
-    } catch(...) {if(owned) {std::error_code ignored; std::filesystem::remove(temporary,ignored);} throw;}
-}
 warehouse::ResourceCounts counts(const scenario::ScenarioDefinition& d)
 {const auto& c=std::get<scenario::WarehouseConfig>(d.domain);return {c.loading_bays,c.workers,c.forklifts};}
 std::vector<std::string> strings(const Json& j,std::size_t maximum)
@@ -262,6 +219,38 @@ std::vector<std::string> strings(const Json& j,std::size_t maximum)
 }
 struct ProjectCodec
 {
+    struct RunCapture {
+        std::uint64_t id;
+        scenario::ScenarioDefinition definition;
+        warehouse::WarehouseSnapshot snapshot;
+        simulation::ClockSnapshot clock;
+        viewer::CameraPose camera;
+        std::optional<viewer::VisualKey> selection;
+        std::vector<warehouse::CapacityChange> commands;
+    };
+    struct Capture {
+        Json metadata;
+        std::vector<StudyRecord> studies;
+        std::vector<RunCapture> runs;
+        std::string marker,saved;
+    };
+    struct RestoredRuns {
+        std::unique_ptr<viewer::ViewerController> baseline;
+        std::vector<PlayableRun> runs;
+    };
+    static Capture capture(const ScenarioWorkspace& w,const ProjectInfo& info,const ProjectPreferences& prefs) {
+        (void)w.baseline();
+        if(w.has_pending_study())throw std::logic_error("Resolve the unretained completed study before saving or recovering the project");
+        for(const auto* draft:{&w.draft_,&w.draft_origin_})for(const auto& value:draft->values)(void)bounded(Json(value),4096,"draft field");
+        for(const auto& c:w.candidates_){(void)bounded(Json(c.notes),4096,"candidate notes");(void)bounded(Json(c.changed_inputs),4096,"candidate changes");}
+        Capture result;result.metadata=payload(w,info,prefs);result.studies=w.studies_;result.marker=marker(w,info,prefs);result.saved=timestamp();result.metadata["identity"]["saved"]=result.saved;
+        const auto add=[&](const viewer::ViewerController& v,std::uint64_t id){result.runs.push_back({id,v.definition(),v.runtime().capture_snapshot(),v.runtime().clock().capture_snapshot(),v.orbit_camera().pose(),v.selection(),v.command_history()});};
+        add(*w.baseline_view_,0);for(const auto& r:w.runs_)add(*r.controller,r.id);return result;
+    }
+    static Json run(const RunCapture& r) {
+        Json j{{"id",r.id},{"definition",definition(r.definition)},{"snapshot",snapshot(r.snapshot)},{"clock",clock_json(r.clock)},{"camera",camera_json(r.camera)},{"selection",selection_json(r.selection)},{"commands",Json::array()}};
+        for(const auto& c:r.commands)j["commands"].push_back({c.tick,c.started_before,c.capacity,static_cast<int>(c.resource)});return j;
+    }
     static std::string marker(const ScenarioWorkspace& w,const ProjectInfo& info,const ProjectPreferences& prefs)
     {
         Json j{{"generation",w.persistent_generation_},{"active",w.active_run_},{"preferences",preferences_json(prefs)},{"name",info.name},{"runs",Json::array()},{"preview",w.viewed_identity_}};
@@ -273,13 +262,6 @@ struct ProjectCodec
         if(w.baseline_view_) add(*w.baseline_view_);
         for(const auto& r:w.runs_) add(*r.controller);
         return j.dump();
-    }
-    static Json run(const viewer::ViewerController& v,std::uint64_t identity)
-    {
-        Json result{{"id",identity},{"definition",definition(v.definition())},{"snapshot",snapshot(v.runtime().capture_snapshot())},
-            {"clock",clock_json(v.runtime().clock().capture_snapshot())},{"camera",camera_json(v.orbit_camera().pose())},{"selection",selection_json(v.selection())},{"commands",Json::array()}};
-        for(const auto& c:v.command_history()) result["commands"].push_back({c.tick,c.started_before,c.capacity,static_cast<int>(c.resource)});
-        return result;
     }
     static std::unique_ptr<viewer::ViewerController> run(const Json& j,ProjectTimings& timings)
     {
@@ -322,17 +304,17 @@ struct ProjectCodec
         if(j.contains("kind")) {
             if(j.at("kind")=="confirmation") {
                 fields(j,{"kind","confirmation"},{},"confirmation project report");
-                auto c=analysis::parse_confirmation_report(j.at("confirmation").dump());Comparison r;r.confirmation=std::move(c.request);r.statistics=std::move(c.paired);
+                auto c=analysis::detail::confirmation_report_value(j.at("confirmation"));Comparison r;r.confirmation=std::move(c.request);r.statistics=std::move(c.paired);
                 r.request_id=r.statistics->request.id;r.baseline_definition=r.statistics->request.baseline;r.objective=r.statistics->request.objective;r.limitations=r.statistics->limitations;
                 for(const auto& candidate:r.statistics->request.candidates) {r.candidate_ids.push_back(candidate.id);r.definitions.push_back(candidate.definition);r.changed_inputs.push_back(differences(r.baseline_definition,candidate.definition));}
                 w.report_=std::make_shared<const Comparison>(std::move(r));w.execution().reserve_request_ids(w.report_->request_id);return;
             }
-            if(j.at("kind")=="interaction") {fields(j,{"kind","interaction"},{},"interaction project report");Comparison r;r.interaction=analysis::parse_interaction_report(j.at("interaction").dump());const auto& input=r.interaction->request;r.request_id=input.id;r.baseline_definition=input.source;r.limitations=r.interaction->limitations;const auto request_id=r.request_id;w.report_=std::make_shared<const Comparison>(std::move(r));++w.report_generation_;w.execution().reserve_request_ids(request_id);return;}
-            if(j.at("kind")=="sensitivity") {fields(j,{"kind","sensitivity"},{},"sensitivity project report");Comparison r;r.sensitivity=analysis::parse_sensitivity_report(j.at("sensitivity").dump());const auto& input=r.sensitivity->request;
+            if(j.at("kind")=="interaction") {fields(j,{"kind","interaction"},{},"interaction project report");Comparison r;r.interaction=analysis::detail::interaction_report_value(j.at("interaction"));const auto& input=r.interaction->request;r.request_id=input.id;r.baseline_definition=input.source;r.limitations=r.interaction->limitations;const auto request_id=r.request_id;w.report_=std::make_shared<const Comparison>(std::move(r));++w.report_generation_;w.execution().reserve_request_ids(request_id);return;}
+            if(j.at("kind")=="sensitivity") {fields(j,{"kind","sensitivity"},{},"sensitivity project report");Comparison r;r.sensitivity=analysis::detail::sensitivity_report_value(j.at("sensitivity"));const auto& input=r.sensitivity->request;
                 r.request_id=input.id;r.baseline_definition=input.source;
                 r.limitations=r.sensitivity->limitations;const auto request_id=r.request_id;w.report_=std::make_shared<const Comparison>(std::move(r));++w.report_generation_;w.execution().reserve_request_ids(request_id);return;}
             fields(j,{"kind","statistics"},{},"statistical project report");if(string(j.at("kind"),"report kind")!="paired_statistical") invalid("report","unsupported kind");
-            Comparison r;r.statistics=analysis::parse_statistical_report(j.at("statistics").dump());const auto& input=r.statistics->request;
+            Comparison r;r.statistics=analysis::detail::statistical_report_value(j.at("statistics"));const auto& input=r.statistics->request;
             r.request_id=input.id;r.baseline_definition=input.baseline;r.objective=input.objective;
 
             for(const auto& c:input.candidates) {if(c.id>=w.next_id_) invalid("report","invalid statistical historical candidate identity");r.candidate_ids.push_back(c.id);r.definitions.push_back(c.definition);r.changed_inputs.push_back(differences(input.baseline,c.definition));}
@@ -404,28 +386,45 @@ struct ProjectCodec
     static Json payload(const ScenarioWorkspace& w,const ProjectInfo& info,const ProjectPreferences& prefs)
     {
         Json j{{"identity",{{"id",info.id},{"name",info.name},{"created",info.created},{"saved",info.saved}}},
-            {"baseline",run(*w.baseline_view_,0)},{"draft",w.draft_.values},{"draft_origin",w.draft_origin_.values},
+            {"baseline",Json(nullptr)},{"draft",w.draft_.values},{"draft_origin",w.draft_origin_.values},
             {"candidates",Json::array()},{"runs",Json::array()},{"active_run",w.active_run_},{"next_run_id",w.next_run_id_},
             {"next_candidate_id",w.next_id_},{"default_speed",w.speed_},{"preferences",preferences_json(prefs)},{"report",nullptr},{"study_history",Json::array()},{"selected_study",w.selected_study_},{"next_study_id",w.next_study_id_},{"preview",nullptr}};
-        for(const auto& study:w.studies_) {
-            auto evidence=report(*study.evidence);const auto size=evidence.dump().size();
-            if(size!=study.serialized_bytes || size>max_study_bytes) invalid("study","evidence size mismatch");
-            j["study_history"].push_back({{"id",study.id},{"type",study_type_name(study.type)},{"title",study.title},{"notes",study.notes},{"completed",study.completed},
-                {"bytes",size},{"engine",project_engine_version},{"generator_version",scenario::workload_generator_version},{"evidence",std::move(evidence)},
-                {"reserved_confirmation_seeds",study.reserved_confirmation_seeds},{"view",{{"configuration",study.view.configuration},{"seed",study.view.seed},{"metric",study.view.metric},{"rectangle",study.view.rectangle}}}});
-        }
         if(w.history_bytes()>max_history_bytes) invalid("history","exceeds 192 MiB");
         if(w.draft_.workload!=WorkloadDraft{}) j["draft_workload"]=workload_draft_json(w.draft_.workload);
         if(w.draft_origin_.workload!=WorkloadDraft{}) j["draft_origin_workload"]=workload_draft_json(w.draft_origin_.workload);
         for(const auto& c:w.candidates_) j["candidates"].push_back({{"id",c.id},{"definition",definition(c.definition)},{"notes",c.notes},{"changed_inputs",c.changed_inputs}});
-        for(const auto& r:w.runs_) j["runs"].push_back(run(*r.controller,r.id));
         if(w.preview_view_ && w.report_ && !w.report_->statistics && !w.report_->sensitivity && !w.report_->interaction) {
             const auto separator=w.viewed_identity_.find(": "); const auto name=w.viewed_identity_.substr(separator+2);
             j["preview"]=w.preview_report_generation_==w.report_generation_ ? Json(name) : Json{{"unavailable",true}};
         }
         return j;
     }
-    static ScenarioWorkspace payload(const Json& j,ProjectInfo& info,ProjectPreferences& prefs,ProjectTimings& timings)
+    static StudyRecord study(ScenarioWorkspace& w,const Json& entry) {
+                fields(entry,{"id","type","title","notes","completed","bytes","engine","generator_version","evidence","view","reserved_confirmation_seeds"},{},"study");
+                StudyRecord study;study.id=bounded(entry.at("id"),64,"study ID");
+                if(!study.id.starts_with("study-")) invalid("study","invalid or duplicate ID");
+                const auto suffix=study.id.substr(6);std::uint64_t numeric=0;const auto parsed=std::from_chars(suffix.data(),suffix.data()+suffix.size(),numeric);
+                if(parsed.ec!=std::errc{} || parsed.ptr!=suffix.data()+suffix.size() || !numeric || study.id!="study-"+std::to_string(numeric)) invalid("study","noncanonical ID");
+                study.title=bounded(entry.at("title"),256,"study title");if(study.title.empty())invalid("study","empty title");
+                study.notes=bounded(entry.at("notes"),4096,"study notes");study.completed=bounded(entry.at("completed"),32,"completed");
+                if(bounded(entry.at("engine"),64,"study engine")!=project_engine_version || integer(entry.at("generator_version"),1,"study generator")!=scenario::workload_generator_version) invalid("study","unsupported provenance");
+                const auto& reserved=entry.at("reserved_confirmation_seeds");if(!reserved.is_array() || reserved.size()>32)invalid("reservations","too many confirmation attempts");
+                std::set<std::uint64_t> used_confirmation_seeds;
+                for(const auto& seed_set:reserved) {
+                    if(!seed_set.is_array() || seed_set.empty() || seed_set.size()>analysis::max_replications)invalid("reservations","invalid seed set");
+                    std::vector<std::uint64_t> seeds;for(const auto& value:seed_set) {auto seed=id(value);if(!used_confirmation_seeds.insert(seed).second)invalid("reservations","reused confirmation seed");seeds.push_back(seed);}study.reserved_confirmation_seeds.push_back(std::move(seeds));
+                }
+                const auto evidence=entry.at("evidence").dump();study.serialized_bytes=integer(entry.at("bytes"),max_study_bytes,"study bytes");
+                if(study.serialized_bytes!=evidence.size()) invalid("study","evidence size mismatch");
+                report(w,entry.at("evidence"));study.evidence=w.report_;if(!study.evidence) invalid("study","missing evidence");
+                study.type=study_type(*study.evidence);if(entry.at("type")!=study_type_name(study.type))invalid("study","type mismatch");
+                const auto& view=entry.at("view");fields(view,{"configuration","seed","metric","rectangle"},{},"study view");
+                study.view.configuration=id(view.at("configuration"));study.view.seed=id(view.at("seed"));
+                study.view.metric=static_cast<int>(integer(view.at("metric"),4,"metric"));const auto& rectangle=view.at("rectangle");if(!rectangle.is_array() || rectangle.size()!=4)invalid("view","expected four rectangle endpoints");for(std::size_t i=0;i<4;++i)study.view.rectangle[i]=static_cast<std::uint32_t>(integer(rectangle[i],100000,"rectangle endpoint"));
+        return study;
+    }
+    static void decoder_ids(ScenarioWorkspace& w) {w.next_id_=UINT64_MAX;}
+    static ScenarioWorkspace payload(const Json& j,ProjectInfo& info,ProjectPreferences& prefs,ProjectTimings& timings,std::optional<std::vector<StudyRecord>> decoded={},std::unique_ptr<RestoredRuns> restored={})
     {
         fields(j,{"identity","baseline","draft","draft_origin","candidates","runs","active_run","next_run_id","next_candidate_id","default_speed","preferences","report","preview"},{"draft_workload","draft_origin_workload","study_history","selected_study","next_study_id"},"payload");
         const auto& identity=j.at("identity"); fields(identity,{"id","name","created","saved"},{},"project identity");
@@ -435,7 +434,7 @@ struct ProjectCodec
         info.created=bounded(identity.at("created"),32,"created"); info.saved=bounded(identity.at("saved"),32,"saved");
         ScenarioWorkspace w;
         if(id(j.at("baseline").at("id"))!=0) invalid("baseline","identity must be zero");
-        w.baseline_view_=run(j.at("baseline"),timings); w.baseline_=w.baseline_view_->definition(); w.speed_=number(j.at("default_speed"),0.01,3600,"default playback speed");
+        w.baseline_view_=restored && restored->baseline?std::move(restored->baseline):run(j.at("baseline"),timings); w.baseline_=w.baseline_view_->definition(); w.speed_=number(j.at("default_speed"),0.01,3600,"default playback speed");
         const auto draft=[](const Json& values) {
             if(!values.is_array() || values.size()!=9) invalid("draft","invalid field count"); Draft d;
             for(std::size_t i=0;i<9;++i) d.values[i]=bounded(values[i],4096,"draft field"); return d;
@@ -457,10 +456,11 @@ struct ProjectCodec
             w.candidates_.push_back({candidate_id,std::move(d),bounded(c.at("notes"),4096,"notes"),std::move(changed)});
         }
         ids.clear();
+        std::size_t run_index=0;
         for(const auto& r:runs) {
             const auto run_id=id(r.at("id"));
             if(!run_id || run_id>=w.next_run_id_ || !ids.insert(run_id).second) invalid("run","duplicate or invalid identity");
-            w.runs_.push_back({run_id,run(r,timings)});
+            w.runs_.push_back({run_id,restored?std::move(restored->runs.at(run_index++).controller):run(r,timings)});
         }
         w.active_run_=id(j.at("active_run"));
         if(w.active_run_ && !ids.contains(w.active_run_)) invalid("active run","missing run");
@@ -472,28 +472,16 @@ struct ProjectCodec
             w.next_study_id_=id(j.at("next_study_id"));if(!w.next_study_id_ || w.next_study_id_==UINT64_MAX) invalid("history","invalid next ID");
             std::set<std::string> study_ids;
             for(const auto& entry:history) {
-                fields(entry,{"id","type","title","notes","completed","bytes","engine","generator_version","evidence","view","reserved_confirmation_seeds"},{},"study");
-                StudyRecord study;study.id=bounded(entry.at("id"),64,"study ID");
-                if(!study.id.starts_with("study-") || !study_ids.insert(study.id).second) invalid("study","invalid or duplicate ID");
-                const auto suffix=study.id.substr(6);std::uint64_t numeric=0;const auto parsed=std::from_chars(suffix.data(),suffix.data()+suffix.size(),numeric);
-                if(parsed.ec!=std::errc{} || parsed.ptr!=suffix.data()+suffix.size() || !numeric || numeric>=w.next_study_id_ || study.id!="study-"+std::to_string(numeric)) invalid("study","noncanonical ID");
-                study.title=bounded(entry.at("title"),256,"study title");if(study.title.empty())invalid("study","empty title");
-                study.notes=bounded(entry.at("notes"),4096,"study notes");study.completed=bounded(entry.at("completed"),32,"completed");
-                if(bounded(entry.at("engine"),64,"study engine")!=project_engine_version || integer(entry.at("generator_version"),1,"study generator")!=scenario::workload_generator_version) invalid("study","unsupported provenance");
-                const auto& reserved=entry.at("reserved_confirmation_seeds");if(!reserved.is_array() || reserved.size()>32)invalid("reservations","too many confirmation attempts");
-                std::set<std::uint64_t> used_confirmation_seeds;
-                for(const auto& seed_set:reserved) {
-                    if(!seed_set.is_array() || seed_set.empty() || seed_set.size()>analysis::max_replications)invalid("reservations","invalid seed set");
-                    std::vector<std::uint64_t> seeds;for(const auto& value:seed_set) {auto seed=id(value);if(!used_confirmation_seeds.insert(seed).second)invalid("reservations","reused confirmation seed");seeds.push_back(seed);}study.reserved_confirmation_seeds.push_back(std::move(seeds));
-                }
-                const auto evidence=entry.at("evidence").dump();study.serialized_bytes=integer(entry.at("bytes"),max_study_bytes,"study bytes");
-                if(study.serialized_bytes!=evidence.size()) invalid("study","evidence size mismatch");
-                report(w,entry.at("evidence"));study.evidence=w.report_;if(!study.evidence) invalid("study","missing evidence");
-                study.type=study_type(*study.evidence);if(entry.at("type")!=study_type_name(study.type))invalid("study","type mismatch");
-                const auto& view=entry.at("view");fields(view,{"configuration","seed","metric","rectangle"},{},"study view");
-                study.view.configuration=id(view.at("configuration"));study.view.seed=id(view.at("seed"));
-                study.view.metric=static_cast<int>(integer(view.at("metric"),4,"metric"));const auto& rectangle=view.at("rectangle");if(!rectangle.is_array() || rectangle.size()!=4)invalid("view","expected four rectangle endpoints");for(std::size_t i=0;i<4;++i)study.view.rectangle[i]=static_cast<std::uint32_t>(integer(rectangle[i],100000,"rectangle endpoint"));
-                w.studies_.push_back(std::move(study));if(w.history_bytes()>max_history_bytes)invalid("history","exceeds 192 MiB");
+                w.studies_.push_back(study(w,entry));
+            }
+            if(decoded)w.studies_=std::move(*decoded);
+            for(const auto& study:w.studies_) {
+                if(!study_ids.insert(study.id).second)invalid("study","duplicate ID");
+                const auto suffix=study.id.substr(6);std::uint64_t numeric=0;std::from_chars(suffix.data(),suffix.data()+suffix.size(),numeric);
+                if(numeric>=w.next_study_id_)invalid("study","invalid next study ID");
+                if(study.type!=StudyType::Confirmation)for(auto candidate:study.evidence->candidate_ids)if(candidate>=w.next_id_)invalid("report","invalid historical candidate identity");
+                w.execution().reserve_request_ids(study.evidence->request_id);
+                if(w.history_bytes()>max_history_bytes)invalid("history","exceeds 192 MiB");
             }
             for(const auto& study:w.studies_) if(!study.reserved_confirmation_seeds.empty()) {
                 if(study.type==StudyType::Confirmation)invalid("reservations","confirmation cannot be an exploratory source");
@@ -549,10 +537,17 @@ struct ProjectCodec
         return w;
     }
 };
-std::string comparison_storage_json(const Comparison& r) {return ProjectCodec::report(r).dump();}
+std::string comparison_storage_json(const Comparison& r) {
+    if(r.confirmation)return "{\"confirmation\":"+analysis::serialize_confirmation_report({*r.confirmation,*r.statistics})+",\"kind\":\"confirmation\"}";
+    if(r.interaction)return "{\"interaction\":"+analysis::serialize_interaction_report(*r.interaction)+",\"kind\":\"interaction\"}";
+    if(r.sensitivity)return "{\"kind\":\"sensitivity\",\"sensitivity\":"+analysis::serialize_sensitivity_report(*r.sensitivity)+"}";
+    if(r.statistics)return "{\"kind\":\"paired_statistical\",\"statistics\":"+analysis::serialize_statistical_report(*r.statistics)+"}";
+    return ProjectCodec::report(r).dump();
+}
 std::shared_ptr<const Comparison> parse_comparison_storage_json(std::string_view bytes,std::uint64_t next_candidate) {
     ScenarioWorkspace w;w.next_id_=next_candidate;ProjectCodec::report(w,parse_json(bytes,max_study_bytes));return w.report();
 }
+#include "project_io.inl"
 Project::Project(ScenarioWorkspace& workspace):workspace_(workspace)
 {
     info_={identity(),"Untitled project",timestamp(),{},{}};
@@ -567,76 +562,12 @@ void Project::rename(std::string name)
 std::string Project::marker() const {return ProjectCodec::marker(workspace_,info_,preferences_);}
 
 bool Project::dirty() const {return marker()!=saved_marker_;}
-std::string Project::serialize() const
-{
-    if(workspace_.has_pending_study())throw std::logic_error("Resolve the unretained completed study before saving or recovering the project");
-    const auto began=Timer::now();
-    (void)workspace_.baseline();
-    for(const auto* draft:{&workspace_.draft_,&workspace_.draft_origin_})
-        for(const auto& value:draft->values) (void)bounded(Json(value),4096,"draft field");
-    for(const auto& c:workspace_.candidates_) { (void)bounded(Json(c.notes),4096,"candidate notes");(void)bounded(Json(c.changed_inputs),4096,"candidate changes"); }
-    auto payload=ProjectCodec::payload(workspace_,info_,preferences_); payload["identity"]["saved"]=timestamp();
-    const auto text=payload.dump();
-    Json envelope{{"format","SimForge"},{"version",project_format_version},{"engine",project_engine_version},{"scenario_schema",1},
-        {"features",Json::array({"warehouse_snapshots","clock_phase","historical_reports","independent_runs"})},
-        {"payload_size",text.size()},{"crc32",checksum(text)},{"payload",std::move(payload)}};
-    if(has_workload(envelope.at("payload"))) envelope["features"].push_back("workload_v1");
-    if(has_statistics(envelope.at("payload"))) envelope["features"].push_back("statistics_v1");
-    if(has_interaction(envelope.at("payload")))envelope["features"].push_back("interaction_v1");
-    if(has_sensitivity(envelope.at("payload")))envelope["features"].push_back("sensitivity_v1");
-    auto bytes=envelope.dump();
-    if(bytes.size()>project_max_bytes) throw std::length_error("Project exceeds 256 MiB limit");
-    timings_.serialization_ms=ms(began); timings_.bytes=bytes.size(); return bytes;
-}
-void Project::save(const std::filesystem::path& path,bool save_as,const ProjectWriteHook& hook)
-{
-    auto destination=path.empty()?info_.path:path;
-    if(destination.empty()) throw std::invalid_argument("Choose a project filename with Save As");
-    path_valid(destination);
-    if(destination.extension()!=".simforge") throw std::invalid_argument("Project filename must end in .simforge");
-    destination=std::filesystem::absolute(destination).lexically_normal();
-    const bool associated=!info_.path.empty() && destination==info_.path;
-    if(!save_as && !info_.path.empty() && !associated) throw std::invalid_argument("Use Save As to change project location");
-    const auto total=Timer::now(); const auto bytes=serialize();auto saved_marker=marker();auto saved_time=timestamp();
-    transactional_write(destination,bytes,associated&&!save_as,timings_,hook);
-    info_.path=std::move(destination);info_.saved=std::move(saved_time);saved_marker_=std::move(saved_marker);timings_.total_ms=ms(total);
-}
-void Project::load(const std::filesystem::path& path,bool recovery)
-{
-    path_valid(path); const auto total=Timer::now(); timings_={};
-    const auto bytes=load_text(path,project_max_bytes); timings_.bytes=bytes.size();
-    const auto parsing=Timer::now(); const auto j=parse_json(bytes,project_max_bytes,project_max_json_events); timings_.parsing_ms=ms(parsing);
-    const auto validation=Timer::now();
-    fields(j,{"format","version","engine","scenario_schema","features","payload_size","crc32","payload"},{},"project");
-    if(bounded(j.at("format"),16,"format")!="SimForge") invalid("format","not a SimForge project");
-    const auto version=integer(j.at("version"),std::numeric_limits<std::uint32_t>::max(),"version");if(version!=1 && version!=project_format_version) invalid("version","unsupported project version");
-    if((version==2)!=j.at("payload").contains("study_history")) invalid("history","version and history representation disagree");
-    if(bounded(j.at("engine"),64,"engine")!=project_engine_version || integer(j.at("scenario_schema"),1,"scenario schema")!=1) invalid("engine","incompatible simulation/schema version");
-    const auto legacy_features=Json::array({"warehouse_snapshots","clock_phase","historical_reports","independent_runs"});
-    auto expected_features=legacy_features;if(has_workload(j.at("payload"))) expected_features.push_back("workload_v1");
-    if(has_statistics(j.at("payload"))) expected_features.push_back("statistics_v1");
-    if(has_interaction(j.at("payload")))expected_features.push_back("interaction_v1");
-    if(has_sensitivity(j.at("payload")))expected_features.push_back("sensitivity_v1");
-    if(j.at("features")!=expected_features) invalid("features","unsupported or missing persistence features");
-    const auto payload=j.at("payload").dump();
-    if(integer(j.at("payload_size"),project_max_bytes,"payload size")!=payload.size() ||
-        integer(j.at("crc32"),std::numeric_limits<std::uint32_t>::max(),"crc32")!=checksum(payload)) invalid("project","corrupt project payload");
-    ProjectInfo info; ProjectPreferences prefs;
-    auto replacement=ProjectCodec::payload(j.at("payload"),info,prefs,timings_);
-    timings_.validation_ms=ms(validation)-timings_.restoration_ms-timings_.scene_ms;
-    if(!recovery) info.path=std::filesystem::absolute(path).lexically_normal();
-    auto replacement_marker=ProjectCodec::marker(replacement,info,prefs);
-    auto saved_marker=recovery?std::string{}:replacement_marker;
-    // No current state has changed until here, including metadata/dirty markers.
-    // Destruction joins the old worker.
-    workspace_.execution().cancel(); workspace_.execution().shutdown();
-    workspace_=std::move(replacement); info_=std::move(info); preferences_=std::move(prefs);
-    saved_marker_=std::move(saved_marker);recovery_marker_=std::move(replacement_marker); last_recovery_=Timer::now(); timings_.total_ms=ms(total);
-}
+#include "project_methods.inl"
 void Project::open(const std::filesystem::path& path) {load(path,false);}
-void Project::recover(const std::filesystem::path& path) {load(path,true);workspace_.message_="Recovery restored. Use Save As to choose a primary project file.";}
+void Project::recover(const std::filesystem::path& path) {load(path,true);}
 void Project::create(const scenario::ScenarioDefinition& baseline,std::string name)
 {
+    require_idle();
     if(name.empty() || name.size()>256) throw std::invalid_argument("Invalid project name");
     ScenarioWorkspace replacement(baseline); replacement.view().reset();
     ProjectInfo info{identity(),std::move(name),timestamp(),{},{}};
@@ -648,11 +579,11 @@ bool Project::recover_if_due(const std::filesystem::path& recovery,Timer::time_p
     if(now-last_recovery_<std::chrono::seconds(60)) return false;
     last_recovery_=now;
     if(!dirty()) return false;
-    const auto current=marker(); if(current==recovery_marker_) return false;
+    auto current=marker(); if(current==recovery_marker_) return false;
     path_valid(recovery);
     if(recovery.extension()!=".recovery") throw std::invalid_argument("Recovery requires a separate .recovery file");
     if(!info_.path.empty() && std::filesystem::absolute(recovery).lexically_normal()==info_.path) throw std::invalid_argument("Recovery cannot overwrite primary project");
-    const auto bytes=serialize();transactional_write(recovery,bytes,true,timings_,{});recovery_marker_=current;return true;
+    require_idle();timings_={};const auto began=Timer::now();const auto capture=ProjectCodec::capture(workspace_,info_,preferences_);timings_.snapshot_ms=ms(began);write_project(recovery,capture,true,timings_,{});recovery_marker_=std::move(current);timings_.total_ms=ms(began);return true;
 }
 bool Project::recovery_available(const std::filesystem::path& path)
 {std::error_code error;return std::filesystem::is_regular_file(path,error);}
@@ -664,8 +595,9 @@ void Project::discard_recovery(const std::filesystem::path& path)
 }
 void Project::discard_own_recovery(const std::filesystem::path& path) const
 {
+    require_idle();
     if(!recovery_available(path)) return;
-    const auto j=parse_json(load_text(path,project_max_bytes),project_max_bytes,project_max_json_events);
-    if(j.at("payload").at("identity").at("id")==info_.id) discard_recovery(path);
+    ProjectTimings ignored;const auto loaded=read_project(path,true,ignored,{});
+    if(loaded.info.id==info_.id) discard_recovery(path);
 }
 }
