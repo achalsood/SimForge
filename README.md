@@ -1,5 +1,28 @@
 # SimForge
 
+## Does adding a forklift two hours into a shift improve throughput?
+
+Open **Analysis → Checkpoint Intervention Study**. Select the validated warehouse, enter its exact two-hour checkpoint tick (432000 at 60 Hz or 72000 at 10 Hz), choose **Forklifts → Increase → 1**, and specify distinct paired seeds. The horizon stays with the frozen source scenario.
+
+![Checkpoint setup and intervention timeline](docs/artifacts/checkpoint-setup.png)
+
+Each seed runs once to its own checkpoint, after all events due at that tick. SimForge independently restores control and intervention branches, applies the recorded command, and continues both with exactly matched arrivals and shipment processing requirements. Progress and cancellation use the existing background worker.
+
+![Checkpoint study progress and preserved earlier report](docs/artifacts/checkpoint-progress.png)
+
+Read signed **intervention minus control** effects, the mean paired effect and its nominal 95% interval. In the curated forklift example, 20 paired eight-hour simulations completed 93.95 shipments on average in control and 129.95 with the mid-shift intervention: a mean difference of +36. The selected differences were all +36, so the degenerate [36,36] model interval is explicitly qualified; it does not guarantee future improvement. The separate no-benefit example retains an exact zero effect. The native screenshots use a separate dense-demand scenario.
+
+![Measured per-seed intervention effects](docs/artifacts/checkpoint-paired-effects.png)
+![Paired effect and nominal confidence interval](docs/artifacts/checkpoint-confidence.png)
+
+Inspect a specific seed's queue, command and numerical outcomes, then open either arm's actual playback. Seek before the checkpoint to inspect the shared history; at the checkpoint the intervention can start additional queued work. The identified arm/seed, resource counts and metrics remain visible in the native 3D viewer.
+
+![Explicit-seed outcomes and playback actions](docs/artifacts/checkpoint-seed-inspection.png)
+![Actual control playback at checkpoint](docs/artifacts/checkpoint-control-playback.png)
+![Actual intervention playback at checkpoint](docs/artifacts/checkpoint-intervention-playback.png)
+
+Study History preserves title/notes, paired observations and reconstruction provenance through Save/Open. JSON and summary/per-seed CSV exports retain the frozen inputs and units. Cumulative end metrics and valid post-checkpoint counter-based metrics are separate; utilization has no preferred direction. See the [five measured examples](examples/checkpoint-interventions), [methods, CLI and limitations](docs/checkpoint-intervention-studies.md), and [Commit 33 validation report](docs/commit-33-validation.md).
+
 ## How to tell whether a Poisson demand model represents real warehouse arrivals.
 
 Open a completed demand calibration in **Study History**, inspect its frozen rates, then choose **Demand Diagnostics**. Configure disjoint UTC bins, training or holdout, a predefined high-count threshold, prediction coverage/horizon, replication count and explicit seed. New bin boundaries require the original CSV with its matching SHA-256; saved diagnostic results retain their own bounded counts.

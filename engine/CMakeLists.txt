@@ -47,6 +47,7 @@ endif()
 add_library(simforge_analysis STATIC src/analysis/comparison.cpp src/analysis/experiment_json.cpp src/analysis/report_export.cpp
     src/analysis/demand_calibration.cpp src/analysis/demand_json.cpp src/analysis/demand_hash.cpp
     src/analysis/demand_diagnostics.cpp src/analysis/demand_diagnostics_json.cpp
+    src/analysis/checkpoint_intervention.cpp src/analysis/checkpoint_intervention_json.cpp
     src/analysis/paired_statistics.cpp src/analysis/statistical_experiment.cpp src/analysis/statistical_json.cpp
     src/analysis/sensitivity.cpp src/analysis/sensitivity_json.cpp src/analysis/interaction.cpp src/analysis/interaction_json.cpp src/analysis/confirmation.cpp)
 target_link_libraries(simforge_analysis PUBLIC simforge_engine PRIVATE nlohmann_json::nlohmann_json)
@@ -73,7 +74,7 @@ add_library(simforge_viewer STATIC src/viewer/viewer.cpp src/viewer/presentation
 target_link_libraries(simforge_viewer PUBLIC simforge_visualization)
 target_compile_features(simforge_viewer PUBLIC cxx_std_23)
 add_library(simforge_workspace STATIC src/workspace/scenario_workspace.cpp src/workspace/study_history.cpp src/workspace/workload_draft.cpp src/workspace/experiment_execution.cpp src/workspace/presentation.cpp src/workspace/project.cpp)
-target_sources(simforge_workspace PRIVATE src/workspace/calibration_execution.cpp)
+target_sources(simforge_workspace PRIVATE src/workspace/calibration_execution.cpp src/workspace/checkpoint_study.cpp)
 target_link_libraries(simforge_workspace PUBLIC simforge_viewer simforge_analysis simforge_scenario_language PRIVATE nlohmann_json::nlohmann_json)
 target_compile_features(simforge_workspace PUBLIC cxx_std_23)
 if(MSVC)

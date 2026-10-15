@@ -318,6 +318,10 @@ ExperimentRequest ScenarioWorkspace::capture_request(ComparisonMode mode, analys
 }
 void validate_experiment_request(const ExperimentRequest& request)
 {
+    if(request.checkpoint_study){
+        if(request.confirmation || request.interaction || request.sensitivity || request.replications || request.checkpoint || request.checkpoint_tick || !request.candidates.empty() || request.mode!=ComparisonMode::Initial)throw std::invalid_argument("Checkpoint study cannot mix experiment inputs");
+        analysis::checkpoint::validate(*request.checkpoint_study);return;
+    }
     if(request.confirmation) {
         if(request.interaction || request.sensitivity || request.replications || request.checkpoint || request.checkpoint_tick || !request.candidates.empty() || request.mode!=ComparisonMode::Initial) throw std::invalid_argument("Confirmation cannot mix experiment inputs");
         analysis::validate_confirmation_request(*request.confirmation);return;
@@ -432,6 +436,8 @@ bool ScenarioWorkspace::poll_experiment()
 Comparison execute_experiment(const ExperimentRequest& request, const simulation::ExecutionControl* control)
 {
     validate_experiment_request(request);
+    if(request.checkpoint_study){auto input=*request.checkpoint_study;input.id=request.id;Comparison result;result.request_id=request.id;result.baseline_definition=input.source;result.objective=input.objective;
+        result.checkpoint_study=analysis::checkpoint::run(input,control);result.limitations=result.checkpoint_study->limitations;return result;}
     if(request.confirmation) {
         auto input=*request.confirmation;input.paired.id=request.id;auto r=analysis::run_confirmation(input,control);
         Comparison result;result.request_id=request.id;result.baseline_definition=input.paired.baseline;result.objective=input.paired.objective;
@@ -524,7 +530,7 @@ Comparison execute_experiment(const ExperimentRequest& request, const simulation
 void ScenarioWorkspace::view_result(std::optional<std::string> name)
 {
     if (!report_) throw std::logic_error("Run a comparison first"); const auto& r = *report_;
-    if(r.statistics || r.sensitivity || r.interaction) throw std::logic_error("Aggregate reports have no average warehouse snapshot; select a tested configuration and seed");
+    if(r.checkpoint_study || r.statistics || r.sensitivity || r.interaction) throw std::logic_error("Aggregate reports have no average warehouse snapshot; select a tested configuration and seed");
     auto d = r.baseline_definition; auto expected = r.baseline.metrics; auto capacity = r.baseline.candidate.resources; std::size_t index = 0;
     if(name)
     {
@@ -552,10 +558,11 @@ void ScenarioWorkspace::view_result(std::optional<std::string> name)
 void ScenarioWorkspace::return_to_baseline()
 { select_run(0); }
 std::string comparison_csv(const Comparison& r)
-{ if(r.confirmation)return analysis::serialize_confirmation_csv({*r.confirmation,*r.statistics});if(r.interaction)return analysis::serialize_interaction_csv(*r.interaction);if(r.sensitivity)return analysis::serialize_sensitivity_csv(*r.sensitivity); if(r.statistics) return analysis::serialize_statistical_csv(*r.statistics);return analysis::serialize_comparison_csv(r.baseline,r.candidates); }
+{ if(r.checkpoint_study)return analysis::checkpoint::report_csv(*r.checkpoint_study);if(r.confirmation)return analysis::serialize_confirmation_csv({*r.confirmation,*r.statistics});if(r.interaction)return analysis::serialize_interaction_csv(*r.interaction);if(r.sensitivity)return analysis::serialize_sensitivity_csv(*r.sensitivity); if(r.statistics) return analysis::serialize_statistical_csv(*r.statistics);return analysis::serialize_comparison_csv(r.baseline,r.candidates); }
 std::string comparison_json(const Comparison& r)
 {
 
+    if(r.checkpoint_study)return analysis::checkpoint::report_json(*r.checkpoint_study);
     if(r.confirmation)return analysis::serialize_confirmation_report({*r.confirmation,*r.statistics});
     if(r.interaction)return analysis::serialize_interaction_report(*r.interaction);
     if(r.sensitivity)return analysis::serialize_sensitivity_report(*r.sensitivity);
@@ -583,6 +590,7 @@ void ScenarioWorkspace::export_csv(const std::filesystem::path& path)
 }
 void ScenarioWorkspace::export_seed_csv(const std::filesystem::path& path)
 {
+    if(report_&&report_->checkpoint_study){analysis::detail::save_output(path,analysis::checkpoint::report_csv(*report_->checkpoint_study,true));return;}
     if(report_&&report_->confirmation) {analysis::detail::save_output(path,analysis::serialize_confirmation_csv({*report_->confirmation,*report_->statistics},true,selected_study_));return;}
     if(report_&&report_->interaction) {analysis::save_interaction_csv(path,*report_->interaction,analysis::InteractionCsv::Seeds);return;}
     if(report_&&report_->sensitivity) {analysis::detail::save_output(path,analysis::serialize_sensitivity_csv(*report_->sensitivity,analysis::SensitivityCsv::Seeds));return;}
@@ -596,6 +604,7 @@ void ScenarioWorkspace::export_interaction_csv(const std::filesystem::path& path
 }
 void ScenarioWorkspace::verify_export(std::string_view bytes)
 {
+    if(scenario::detail::parse_json(bytes,analysis::max_report_bytes).contains("checkpoint_report_version")){(void)analysis::checkpoint::parse_report(bytes);return;}
     if(scenario::detail::parse_json(bytes,analysis::max_report_bytes).contains("confirmation_report_version")) {(void)analysis::parse_confirmation_report(bytes);return;}
     if(scenario::detail::parse_json(bytes,analysis::max_report_bytes).contains("interaction_report_version")) {(void)analysis::parse_interaction_report(bytes);return;}
     if(scenario::detail::parse_json(bytes,analysis::max_report_bytes).contains("sensitivity_report_version")) {(void)analysis::parse_sensitivity_report(bytes);return;}

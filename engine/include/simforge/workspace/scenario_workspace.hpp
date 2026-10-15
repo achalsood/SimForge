@@ -4,6 +4,7 @@
 #include <simforge/analysis/sensitivity.hpp>
 #include <simforge/analysis/interaction.hpp>
 #include <simforge/analysis/confirmation.hpp>
+#include <simforge/analysis/checkpoint_intervention.hpp>
 #include <simforge/viewer/viewer.hpp>
 #include <simforge/scenario/scenario_language.hpp>
 #include <simforge/workspace/calibration_execution.hpp>
@@ -40,6 +41,7 @@ enum class ComparisonMode { Initial, Checkpoint };
 enum class Status { Empty, Ready, Modified, Invalid, ComparisonReady, Results, ExportFailed };
 struct Comparison
 {
+    std::optional<analysis::checkpoint::Report> checkpoint_study;
     std::optional<analysis::ConfirmationRequest> confirmation;
     std::optional<analysis::SensitivityReport> sensitivity;
     std::optional<analysis::InteractionReport> interaction;
@@ -63,7 +65,7 @@ struct Comparison
 };
 inline constexpr std::size_t max_studies=32, max_study_bytes=32*1024*1024,
     max_history_bytes=192*1024*1024, max_study_observations=10'100;
-enum class StudyType { SingleSeed, Statistical, Sensitivity, Interaction, Confirmation };
+enum class StudyType { SingleSeed, Statistical, Sensitivity, Interaction, Confirmation, CheckpointIntervention };
 const char* study_type_name(StudyType);
 const char* study_type_label(StudyType);
 StudyType study_type(const Comparison&);
@@ -104,6 +106,7 @@ struct ExperimentRequest
     std::optional<analysis::SensitivityRequest> sensitivity;
     std::optional<analysis::InteractionRequest> interaction;
     std::optional<analysis::ConfirmationRequest> confirmation;
+    std::optional<analysis::checkpoint::Request> checkpoint_study;
 };
 void validate_experiment_request(const ExperimentRequest& request);
 [[nodiscard]] Comparison execute_experiment(const ExperimentRequest& request,
@@ -149,6 +152,9 @@ public:
     void start_experiment(ComparisonMode mode, analysis::Objective objective, std::optional<std::uint64_t> tick = {});
     void start_statistical_experiment(ComparisonMode mode, analysis::Objective objective,const analysis::ReplicationPlan& plan);
     void start_interaction(analysis::InteractionRequest request);
+    void start_checkpoint(analysis::checkpoint::Request request,
+        std::function<void(std::string_view,std::string_view,std::uint64_t,std::uint64_t)> observer = {});
+    void simulate_checkpoint(std::uint64_t seed,bool intervention);
     std::uint64_t add_interaction_candidate(std::uint64_t experiment,std::uint64_t cell,std::string name,std::uint64_t seed);
     void simulate_interaction(std::uint64_t experiment,std::uint64_t cell,std::uint64_t seed);
     void export_interaction_csv(const std::filesystem::path&,bool per_seed=false);

@@ -2,8 +2,9 @@
 #include "dashboard.hpp"
 #include "scenario_language_panel.hpp"
 #include "calibration_panel.hpp"
+#include "checkpoint_panel.hpp"
 #include <simforge/workspace/scenario_workspace.hpp>
-enum class WorkspaceAction { Validate, Revert, Open, Save, Run, Add, Edit, Update, Rename, Duplicate, Remove, Restore, Compare, Cancel, View, Baseline, Json, Csv, SelectRun, RemoveRun, Live, SimulateCandidate, SimulateResult, LoadRun, ApplyLanguage, CsvSeeds, Sweep, SweepCandidate, SweepRun, CsvMarginal, Interaction, InteractionCandidate, InteractionRun, CsvInteractions, CsvInteractionSeeds };
+enum class WorkspaceAction { CheckpointPlayback, Validate, Revert, Open, Save, Run, Add, Edit, Update, Rename, Duplicate, Remove, Restore, Compare, Cancel, View, Baseline, Json, Csv, SelectRun, RemoveRun, Live, SimulateCandidate, SimulateResult, LoadRun, ApplyLanguage, CsvSeeds, Sweep, SweepCandidate, SweepRun, CsvMarginal, Interaction, InteractionCandidate, InteractionRun, CsvInteractions, CsvInteractionSeeds };
 struct WorkspaceCommand
 {
     WorkspaceAction action;
@@ -23,6 +24,7 @@ struct WorkspaceCommand
 struct WorkspaceUI
 {
     CalibrationUI calibration;
+    CheckpointUI checkpoint;
     std::vector<WorkspaceCommand> pending;
     std::string path{"examples/warehouse-baseline.json"}, export_path{"build/warehouse-report.json"}, save_path{"build/warehouse-alternative.json"};
     std::string candidate_name, notes, error, result_name;

@@ -16,6 +16,9 @@ void apply_workspace(workspace::ScenarioWorkspace& w, const WorkspaceCommand& c)
 {
     switch(c.action)
     {
+    case WorkspaceAction::CheckpointPlayback:
+        if(!w.report() || !w.report()->checkpoint_study || w.report()->request_id!=c.id)throw std::invalid_argument("Checkpoint study selection changed");
+        w.simulate_checkpoint(c.seed,c.approved);break;
     case WorkspaceAction::Validate: (void)w.validate_draft(); break;
     case WorkspaceAction::Revert: w.revert(c.discard); break;
     case WorkspaceAction::Open: w.open(std::filesystem::u8path(c.text),c.discard); break;
@@ -162,7 +165,19 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
         if(ui.calibration.open){draw_calibration(w,ui.calibration,s);ImGui::End();return;}
     }
     const auto progress = w.execution().progress();
-    if(ui.analysis_page) {draw_interaction_setup(w,ui,s);if(!ui.interaction){if(ImGui::GetContentRegionAvail().x/s>500)ImGui::SameLine();draw_sensitivity_setup(w,ui,s);if(!ui.sensitivity)draw_statistical_setup(w,ui,s);}}
+    if(ui.analysis_page){
+        ImGui::Checkbox("Checkpoint Intervention Study",&ui.checkpoint.open);ui.checkpoint.toggle=center();
+        if(ui.checkpoint.open){
+            ImGui::BeginChild("Checkpoint study workspace",{0,0});
+            draw_checkpoint_setup(w,ui.checkpoint,s);
+            if(w.report() && w.report()->checkpoint_study){draw_checkpoint_results(w,ui.checkpoint,s);
+                if(ui.checkpoint.playback_requested){WorkspaceCommand command{WorkspaceAction::CheckpointPlayback};command.id=w.report()->request_id;command.seed=ui.checkpoint.playback_seed;command.approved=*ui.checkpoint.playback_requested;queue(std::move(command));ui.checkpoint.playback_requested.reset();}}
+            if(!ui.error.empty())ImGui::TextWrapped("%s",ui.error.c_str());
+            if(const auto attempt=w.execution().last_unsuccessful_attempt();attempt && !attempt->error.empty())ImGui::TextWrapped("Previous attempt: %s",attempt->error.c_str());
+            ImGui::EndChild();ImGui::End();return;
+        }
+    }
+    if(ui.analysis_page && !ui.checkpoint.open) {if(ImGui::GetContentRegionAvail().x/s>600)ImGui::SameLine();draw_interaction_setup(w,ui,s);if(!ui.interaction){if(ImGui::GetContentRegionAvail().x/s>500)ImGui::SameLine();draw_sensitivity_setup(w,ui,s);if(!ui.sensitivity)draw_statistical_setup(w,ui,s);}}
     if (progress.request_id != 0 && ui.analysis_page && !(progress.total_replications && !progress.active()))
     {
         ImGui::Separator();
@@ -418,6 +433,7 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
                 if(ImGui::Button("Configure an experiment",{240*s,36*s})) ui.requested_tab=0;
                 if(!w.viewing_baseline() && ImGui::Button("Return to preserved baseline",{-1,36*s})) queue({WorkspaceAction::Baseline});
             }
+            else if(w.report()->checkpoint_study) {draw_checkpoint_results(w,ui.checkpoint,s);if(ui.checkpoint.playback_requested){WorkspaceCommand command{WorkspaceAction::CheckpointPlayback};command.id=w.report()->request_id;command.seed=ui.checkpoint.playback_seed;command.approved=*ui.checkpoint.playback_requested;queue(std::move(command));ui.checkpoint.playback_requested.reset();}}
             else if(w.report()->interaction) draw_interaction_results(w,ui,s);
             else if(w.report()->sensitivity) draw_sensitivity_results(w,ui,s);
             else if(w.report()->statistics) draw_statistical_results(w,ui,s);

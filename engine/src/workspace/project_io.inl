@@ -18,6 +18,7 @@ void emit_project(const ProjectCodec::Capture& capture,const Sink& sink,ProjectT
     auto features=Json::array({"warehouse_snapshots","clock_phase","historical_reports","independent_runs"});
     bool poisson=has_poisson(capture.metadata),coverage=false;
     for(const auto& run:capture.runs)poisson|=scenario::workload::poisson(std::get<scenario::WarehouseConfig>(run.definition.domain));
+    bool checkpoint_study=false;
     bool workload=has_workload(capture.metadata),statistics=has_statistics(capture.metadata),interaction=has_interaction(capture.metadata),sensitivity=has_sensitivity(capture.metadata);
     out("{\"payload\":");payload_out("{");bool first=true;
     for(const auto& [key,value]:capture.metadata.items()) {
@@ -34,7 +35,7 @@ void emit_project(const ProjectCodec::Capture& capture,const Sink& sink,ProjectT
                 if(evidence.size()!=study.serialized_bytes || evidence.size()>max_study_bytes)invalid("study","evidence size mismatch");
                 history+=evidence.size();if(history>max_history_bytes)invalid("history","exceeds 192 MiB");
                 workload|=evidence.find("\"workload\":")!=std::string::npos;
-                statistics|=bool(study.evidence->statistics);interaction|=bool(study.evidence->interaction);sensitivity|=bool(study.evidence->sensitivity);
+                checkpoint_study|=bool(study.evidence->checkpoint_study);statistics|=bool(study.evidence->statistics);interaction|=bool(study.evidence->interaction);sensitivity|=bool(study.evidence->sensitivity);
                 Json entry{{"id",study.id},{"type",study_type_name(study.type)},{"title",study.title},{"notes",study.notes},{"completed",study.completed},{"bytes",evidence.size()},{"engine",project_engine_version},{"generator_version",scenario::workload_generator_version},{"evidence",nullptr},{"reserved_confirmation_seeds",study.reserved_confirmation_seeds},{"view",{{"configuration",study.view.configuration},{"seed",study.view.seed},{"metric",study.view.metric},{"rectangle",study.view.rectangle}}}};
                 if(i)payload_out(",");payload_out("{");bool field_first=true;
                 for(const auto& [name,field]:entry.items()){if(!field_first)payload_out(",");field_first=false;payload_out(Json(name).dump());payload_out(":");payload_out(name=="evidence"?std::string_view(evidence):std::string_view(field.dump()));}
@@ -66,6 +67,7 @@ void emit_project(const ProjectCodec::Capture& capture,const Sink& sink,ProjectT
     }
     payload_out("}");control.phase("integrity_finalization",total,capture.studies.size());
     if(workload)features.push_back("workload_v1");if(statistics)features.push_back("statistics_v1");if(interaction)features.push_back("interaction_v1");if(sensitivity)features.push_back("sensitivity_v1");
+    if(checkpoint_study)features.push_back("checkpoint_intervention_v1");
     if(capture.metadata.contains("demand_calibrations"))features.push_back("demand_calibration_v1");
     if(capture.metadata.contains("demand_diagnostics"))features.push_back("demand_diagnostics_v1");
     if(poisson)features.push_back("poisson_arrivals_v2");if(coverage)features.push_back("coverage_windows_v2");
@@ -139,7 +141,7 @@ LoadedProject read_project(const std::filesystem::path& path,bool recovery,Proje
     bool diagnostic_active=false,diagnostic_seen=false;std::size_t diagnostic_events=0;
     detail::Digest diagnostic_digest;diagnostic_digest.append("[");
     bool calibration_active=false,calibration_seen=false;std::size_t calibration_events=0;
-    bool poisson=false,coverage=false;
+    bool poisson=false,coverage=false,checkpoint_study=false;
     detail::Digest calibration_digest;calibration_digest.append("[");
     bool history_active=false,history_seen=false,runs_active=false,runs_seen=false,workload=false,statistics=false,interaction=false,sensitivity=false;
     auto restored=std::make_unique<ProjectCodec::RestoredRuns>();Json baseline_summary,runs_summary=Json::array();
@@ -166,6 +168,7 @@ LoadedProject read_project(const std::filesystem::path& path,bool recovery,Proje
             auto& keys=objects.back();if(keys.size()>=64)throw std::length_error("JSON object field limit exceeded");
             if(std::find(keys.begin(),keys.end(),key)!=keys.end())invalid(key,"duplicate JSON field");keys.push_back(key);
             workload|=key=="workload" || key=="draft_workload" || key=="draft_origin_workload";
+            checkpoint_study|=key=="checkpoint_report_version";
             statistics|=key=="statistics" || key=="statistical_report_version";
             interaction|=key=="interaction" || key=="interaction_report_version";
             sensitivity|=key=="sensitivity" || key=="sensitivity_report_version";
@@ -243,6 +246,7 @@ LoadedProject read_project(const std::filesystem::path& path,bool recovery,Proje
     if(bounded(j.at("engine"),64,"engine")!=project_engine_version || integer(j.at("scenario_schema"),1,"scenario schema")!=1)invalid("engine","incompatible simulation/schema version");
     auto features=Json::array({"warehouse_snapshots","clock_phase","historical_reports","independent_runs"});
     if(workload||has_workload(payload))features.push_back("workload_v1");if(statistics||has_statistics(payload))features.push_back("statistics_v1");if(interaction||has_interaction(payload))features.push_back("interaction_v1");if(sensitivity||has_sensitivity(payload))features.push_back("sensitivity_v1");
+    if(checkpoint_study)features.push_back("checkpoint_intervention_v1");
     if(calibration_seen)features.push_back("demand_calibration_v1");
     if(diagnostic_seen)features.push_back("demand_diagnostics_v1");
     if(poisson)features.push_back("poisson_arrivals_v2");if(coverage)features.push_back("coverage_windows_v2");

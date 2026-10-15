@@ -221,7 +221,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
                 }
                 if(c.action==WorkspaceAction::View || c.action==WorkspaceAction::Run || c.action==WorkspaceAction::Baseline ||
                     c.action==WorkspaceAction::SelectRun || c.action==WorkspaceAction::RemoveRun || c.action==WorkspaceAction::Live || c.action==WorkspaceAction::LoadRun ||
-                    c.action==WorkspaceAction::SimulateCandidate || c.action==WorkspaceAction::SimulateResult)
+                    c.action==WorkspaceAction::SimulateCandidate || c.action==WorkspaceAction::SimulateResult || c.action==WorkspaceAction::CheckpointPlayback)
                 { workspace_ui.requested_tab=-1; ui_state.panels.mode=viewer::ApplicationMode::Simulation; ui_state.panels.workspace=false; ui_state.panel_changed=ui_state.workspace_changed=true;
                   ui_state.seeking=false; ui_state.last_selection.reset(); ui_state.feedback.clear(); ui_state.feedback_tick.reset(); }
             }
@@ -279,7 +279,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         controller.set_viewport(dashboard_viewport(controller,ui_state),ui_state.panel_changed); ui_state.panel_changed = false;
         ui_state.results_available=bool(workspace.report());
         ui_state.viewing_baseline=workspace.viewing_baseline();
-        ui_state.statistical_report=workspace.report() && (workspace.report()->statistics.has_value() || workspace.report()->sensitivity.has_value() || workspace.report()->interaction.has_value());
+        ui_state.statistical_report=workspace.report() && (workspace.report()->checkpoint_study.has_value() || workspace.report()->statistics.has_value() || workspace.report()->sensitivity.has_value() || workspace.report()->interaction.has_value());
         ui_state.run_identity=workspace.viewed_identity(); ui_state.active_run=workspace.active_run_id();
         ui_state.runs={{0,"Original Baseline: "+workspace.baseline().name}};
         for (const auto& run : workspace.runs()) ui_state.runs.emplace_back(run.id,run.controller->name()+" / Run #"+std::to_string(run.id));
@@ -357,6 +357,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
     #include "calibration_diagnostic.inl"
     #include "stochastic_coverage_diagnostic.inl"
     #include "demand_diagnostics_diagnostic.inl"
+    #include "checkpoint_diagnostic.inl"
     if(smoke_frames && project_path && std::getenv("SIMFORGE_STUDY_TEST_PATH")) {
         require(workspace.studies().size()==4 && workspace.report() && workspace.report()->confirmation,"Study history/lineage not restored");
         require(workspace.execution().progress().state==workspace::ExecutionState::Idle,"Study restore reran an experiment");
@@ -425,7 +426,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         require(workspace.view().runtime().capture_snapshot()==saved && workspace.view().orbit_camera().pose()==camera,"Aggregate analysis changed restored live state or camera");
         std::cout<<"Statistical fresh process: exact raw pairs, intervals, settings and live state restored without running an experiment or creating an average snapshot.\n";
     }
-    if(smoke_frames && project_path && !std::getenv("SIMFORGE_STATISTICAL_TEST_PATH") && !std::getenv("SIMFORGE_SENSITIVITY_TEST_PATH") && !std::getenv("SIMFORGE_INTERACTION_TEST_PATH") && !std::getenv("SIMFORGE_STUDY_TEST_PATH") && !std::getenv("SIMFORGE_PERSISTENCE_TEST_PATH") && !std::getenv("SIMFORGE_CALIBRATION_TEST_PATH") && !std::getenv("SIMFORGE_STOCHASTIC_COVERAGE_TEST_PATH") && !std::getenv("SIMFORGE_DEMAND_DIAGNOSTICS_TEST_PATH")) {
+    if(smoke_frames && project_path && !std::getenv("SIMFORGE_STATISTICAL_TEST_PATH") && !std::getenv("SIMFORGE_SENSITIVITY_TEST_PATH") && !std::getenv("SIMFORGE_INTERACTION_TEST_PATH") && !std::getenv("SIMFORGE_STUDY_TEST_PATH") && !std::getenv("SIMFORGE_PERSISTENCE_TEST_PATH") && !std::getenv("SIMFORGE_CALIBRATION_TEST_PATH") && !std::getenv("SIMFORGE_STOCHASTIC_COVERAGE_TEST_PATH") && !std::getenv("SIMFORGE_CHECKPOINT_TEST_PATH") && !std::getenv("SIMFORGE_DEMAND_DIAGNOSTICS_TEST_PATH")) {
         const auto saved=workspace.view().runtime().capture_snapshot();const auto saved_clock=workspace.view().runtime().clock().capture_snapshot();
         const auto saved_camera=workspace.view().orbit_camera().pose();const auto active=workspace.active_run_id();
         submit();submit();diagnostic_failure_probe();capture("project-restored");
@@ -623,7 +624,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         require(std::filesystem::exists(project_ui.test_path) && project_ui.error.empty(),"Statistical project save failed");capture("statistical-project");
         std::cout<<"Statistical graphics: native setup, real progress, camera navigation, cancellation preservation, paired intervals/raw details, exports, save, resize and aggregate-only semantics verified.\n";
     }
-    if (smoke_frames && !project_path && !std::getenv("SIMFORGE_WORKLOAD_TEST_PATH") && !std::getenv("SIMFORGE_STATISTICAL_TEST_PATH") && !std::getenv("SIMFORGE_SENSITIVITY_TEST_PATH") && !std::getenv("SIMFORGE_INTERACTION_TEST_PATH") && !std::getenv("SIMFORGE_STUDY_TEST_PATH") && !std::getenv("SIMFORGE_PERSISTENCE_TEST_PATH") && !std::getenv("SIMFORGE_CALIBRATION_TEST_PATH") && !std::getenv("SIMFORGE_STOCHASTIC_COVERAGE_TEST_PATH") && !std::getenv("SIMFORGE_DEMAND_DIAGNOSTICS_TEST_PATH"))
+    if (smoke_frames && !project_path && !std::getenv("SIMFORGE_WORKLOAD_TEST_PATH") && !std::getenv("SIMFORGE_STATISTICAL_TEST_PATH") && !std::getenv("SIMFORGE_SENSITIVITY_TEST_PATH") && !std::getenv("SIMFORGE_INTERACTION_TEST_PATH") && !std::getenv("SIMFORGE_STUDY_TEST_PATH") && !std::getenv("SIMFORGE_PERSISTENCE_TEST_PATH") && !std::getenv("SIMFORGE_CALIBRATION_TEST_PATH") && !std::getenv("SIMFORGE_STOCHASTIC_COVERAGE_TEST_PATH") && !std::getenv("SIMFORGE_CHECKPOINT_TEST_PATH") && !std::getenv("SIMFORGE_DEMAND_DIAGNOSTICS_TEST_PATH"))
     {
         submit(); submit(); diagnostic_failure_probe(); const auto overview = capture("overview");
         require(graphics.info().ui_vertices > 1000 && graphics.info().ui_draw_calls >= 3,"Dashboard emitted no meaningful UI draw data");

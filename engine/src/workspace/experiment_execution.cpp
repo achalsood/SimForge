@@ -30,6 +30,7 @@ std::uint64_t ExperimentExecution::start(ExperimentRequest request, Observer obs
     if (next_id_ == std::numeric_limits<std::uint64_t>::max()) throw std::overflow_error("Request identities exhausted");
     if (worker_.joinable()) worker_.join();
     request.id = next_id_++;
+    if(request.checkpoint_study)request.checkpoint_study->id=request.id;
     if(request.sensitivity)request.sensitivity->id=request.id;
     if(request.interaction)request.interaction->id=request.id;
     if(request.confirmation)request.confirmation->paired.id=request.id;
@@ -39,6 +40,7 @@ std::uint64_t ExperimentExecution::start(ExperimentRequest request, Observer obs
         result_.reset(); progress_ = {}; progress_.request_id = id;
         progress_.total_candidates = request.candidates.size(); progress_.state = ExecutionState::Preparing;
         progress_.candidates_per_replication=request.candidates.size();
+        if(request.checkpoint_study){progress_.total_replications=request.checkpoint_study->plan.count;progress_.candidates_per_replication=1;progress_.total_candidates=request.checkpoint_study->plan.count;}
         if(request.replications) {progress_.total_replications=request.replications->count;progress_.total_candidates*=request.replications->count;}
         if(request.sensitivity) {progress_.sensitivity=true;progress_.parameter=analysis::parameter_name(request.sensitivity->parameter);progress_.total_replications=request.sensitivity->plan.count;progress_.candidates_per_replication=request.sensitivity->values.size();progress_.total_candidates=progress_.candidates_per_replication*progress_.total_replications;}
         if(request.interaction) {progress_.interaction=true;progress_.x_parameter=analysis::parameter_name(request.interaction->x);progress_.y_parameter=analysis::parameter_name(request.interaction->y);progress_.total_replications=request.interaction->plan.count;progress_.candidates_per_replication=request.interaction->x_values.size()*request.interaction->y_values.size();progress_.total_candidates=progress_.candidates_per_replication*progress_.total_replications;}

@@ -14,6 +14,7 @@
 #include <simforge/analysis/interaction.hpp>
 #include <simforge/analysis/confirmation.hpp>
 #include <simforge/analysis/demand_diagnostics.hpp>
+#include <simforge/analysis/checkpoint_intervention.hpp>
 #include <simforge/workspace/project.hpp>
 #include <nlohmann/json.hpp>
 #include <fstream>
@@ -261,6 +262,19 @@ int experiment_workflow(const Options& options)
                 if(options.export_seeds)save_sensitivity_csv(*options.export_seeds,report,SensitivityCsv::Seeds);
                 if(options.export_marginal)save_sensitivity_csv(*options.export_marginal,report,SensitivityCsv::Marginal);return 0;
             }catch(const simforge::simulation::ExecutionCancelled& e) {std::cerr<<e.what()<<'\n';return 5;}catch(const std::invalid_argument& e) {std::cerr<<e.what()<<'\n';return 2;}catch(const std::exception& e) {std::cerr<<e.what()<<'\n';return 4;}
+        }
+        if(specification.is_object() && specification.value("mode",std::string{})=="paired_checkpoint_intervention"){
+            if(options.export_marginal || options.export_interactions || options.export_interaction_seeds)throw std::invalid_argument("Checkpoint studies support JSON, summary CSV and per-seed CSV");
+            std::ifstream request_file(*options.experiment,std::ios::binary);
+            const std::string request_bytes{std::istreambuf_iterator<char>(request_file),std::istreambuf_iterator<char>()};
+            const auto request=checkpoint::parse_request(request_bytes);const auto report=checkpoint::run(request);
+            std::cout<<"SimForge Paired Checkpoint Intervention | "<<request.plan.count<<" seeds | checkpoint tick "<<request.checkpoint_tick<<" | after due events | raw intervention minus control\n";
+            const auto& summary=report.end_metrics[static_cast<std::size_t>(objective_metric(request.objective))];
+            std::cout<<"Mean paired effect: "<<(summary.mean_difference?std::to_string(*summary.mean_difference):"unavailable")<<" | nominal 95% paired interval: "<<(summary.lower?std::to_string(*summary.lower)+", "+std::to_string(*summary.upper):"unavailable")<<"\n";
+            if(options.export_json)checkpoint::save_report(*options.export_json,report);
+            if(options.export_csv)checkpoint::save_csv(*options.export_csv,report);
+            if(options.export_seeds)checkpoint::save_csv(*options.export_seeds,report,true);
+            return 0;
         }
         if(specification.is_object() && specification.contains("schema_version") && specification.at("schema_version").is_number_integer() && specification.at("schema_version")==2) {
             if(options.export_marginal)throw std::invalid_argument("Marginal CSV requires sensitivity experiment");

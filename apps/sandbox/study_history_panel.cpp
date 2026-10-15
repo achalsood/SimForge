@@ -38,8 +38,9 @@ std::uint64_t selection(const workspace::Comparison& r,const WorkspaceUI& ui) {
 void restore_view(workspace::ScenarioWorkspace& w,WorkspaceUI& ui) {
     if(ui.history_observed==w.selected_study_id())return;ui.history_observed=w.selected_study_id();
     const auto s=std::find_if(w.studies().begin(),w.studies().end(),[&](const auto& v){return v.id==w.selected_study_id();});if(s==w.studies().end())return;
-    ui.study_title=s->title;ui.study_notes=s->notes;const auto& r=*s->evidence;ui.result_name.clear();ui.result_order.clear();
-    ui.grid_selected=ui.sweep_selected=ui.grid_seed=ui.sweep_seed=ui.grid_rectangle=0;ui.statistical_metric=ui.grid_metric=s->view.metric;
+    ui.study_title=s->title;ui.study_notes=s->notes;const auto& r=*s->evidence;ui.checkpoint.open=bool(r.checkpoint_study);ui.result_name.clear();ui.result_order.clear();
+    ui.grid_selected=ui.sweep_selected=ui.grid_seed=ui.sweep_seed=ui.grid_rectangle=0;ui.statistical_metric=ui.grid_metric=std::clamp(s->view.metric,0,4);
+    if(r.checkpoint_study){ui.checkpoint.open=true;ui.checkpoint.metric=s->view.metric;for(std::size_t i=0;i<r.checkpoint_study->outcomes.size();++i)if(r.checkpoint_study->outcomes[i].seed==s->view.seed)ui.checkpoint.selected_seed=static_cast<int>(i);}
     if(r.confirmation && !s->view.configuration)ui.statistical_metric=static_cast<int>(r.confirmation->objective);
     if(r.interaction)for(std::size_t i=0;i<r.interaction->interactions.size();++i){const auto& rectangle=r.interaction->interactions[i];if(s->view.rectangle==std::array<std::uint32_t,4>{rectangle.x0,rectangle.x1,rectangle.y0,rectangle.y1})ui.grid_rectangle=static_cast<int>(i);}
     if(r.interaction) {for(std::size_t i=0;i<r.interaction->cells.size();++i)if(r.interaction->cells[i].id==s->view.configuration)ui.grid_selected=static_cast<int>(i);const auto seeds=analysis::replication_seeds(r.interaction->request.plan);for(std::size_t i=0;i<seeds.size();++i)if(seeds[i]==s->view.seed)ui.grid_seed=static_cast<int>(i);}
@@ -50,6 +51,7 @@ void restore_view(workspace::ScenarioWorkspace& w,WorkspaceUI& ui) {
 }
 void save_study_view(workspace::ScenarioWorkspace& w,const WorkspaceUI& ui) {
     if(!w.report() || w.selected_study_id().empty())return;const auto& r=*w.report();workspace::StudyViewState v;
+    if(r.checkpoint_study){v.metric=ui.checkpoint.metric;v.seed=r.checkpoint_study->outcomes.at(static_cast<std::size_t>(std::clamp(ui.checkpoint.selected_seed,0,static_cast<int>(r.checkpoint_study->outcomes.size()-1)))).seed;w.study_view(v);return;}
     v.configuration=selection(r,ui);v.metric=r.interaction?ui.grid_metric:ui.statistical_metric;
     if(r.interaction) {if(!r.interaction->interactions.empty()){const auto& rect=r.interaction->interactions[std::min(static_cast<std::size_t>(std::max(0,ui.grid_rectangle)),r.interaction->interactions.size()-1)];v.rectangle={rect.x0,rect.x1,rect.y0,rect.y1};}auto seeds=analysis::replication_seeds(r.interaction->request.plan);v.seed=seeds[std::min(static_cast<std::size_t>(std::max(0,ui.grid_seed)),seeds.size()-1)];}
     if(r.sensitivity) {auto seeds=analysis::replication_seeds(r.sensitivity->request.plan);v.seed=seeds[std::min(static_cast<std::size_t>(std::max(0,ui.sweep_seed)),seeds.size()-1)];}
@@ -85,8 +87,8 @@ void draw_study_history(workspace::ScenarioWorkspace& w,WorkspaceUI& ui,float s)
         for(const auto& record:w.studies()) {
             const auto& r=*record.evidence;ImGui::PushID(record.id.c_str());ImGui::TableNextRow();ImGui::TableNextColumn();
             if(ImGui::Selectable(record.title.c_str(),record.id==w.selected_study_id()))next=record.id;ui.history_open_controls.push_back(center());
-            ImGui::TableNextColumn();const auto count=r.interaction?r.interaction->cells.size():r.sensitivity?r.sensitivity->points.size():r.statistics?r.statistics->candidates.size():r.candidates.size();
-            const auto seeds=r.interaction?r.interaction->replications.size():r.sensitivity?r.sensitivity->replications.size():r.statistics?r.statistics->replications.size():1;
+            ImGui::TableNextColumn();const auto count=r.checkpoint_study?1:r.interaction?r.interaction->cells.size():r.sensitivity?r.sensitivity->points.size():r.statistics?r.statistics->candidates.size():r.candidates.size();
+            const auto seeds=r.checkpoint_study?r.checkpoint_study->outcomes.size():r.interaction?r.interaction->replications.size():r.sensitivity?r.sensitivity->replications.size():r.statistics?r.statistics->replications.size():1;
             ImGui::TextWrapped("%s | %zu configurations | %zu seeds",workspace::study_type_label(record.type),count,seeds);
             ImGui::TableNextColumn();ImGui::TextWrapped("%.2f MiB | %s",record.serialized_bytes/1048576.0,completion(record.completed).c_str());ImGui::PopID();
         }ImGui::EndTable();

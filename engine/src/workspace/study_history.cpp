@@ -16,12 +16,13 @@ const char* study_type_name(StudyType t) {
     case StudyType::Sensitivity:return "sensitivity";
     case StudyType::Interaction:return "interaction";
     case StudyType::Confirmation:return "confirmation";
+    case StudyType::CheckpointIntervention:return "checkpoint_intervention";
     }throw std::invalid_argument("Unknown study type");
 }
 StudyType study_type(const Comparison& r) {
-    if(int(bool(r.statistics))+int(bool(r.sensitivity))+int(bool(r.interaction))>1 || (r.confirmation && !r.statistics))
+    if(int(bool(r.statistics))+int(bool(r.sensitivity))+int(bool(r.interaction))+int(bool(r.checkpoint_study))>1 || (r.confirmation && !r.statistics))
         throw std::invalid_argument("Invalid tagged study evidence");
-    return r.confirmation?StudyType::Confirmation:r.interaction?StudyType::Interaction:r.sensitivity?StudyType::Sensitivity:r.statistics?StudyType::Statistical:StudyType::SingleSeed;
+    return r.checkpoint_study?StudyType::CheckpointIntervention:r.confirmation?StudyType::Confirmation:r.interaction?StudyType::Interaction:r.sensitivity?StudyType::Sensitivity:r.statistics?StudyType::Statistical:StudyType::SingleSeed;
 }
 const char* study_type_label(StudyType t) {
     switch(t) {
@@ -30,6 +31,7 @@ const char* study_type_label(StudyType t) {
     case StudyType::Sensitivity:return "Sensitivity sweep";
     case StudyType::Interaction:return "Interaction grid";
     case StudyType::Confirmation:return "Independent confirmation";
+    case StudyType::CheckpointIntervention:return "Checkpoint Intervention Study";
     }throw std::invalid_argument("Unknown study type");
 }
 namespace {
@@ -58,7 +60,7 @@ void ScenarioWorkspace::publish_study(std::shared_ptr<const Comparison> evidence
     // Report parsers check raw observations, aggregate consistency and provenance without rerunning simulations.
     if(bytes.size()>max_study_bytes) throw std::length_error("Study exceeds 32 MiB evidence limit; existing history retained.");
     (void)parse_comparison_storage_json(bytes,next_id_);
-    const auto observations=evidence->interaction?evidence->interaction->replications.size()*(evidence->interaction->cells.size()+1):
+    const auto observations=evidence->checkpoint_study?evidence->checkpoint_study->outcomes.size()*3:evidence->interaction?evidence->interaction->replications.size()*(evidence->interaction->cells.size()+1):
         evidence->sensitivity?evidence->sensitivity->replications.size()*(evidence->sensitivity->points.size()+1):
         evidence->statistics?evidence->statistics->replications.size()*(evidence->statistics->candidates.size()+4):evidence->executions.size();
     if(observations>max_study_observations) throw std::length_error("Study exceeds 10,100 observation limit");
@@ -103,11 +105,12 @@ void ScenarioWorkspace::delete_study(std::string_view id,bool confirmed) {
     if(selected) {selected_study_.clear();report_.reset();preview_view_.reset();++report_generation_;if(!studies_.empty())select_study(studies_.back().id);}
 }
 void ScenarioWorkspace::study_view(StudyViewState view) {
-    if(view.metric<0 || view.metric>=int(analysis::statistical_metric_count))view.metric=0;
+    if(view.metric<0 || view.metric>=int(report_ && report_->checkpoint_study?analysis::checkpoint::metric_count:analysis::statistical_metric_count))view.metric=0;
     for(auto& s:studies_)if(s.id==selected_study_ && s.view!=view){s.view=view;++persistent_generation_;}
 }
 analysis::ConfirmationRequest ScenarioWorkspace::freeze_confirmation(std::uint64_t selection,const analysis::ReplicationPlan& plan) const {
     if(!report_)throw std::logic_error("Select a completed exploratory study");const auto& r=*report_;
+    if(r.checkpoint_study)throw std::invalid_argument("Checkpoint studies are not fresh-start confirmation sources");
     if(r.confirmation)throw std::invalid_argument("Confirmation outcomes cannot be relabeled as untouched exploration");
     const auto s=std::find_if(studies_.begin(),studies_.end(),[&](const auto& v){return v.id==selected_study_;});
     if(s==studies_.end())throw std::logic_error("Exploratory study is not retained");

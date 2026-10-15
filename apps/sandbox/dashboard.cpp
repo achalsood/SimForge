@@ -382,7 +382,7 @@ DashboardFrame draw_dashboard(const simforge::viewer::ViewerController& v, Dashb
     }
     if (!draft.seeking) draft.seek_tick = state.tick;
     const std::uint64_t zero = 0;
-    if (!layout.compact) { Font font{design::label}; ImGui::TextColored(color(design::secondary),"Plain scenario"); ImGui::SameLine(layout.padding+108*s); }
+    if (!layout.compact) { Font font{design::label}; ImGui::TextColored(color(design::secondary),v.command_history().empty()?"Plain scenario":"Recorded commands"); ImGui::SameLine(layout.padding+108*s); }
     const auto display = format_time(draft.seek_tick,state.tick_rate);
     ImGui::SetNextItemWidth(-1); ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,{8*s,5*s});
     ImGui::BeginDisabled(v.result_preview());

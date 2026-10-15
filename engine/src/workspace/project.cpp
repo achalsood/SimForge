@@ -307,6 +307,7 @@ struct ProjectCodec
     static Json report(const Comparison& r)
     {
 
+        if(r.checkpoint_study)return {{"kind","checkpoint_intervention"},{"checkpoint_study",Json::parse(analysis::checkpoint::report_json(*r.checkpoint_study))}};
         if(r.confirmation)return {{"kind","confirmation"},{"confirmation",Json::parse(analysis::serialize_confirmation_report({*r.confirmation,*r.statistics}))}};
         if(r.interaction)return {{"kind","interaction"},{"interaction",Json::parse(analysis::serialize_interaction_report(*r.interaction))}};
         if(r.sensitivity)return {{"kind","sensitivity"},{"sensitivity",Json::parse(analysis::serialize_sensitivity_report(*r.sensitivity))}};
@@ -325,6 +326,11 @@ struct ProjectCodec
     {
         if(j.is_null()) return;
         if(j.contains("kind")) {
+            if(j.at("kind")=="checkpoint_intervention"){
+                fields(j,{"kind","checkpoint_study"},{},"checkpoint study");Comparison r;r.checkpoint_study=analysis::checkpoint::parse_report(j.at("checkpoint_study").dump());
+                const auto& input=r.checkpoint_study->request;r.request_id=input.id;r.baseline_definition=input.source;r.objective=input.objective;r.limitations=r.checkpoint_study->limitations;const auto request_id=input.id;
+                w.report_=std::make_shared<const Comparison>(std::move(r));++w.report_generation_;w.execution().reserve_request_ids(request_id);return;
+            }
             if(j.at("kind")=="confirmation") {
                 fields(j,{"kind","confirmation"},{},"confirmation project report");
                 auto c=analysis::detail::confirmation_report_value(j.at("confirmation"));Comparison r;r.confirmation=std::move(c.request);r.statistics=std::move(c.paired);
@@ -418,7 +424,7 @@ struct ProjectCodec
         if(w.draft_.workload!=WorkloadDraft{}) j["draft_workload"]=workload_draft_json(w.draft_.workload);
         if(w.draft_origin_.workload!=WorkloadDraft{}) j["draft_origin_workload"]=workload_draft_json(w.draft_origin_.workload);
         for(const auto& c:w.candidates_) j["candidates"].push_back({{"id",c.id},{"definition",definition(c.definition)},{"notes",c.notes},{"changed_inputs",c.changed_inputs}});
-        if(w.preview_view_ && w.report_ && !w.report_->statistics && !w.report_->sensitivity && !w.report_->interaction) {
+        if(w.preview_view_ && w.report_ && !w.report_->checkpoint_study && !w.report_->statistics && !w.report_->sensitivity && !w.report_->interaction) {
             const auto separator=w.viewed_identity_.find(": "); const auto name=w.viewed_identity_.substr(separator+2);
             j["preview"]=w.preview_report_generation_==w.report_generation_ ? Json(name) : Json{{"unavailable",true}};
         }
@@ -445,7 +451,7 @@ struct ProjectCodec
                 study.type=study_type(*study.evidence);if(entry.at("type")!=study_type_name(study.type))invalid("study","type mismatch");
                 const auto& view=entry.at("view");fields(view,{"configuration","seed","metric","rectangle"},{},"study view");
                 study.view.configuration=id(view.at("configuration"));study.view.seed=id(view.at("seed"));
-                study.view.metric=static_cast<int>(integer(view.at("metric"),4,"metric"));const auto& rectangle=view.at("rectangle");if(!rectangle.is_array() || rectangle.size()!=4)invalid("view","expected four rectangle endpoints");for(std::size_t i=0;i<4;++i)study.view.rectangle[i]=static_cast<std::uint32_t>(integer(rectangle[i],100000,"rectangle endpoint"));
+                study.view.metric=static_cast<int>(integer(view.at("metric"),study.type==StudyType::CheckpointIntervention?7:4,"metric"));const auto& rectangle=view.at("rectangle");if(!rectangle.is_array() || rectangle.size()!=4)invalid("view","expected four rectangle endpoints");for(std::size_t i=0;i<4;++i)study.view.rectangle[i]=static_cast<std::uint32_t>(integer(rectangle[i],100000,"rectangle endpoint"));
         return study;
     }
     static void decoder_ids(ScenarioWorkspace& w) {w.next_id_=UINT64_MAX;}
@@ -509,7 +515,7 @@ struct ProjectCodec
                 if(w.history_bytes()>max_history_bytes)invalid("history","exceeds 192 MiB");
             }
             for(const auto& study:w.studies_) if(!study.reserved_confirmation_seeds.empty()) {
-                if(study.type==StudyType::Confirmation)invalid("reservations","confirmation cannot be an exploratory source");
+                if(study.type==StudyType::Confirmation || study.type==StudyType::CheckpointIntervention)invalid("reservations","study cannot be a fresh-start exploratory source");
                 const auto& r=*study.evidence;
                 auto exploration=r.interaction?analysis::replication_seeds(r.interaction->request.plan):r.sensitivity?analysis::replication_seeds(r.sensitivity->request.plan):r.statistics?analysis::replication_seeds(r.statistics->request.plan):std::vector<std::uint64_t>{r.baseline_definition.simulation.random_seed};
                 if(!r.interaction && !r.sensitivity && !r.statistics)for(const auto& d:r.definitions)if(std::find(exploration.begin(),exploration.end(),d.simulation.random_seed)==exploration.end())exploration.push_back(d.simulation.random_seed);
@@ -570,6 +576,7 @@ struct ProjectCodec
     }
 };
 std::string comparison_storage_json(const Comparison& r) {
+    if(r.checkpoint_study)return "{\"checkpoint_study\":"+analysis::checkpoint::report_json(*r.checkpoint_study)+",\"kind\":\"checkpoint_intervention\"}";
     if(r.confirmation)return "{\"confirmation\":"+analysis::serialize_confirmation_report({*r.confirmation,*r.statistics})+",\"kind\":\"confirmation\"}";
     if(r.interaction)return "{\"interaction\":"+analysis::serialize_interaction_report(*r.interaction)+",\"kind\":\"interaction\"}";
     if(r.sensitivity)return "{\"kind\":\"sensitivity\",\"sensitivity\":"+analysis::serialize_sensitivity_report(*r.sensitivity)+"}";
