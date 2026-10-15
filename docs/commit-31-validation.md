@@ -1,5 +1,7 @@
 # Commit 31 completion and validation
 
+> Publication curation: additional captures cited in this engineering record remain in Commit #33. See [screenshot history and recovery](screenshot-gallery.md#historical-captures).
+
 Scope: seeded count-process arrivals and explicit observation coverage. Baseline was clean at `b88039e8b4cf9e74ddb43027796e06bafda2f0a9`. The local commit uses exactly `feat(workloads): add seeded count-process arrivals and coverage windows`. Its resulting SHA and final clean-tree status are included in the delivery message. No push, publication or subsequent milestone is part of this change.
 
 | # | Requested completion item | Evidence/result |
@@ -78,7 +80,7 @@ The multi-shift reference has 138 training arrivals / 54,000 observed seconds an
 
 - [Release raw benchmark CSV](stochastic-coverage-benchmarks.csv): generator/throughput, multiple seeds, 20-point sensitivity, 64-cell interaction, maximum observations and coverage, Save/Open, cumulative peak memory and cooperative cancellation.
 - [Native maximum-import CSV](native-stochastic-coverage-benchmark.csv): actual frames during one-million-record import across 72 explicit windows, without a timing gate. Detailed interpretation and measured ranges are in the method document.
-- Screens: [setup](artifacts/stochastic-setup.png), [piecewise profile](artifacts/stochastic-piecewise.png), [coverage definition](artifacts/stochastic-coverage-definition.png), [observations/coverage](artifacts/stochastic-coverage.png), [intensity](artifacts/stochastic-intensity.png), [holdout](artifacts/stochastic-holdout.png), [actual realization](artifacts/stochastic-realization.png), [3D playback](artifacts/stochastic-simulation.png), [restored project](artifacts/stochastic-restored.png).
+- Screens: **setup** (archived capture: `stochastic-setup.png`), **piecewise profile** (archived capture: `stochastic-piecewise.png`), **coverage definition** (archived capture: `stochastic-coverage-definition.png`), [observations/coverage](artifacts/stochastic-coverage.png), **intensity** (archived capture: `stochastic-intensity.png`), **holdout** (archived capture: `stochastic-holdout.png`), **actual realization** (archived capture: `stochastic-realization.png`), **3D playback** (archived capture: `stochastic-simulation.png`), **restored project** (archived capture: `stochastic-restored.png`).
 
 Captured on NVIDIA GeForce RTX 5080 Laptop GPU with Vulkan synchronization validation enabled; source Review run `653f8d3585614feebe235eadd190c535`. Images are copied unchanged from actual framebuffer captures. Each is at most 226,942 bytes. Large generated CSVs and successful Test-mode project/capture directories are reclaimed through existing ownership checks; no full projects or million-row inputs are committed.
 

@@ -1,5 +1,7 @@
 # Custom scenario playback
 
+> Publication curation: additional captures cited in this engineering record remain in Commit #33. See [screenshot history and recovery](screenshot-gallery.md#historical-captures).
+
 ## Audit and root cause
 
 Commit 19 (`8188a275d1ff07120073e5115f1621e01fa37223`) already constructed
@@ -210,10 +212,10 @@ resource indicators, shipment inspector timestamps and the final 94/0 result.
 Walkthrough automation provided the mouse/keyboard input; PNG review was performed
 separately.
 
-![New custom warehouse paused at tick zero](artifacts/custom-playback-initial.png)
-![Actual custom shipment processing and timestamps](artifacts/custom-playback-processing.png)
-![Initial candidate played to its actual final state](artifacts/custom-playback-candidate-final.png)
-![Saved JSON loaded and played to its actual final state](artifacts/custom-playback-file-final.png)
+**New custom warehouse paused at tick zero** (archived capture: `custom-playback-initial.png`)
+**Actual custom shipment processing and timestamps** (archived capture: `custom-playback-processing.png`)
+**Initial candidate played to its actual final state** (archived capture: `custom-playback-candidate-final.png`)
+**Saved JSON loaded and played to its actual final state** (archived capture: `custom-playback-file-final.png`)
 
 Runs are retained in memory only, not persisted across application close.
 Seeking replays from the initial snapshot and may cost more for large scenarios;

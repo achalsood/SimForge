@@ -1,5 +1,7 @@
 # Commit 33 completion and validation
 
+> Publication curation: additional captures cited in this engineering record remain in Commit #33. See [screenshot history and recovery](screenshot-gallery.md#historical-captures).
+
 Baseline HEAD was clean at `b08bbefe365b2cb5c2fa1f0fc2b711470afdf8ec`. Local target message: `feat(experiments): add paired multi-seed checkpoint interventions`. The final commit SHA and clean-tree verification are supplied in the delivery because a committed file cannot contain its own hash. No push/publication, release or next milestone is included.
 
 ## Requested completion items
@@ -106,14 +108,14 @@ The largest measured report/project was 317983/320938 bytes; retaining it increa
 Nine unchanged framebuffer PNGs were visually inspected, maximum 257993 bytes. The 640×480 capture shows the actual interval and control mean reachable by scrolling. These are native application outputs, not mockups or edited images.
 
 - [Setup and checkpoint timeline](artifacts/checkpoint-setup.png)
-- [Actual seed/phase/tick progress](artifacts/checkpoint-progress.png)
+- **Actual seed/phase/tick progress** (archived capture: `checkpoint-progress.png`)
 - [Signed per-seed paired effects](artifacts/checkpoint-paired-effects.png)
-- [Mean effect and nominal interval](artifacts/checkpoint-confidence.png)
-- [Explicit seed and paired outcomes](artifacts/checkpoint-seed-inspection.png)
-- [Actual control playback](artifacts/checkpoint-control-playback.png)
+- **Mean effect and nominal interval** (archived capture: `checkpoint-confidence.png`)
+- **Explicit seed and paired outcomes** (archived capture: `checkpoint-seed-inspection.png`)
+- **Actual control playback** (archived capture: `checkpoint-control-playback.png`)
 - [Actual intervention playback](artifacts/checkpoint-intervention-playback.png)
-- [Fresh-process restored study](artifacts/checkpoint-restored.png)
-- [640-pixel interval view](artifacts/checkpoint-compact.png)
+- **Fresh-process restored study** (archived capture: `checkpoint-restored.png`)
+- **640-pixel interval view** (archived capture: `checkpoint-compact.png`)
 
 Only curated PNGs, raw benchmark CSVs and bounded example requests/reports are committed. Generated full projects, benchmark workloads and temporary exports remain outside tracked source. Native Review artifacts use the existing owned-path/lease checks and bounded successful-run retention. Failed exploratory artifacts are removed only after ownership and inactive lease verification.
 

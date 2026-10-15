@@ -1,5 +1,7 @@
 # Two-factor interaction studies
 
+> Publication curation: additional captures cited in this engineering record remain in Commit #33. See [screenshot history and recovery](screenshot-gallery.md#historical-captures).
+
 SimForge measures a bounded joint response to two operational inputs. A one-factor sweep holds the other inputs fixed; this study tests a Cartesian product and measures whether one factor's local effect changes with the other. This is a controlled simulation experiment, not a global optimizer.
 
 ## Requests, bounds and execution
@@ -132,17 +134,17 @@ The curated Release native walkthrough on NVIDIA GeForce RTX 5080 Laptop GPU (AP
 
 The six fixed documentation PNGs below total **1,126,669 bytes**. Native captures use three seeds for a quick walkthrough (mean completed 79 at X=3,Y=3; explicit seed 1001 completed 80), while the curated headless examples above use 20 seeds. Screenshots were inspected for axes, legends, contrast text, selection, source/seed provenance and actual playback resources. At compact window sizes the existing Analysis result panel and heatmap use scrollbars; the entire study is not squeezed into one screen. The native test covers 640 x 480, 1280 x 720 and larger windows, minimize/restore and fresh-process shutdown. Temporary diagnostics remain under the existing three-run retention cap, routine successes reclaim their files, and Debug symbols remain intact.
 
-![Interaction setup](artifacts/interaction-setup.png)
+**Interaction setup** (archived capture: `interaction-setup.png`)
 
-![Measured outcome heatmap](artifacts/interaction-outcome.png)
+**Measured outcome heatmap** (archived capture: `interaction-outcome.png`)
 
-![Adjacent additive interaction heatmap](artifacts/interaction-contrast.png)
+**Adjacent additive interaction heatmap** (archived capture: `interaction-contrast.png`)
 
-![Selected cell and explicit seed](artifacts/interaction-selected.png)
+**Selected cell and explicit seed** (archived capture: `interaction-selected.png`)
 
-![Four-cell contrast for every seed](artifacts/interaction-seeds.png)
+**Four-cell contrast for every seed** (archived capture: `interaction-seeds.png`)
 
-![Independent seed 1001 custom playback](artifacts/interaction-playback.png)
+**Independent seed 1001 custom playback** (archived capture: `interaction-playback.png`)
 
 Actual Release CLI invocations of the same four workload/grid/seed plans measured **30.558 / 222.242 / 796.034 / 863.652 ms**, respectively. These wall times include process launch, specification parsing, statistical aggregation and console output, with no exports. The largest CLI case therefore processed the equivalent measured 17,801,230 engine events at about **20.61 million events/second**. Different timings from the core benchmark reflect measurement/run variation and process overhead, not a claimed implementation speedup; the `headless_cli_ms` column records each invocation.
 

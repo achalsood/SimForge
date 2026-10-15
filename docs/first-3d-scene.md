@@ -1,5 +1,7 @@
 # First 3D viewport
 
+> Publication curation: additional captures cited in this engineering record remain in Commit #33. See [screenshot history and recovery](screenshot-gallery.md#historical-captures).
+
 The graphics sandbox renders a static technical scene: a 16-by-16 floor, a
 one-unit grid and four orange/teal/yellow/violet cubes with different heights.
 Cube face shades are baked vertex colors, not a lighting system. The camera is
@@ -7,7 +9,7 @@ elevated at `(10,11,14)` looking at `(0,0.2,0)`, with a 45-degree vertical FOV.
 Each world unit represents one meter for this demonstration only; this does
 not add spatial geometry or calibration to the warehouse model.
 
-![Verified 1280x720 desktop capture of the static Vulkan scene](artifacts/first-3d-scene.png)
+**Verified 1280x720 desktop capture of the static Vulkan scene** (archived capture: `first-3d-scene.png`)
 
 This PNG is an actual DPI-aware capture of the sandbox's client area, not a mockup.
 The scene was also verified using GPU readback. There are no controls, warehouse

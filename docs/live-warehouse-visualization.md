@@ -1,5 +1,7 @@
 # Live warehouse simulation visualization
 
+> Publication curation: additional captures cited in this engineering record remain in Commit #33. See [screenshot history and recovery](screenshot-gallery.md#historical-captures).
+
 This document records Commit #14. Commit #15 replaces the title-bar metrics and
 Space-only playback with the [interactive dashboard and viewer](interactive-warehouse-viewer.md).
 Its current capture suffixes and input controls are documented there.
@@ -193,12 +195,12 @@ inspected, rather than conceptual images. Client size is 1280-by-720:
 
 | Capture | Authoritative state |
 | --- | --- |
-| [Initial](artifacts/live-warehouse-initial.png) | Tick 0 before initial settlement: no arrivals |
-| [Processing](artifacts/live-warehouse-processing.png) | Settled tick 0: shipment 0 processing, one busy slot per resource |
-| [Queue buildup](artifacts/live-warehouse-queue.png) | 600 s: three arrived, two processing, one waiting |
-| [Final](artifacts/live-warehouse-final.png) | 28,800 s: 96 arrived, 64 started, 63 completed, 32 waiting, one processing; six waiting shown, 26 hidden |
+| **Initial** (archived capture: `live-warehouse-initial.png`) | Tick 0 before initial settlement: no arrivals |
+| **Processing** (archived capture: `live-warehouse-processing.png`) | Settled tick 0: shipment 0 processing, one busy slot per resource |
+| **Queue buildup** (archived capture: `live-warehouse-queue.png`) | 600 s: three arrived, two processing, one waiting |
+| **Final** (archived capture: `live-warehouse-final.png`) | 28,800 s: 96 arrived, 64 started, 63 completed, 32 waiting, one processing; six waiting shown, 26 hidden |
 
-![Live queue buildup at 600 simulated seconds](artifacts/live-warehouse-queue.png)
+**Live queue buildup at 600 simulated seconds** (archived capture: `live-warehouse-queue.png`)
 
 ## Performance observations
 

@@ -1,5 +1,7 @@
 # Paired multi-seed statistical experiments
 
+> Publication curation: additional captures cited in this engineering record remain in Commit #33. See [screenshot history and recovery](screenshot-gallery.md#historical-captures).
+
 Commit #25 adds an explicit statistical experiment mode alongside the original single-seed comparisons. It answers questions about variation across reproducible model realizations, rather than elevating one favorable seed into a general claim. The warehouse engine and version-1 workload sampler remain authoritative. No AI model produces results.
 
 ## Tutorial: does adding a forklift consistently improve throughput?
@@ -207,15 +209,15 @@ Native review on NVIDIA GeForce RTX 5080 Laptop GPU, Vulkan API 1.4.351/loader 1
 
 These are real framebuffer captures, not generated mockups. The native walkthrough uses three seeds for quick lifecycle checks; the tutorial/headless examples use 20. Setup labels, progress identity, effect signs/intervals, per-seed rows and restored report were inspected. The tests provide scripted native interaction; no additional unscripted manual session is claimed.
 
-![Statistical configuration with labeled count, policy, seed and mode](artifacts/statistical-setup.png)
+**Statistical configuration with labeled count, policy, seed and mode** (archived capture: `statistical-setup.png`)
 
-![Real seed/candidate/tick progress with the previous report preserved](artifacts/statistical-progress.png)
+**Real seed/candidate/tick progress with the previous report preserved** (archived capture: `statistical-progress.png`)
 
 ![Paired effects and nominal intervals, distinct from point ranking](artifacts/statistical-results.png)
 
-![Raw seed-level average-wait differences](artifacts/statistical-per-seed.png)
+**Raw seed-level average-wait differences** (archived capture: `statistical-per-seed.png`)
 
-![Restored completed report without a running worker or average snapshot](artifacts/statistical-restored.png)
+**Restored completed report without a running worker or average snapshot** (archived capture: `statistical-restored.png`)
 
 ## Changed-file map
 

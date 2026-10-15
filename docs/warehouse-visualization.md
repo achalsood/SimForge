@@ -1,5 +1,7 @@
 # Scenario-driven warehouse visualization
 
+> Publication curation: additional captures cited in this engineering record remain in Commit #33. See [screenshot history and recovery](screenshot-gallery.md#historical-captures).
+
 For interactive custom scenarios, see [custom scenario playback](custom-scenario-playback.md).
 Live scenes retain all validated capacity and show at most 256 slots per resource
 with a dashboard notice; this historical static-mode guide retains its original bounds.
@@ -13,7 +15,7 @@ This document records Commit #13's static mode, which remains available unchange
 Commit #14 adds opt-in [live operational visualization](live-warehouse-visualization.md)
 with actual shipment identities and runtime capacity/usage observations.
 
-![Verified SimForge warehouse desktop client](artifacts/warehouse-scene.png)
+**Verified SimForge warehouse desktop client** (archived capture: `warehouse-scene.png`)
 
 ## Ownership and dependencies
 

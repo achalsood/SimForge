@@ -1,5 +1,7 @@
 # SimForge visual design
 
+> Publication curation: additional captures cited in this engineering record remain in Commit #33. See [screenshot history and recovery](screenshot-gallery.md#historical-captures).
+
 Commit #18 gives the existing simulation and analysis workflow a distinct visual
 identity. The reference dashboard informed the level of polish and scene presence;
 SimForge uses its own composition, industrial geometry and interaction system.
@@ -227,14 +229,14 @@ identify the read-only final result, and **Return baseline** is prominent.
 
 | View | 1280×720 | 1600×900 | 1920×1080 |
 |---|---|---|---|
-| Simulation overview at 2 h | [PNG](artifacts/visual-design-simulation-1280.png) | [PNG](artifacts/visual-design-simulation-1600.png) | [PNG](artifacts/visual-design-simulation-1920.png) |
-| Scenario editor | [PNG](artifacts/visual-design-editor-1280.png) | [PNG](artifacts/visual-design-editor-1600.png) | [PNG](artifacts/visual-design-editor-1920.png) |
-| Analysis results | [PNG](artifacts/visual-design-analysis-1280.png) | [PNG](artifacts/visual-design-analysis-1600.png) | [PNG](artifacts/visual-design-analysis-1920.png) |
-| Candidate final preview | [PNG](artifacts/visual-design-candidate-1280.png) | [PNG](artifacts/visual-design-candidate-1600.png) | [PNG](artifacts/visual-design-candidate-1920.png) |
-| Selected shipment | [PNG](artifacts/visual-design-shipment-1280.png) | [PNG](artifacts/visual-design-shipment-1600.png) | [PNG](artifacts/visual-design-shipment-1920.png) |
+| Simulation overview at 2 h | [PNG](artifacts/visual-design-simulation-1280.png) | **PNG** (archived capture: `visual-design-simulation-1600.png`) | **PNG** (archived capture: `visual-design-simulation-1920.png`) |
+| Scenario editor | [PNG](artifacts/visual-design-editor-1280.png) | **PNG** (archived capture: `visual-design-editor-1600.png`) | **PNG** (archived capture: `visual-design-editor-1920.png`) |
+| Analysis results | **PNG** (archived capture: `visual-design-analysis-1280.png`) | **PNG** (archived capture: `visual-design-analysis-1600.png`) | **PNG** (archived capture: `visual-design-analysis-1920.png`) |
+| Candidate final preview | **PNG** (archived capture: `visual-design-candidate-1280.png`) | **PNG** (archived capture: `visual-design-candidate-1600.png`) | **PNG** (archived capture: `visual-design-candidate-1920.png`) |
+| Selected shipment | **PNG** (archived capture: `visual-design-shipment-1280.png`) | **PNG** (archived capture: `visual-design-shipment-1600.png`) | **PNG** (archived capture: `visual-design-shipment-1920.png`) |
 
-Additional [invalid input](artifacts/visual-design-invalid.png) and
-[640×480 / 200%](artifacts/visual-design-dpi200.png) captures demonstrate validation
+Additional **invalid input** (archived capture: `visual-design-invalid.png`) and
+**640×480 / 200%** (archived capture: `visual-design-dpi200.png`) captures demonstrate validation
 and small-window scrolling. At 1280×720 / 150%, the editor scrolls to advanced
 simulation fields and lower actions; all primary analysis columns remain readable.
 

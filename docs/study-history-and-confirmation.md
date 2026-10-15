@@ -1,5 +1,7 @@
 # Persistent study history and independent confirmation
 
+> Publication curation: additional captures cited in this engineering record remain in Commit #33. See [screenshot history and recovery](screenshot-gallery.md#historical-captures).
+
 SimForge retains completed analytical evidence in a bounded local project. Explore a configuration, freeze one tested choice, and compare that choice with its original baseline on new demand realizations. Confirmation reports remain separate from exploration.
 
 ## Architecture and lifecycle
@@ -110,6 +112,6 @@ Twenty- and hundred-seed confirmations took approximately 15.1 ms and 58.6 ms fo
 Commit #29 substantially reduces the near-limit Save/Open/recovery memory costs and moves persistence to a bounded background worker. See [streaming persistence, cancellation and repeated measurements](persistence-performance.md). Report insertion still validates canonical evidence and can allocate temporary parsed representations; switching shares immutable ownership. Cross-project seed reservation, arbitrary workload coupling, cloud sync and optimization remain outside this milestone.
 
 ![Retained studies](artifacts/study-history.png)
-![Frozen confirmation setup](artifacts/study-confirmation-setup.png)
-![Exploration and independent confirmation](artifacts/study-confirmation-results.png)
-![Compact confirmation view](artifacts/study-compact.png)
+**Frozen confirmation setup** (archived capture: `study-confirmation-setup.png`)
+**Exploration and independent confirmation** (archived capture: `study-confirmation-results.png`)
+**Compact confirmation view** (archived capture: `study-compact.png`)

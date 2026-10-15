@@ -1,5 +1,7 @@
 # Automated sensitivity analysis and bottleneck exploration
 
+> Publication curation: additional captures cited in this engineering record remain in Commit #33. See [screenshot history and recovery](screenshot-gallery.md#historical-captures).
+
 Commit #26 adds bounded one-factor-at-a-time (OFAT) studies to the existing Analysis workspace. Each tested configuration comes from the authoritative warehouse simulation. This is an operational response study under fixed other inputs, not a global optimizer or a financial ROI model.
 
 ## Tutorial: How many forklifts does this warehouse actually need?
@@ -185,17 +187,17 @@ One preceding full Debug attempt hit the existing live-view test's 40-second tim
 
 These are actual bounded framebuffer captures, inspected for readable setup, truthful point/seed/tick progress, source reference, unsmoothed means, signed marginal uncertainty, selection and explicitly seeded independent playback. Six fixed documentation PNGs are retained; temporary tests reuse the existing owned artifact cleanup and three-run review cap.
 
-![Sweep setup](artifacts/sensitivity-setup.png)
+**Sweep setup** (archived capture: `sensitivity-setup.png`)
 
-![Real event-loop progress with prior evidence retained](artifacts/sensitivity-progress.png)
+**Real event-loop progress with prior evidence retained** (archived capture: `sensitivity-progress.png`)
 
 ![Objective response and source reference](artifacts/sensitivity-curve.png)
 
-![Signed adjacent effects and uncertainty](artifacts/sensitivity-marginal.png)
+**Signed adjacent effects and uncertainty** (archived capture: `sensitivity-marginal.png`)
 
-![Selected measured configuration and explicit playback seed](artifacts/sensitivity-selected.png)
+**Selected measured configuration and explicit playback seed** (archived capture: `sensitivity-selected.png`)
 
-![Independent custom playback for three forklifts, seed 1001](artifacts/sensitivity-playback.png)
+**Independent custom playback for three forklifts, seed 1001** (archived capture: `sensitivity-playback.png`)
 
 ## Limitations and next milestone
 

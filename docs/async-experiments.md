@@ -1,5 +1,7 @@
 # Asynchronous experiments
 
+> Publication curation: additional captures cited in this engineering record remain in Commit #33. See [screenshot history and recovery](screenshot-gallery.md#historical-captures).
+
 Commit #19 moves graphical comparisons off the SDL thread. Configure candidates,
 choose the objective and fresh/shared-checkpoint mode, and select **Run comparison**.
 Continue using the camera, playback controls or other application modes. Analysis
@@ -196,8 +198,8 @@ The run presented 546 frames, maintained one scene/UI pipeline generation each,
 validated report exports/replay and native active-worker close/reinitialization,
 and recorded **0 Vulkan errors / 0 warnings**.
 
-Fixed documentation PNGs: [running](artifacts/async-experiment-running.png) and
-[cancelled with prior report](artifacts/async-experiment-cancelled.png).
+Fixed documentation PNGs: **running** (archived capture: `async-experiment-running.png`) and
+**cancelled with prior report** (archived capture: `async-experiment-cancelled.png`).
 The complete managed review is under
 `build/test-artifacts/graphics/latest/9ff5ad245bf44a5faf15d3bc726d4e93/`.
 Review retention keeps three successful runs; successful Test runs reclaim their

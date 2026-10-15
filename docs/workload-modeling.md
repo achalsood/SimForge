@@ -1,5 +1,7 @@
 # Reproducible warehouse workloads
 
+> Publication curation: additional captures cited in this engineering record remain in Commit #33. See [screenshot history and recovery](screenshot-gallery.md#historical-captures).
+
 The generator-1 contracts below remain unchanged. See [seeded Poisson arrivals and explicit observation coverage](stochastic-arrivals-and-coverage.md) for generator 2, its count/time sampling, safety limits and supported-toolchain reproducibility contract.
 
 Commit #24 extends the existing event-driven warehouse engine with demand windows and bounded, seeded variability. It does not introduce another simulator. The engine owns all arrivals, processing requirements, queues, completions and metrics; the renderer consumes observations.
@@ -158,11 +160,11 @@ The footprint check retained existing Debug symbols and bounded artifact policy.
 
 The screenshots are actual renderer captures, inspected for readable controls, bounds, queue metrics, sampled requirements and separation between baseline/custom runs. Small windows retain the existing scrolling editor and inspector; the test also exercises 640x480 and restoration to larger dimensions. No claim of additional unscripted manual interaction is made.
 
-![Measured profile queue of 36 at five hours](artifacts/workload-peak.png)
+**Measured profile queue of 36 at five hours** (archived capture: `workload-peak.png`)
 
-![Editor with both distributions and all four bounds](artifacts/workload-editor.png)
+**Editor with both distributions and all four bounds** (archived capture: `workload-editor.png`)
 
-![Active custom shipment with a stored requirement of 59744 ticks](artifacts/workload-random.png)
+**Active custom shipment with a stored requirement of 59744 ticks** (archived capture: `workload-random.png`)
 
 ## File map
 

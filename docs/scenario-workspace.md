@@ -1,5 +1,7 @@
 # Scenario editing and comparison workspace
 
+> Publication curation: additional captures cited in this engineering record remain in Commit #33. See [screenshot history and recovery](screenshot-gallery.md#historical-captures).
+
 **Current execution:** Comparisons run asynchronously with progress and cancellation. Configure candidates, start, continue interacting, inspect progress, cancel or wait, review and export. Reports retain submitted inputs after edits, failures and cancellation. See [asynchronous experiments](async-experiments.md).
 
 **Current presentation:** Commit #18 adds Simulation, Scenario Editor and Analysis modes, full-width workspace pages, directional lighting and Windows report Save As. See [visual design](visual-design.md) for current controls, screenshots and validation. Historical measurements below describe the milestone that introduced each feature.
@@ -244,17 +246,17 @@ Visually inspected, actual Vulkan readbacks converted losslessly from PPM:
 
 | Capture | Verified purpose |
 | --- | --- |
-| [Graphical launcher](artifacts/scenario-workspace-launcher.png) | Real path input/Open action over the preserved cube demo |
-| [Editor](artifacts/scenario-workspace-editor.png) | Loaded initial values; baseline remains at its original final state |
-| [Invalid draft](artifacts/scenario-workspace-invalid.png) | Negative forklift value and visible validation feedback |
-| [Candidates](artifacts/scenario-workspace-candidates.png) | Explicit mode/objective and Run action |
-| [Initial results](artifacts/scenario-workspace-results.png) | Baseline 63/32 versus initial candidate 94/0 completed/waiting |
-| [Candidate preview](artifacts/scenario-workspace-candidate.png) | Actual candidate geometry, 94 completions and final-result label |
-| [Candidate inspector](artifacts/scenario-workspace-inspector.png) | Real picking/inspection in the candidate scene |
-| [Checkpoint results](artifacts/scenario-workspace-checkpoint.png) | Two-hour intervention comparison |
-| [Probe evidence](artifacts/scenario-workspace-probes.png) | Forklift intervention produces measured +24 completions |
-| [Compact workspace](artifacts/scenario-workspace-compact.png) | Scrollable workspace with essential playback/viewport retained |
-| [640 at 200%](artifacts/scenario-workspace-dpi200.png) | Expanded editor page; header toggle restores playback |
+| **Graphical launcher** (archived capture: `scenario-workspace-launcher.png`) | Real path input/Open action over the preserved cube demo |
+| **Editor** (archived capture: `scenario-workspace-editor.png`) | Loaded initial values; baseline remains at its original final state |
+| **Invalid draft** (archived capture: `scenario-workspace-invalid.png`) | Negative forklift value and visible validation feedback |
+| **Candidates** (archived capture: `scenario-workspace-candidates.png`) | Explicit mode/objective and Run action |
+| **Initial results** (archived capture: `scenario-workspace-results.png`) | Baseline 63/32 versus initial candidate 94/0 completed/waiting |
+| **Candidate preview** (archived capture: `scenario-workspace-candidate.png`) | Actual candidate geometry, 94 completions and final-result label |
+| **Candidate inspector** (archived capture: `scenario-workspace-inspector.png`) | Real picking/inspection in the candidate scene |
+| **Checkpoint results** (archived capture: `scenario-workspace-checkpoint.png`) | Two-hour intervention comparison |
+| **Probe evidence** (archived capture: `scenario-workspace-probes.png`) | Forklift intervention produces measured +24 completions |
+| **Compact workspace** (archived capture: `scenario-workspace-compact.png`) | Scrollable workspace with essential playback/viewport retained |
+| **640 at 200%** (archived capture: `scenario-workspace-dpi200.png`) | Expanded editor page; header toggle restores playback |
 
 ## Performance
 

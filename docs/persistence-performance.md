@@ -1,5 +1,7 @@
 # Streaming project persistence
 
+> Publication curation: additional captures cited in this engineering record remain in Commit #33. See [screenshot history and recovery](screenshot-gallery.md#historical-captures).
+
 Commit #29 keeps the existing v2 JSON schema, snapshot formats and authoritative analysis results. Save, Open and automatic recovery use one bounded background operation. The same engine implementation powers renderer-free verification, benchmarks and synchronous APIs.
 
 ## What a save contains
@@ -110,11 +112,11 @@ These are measured rendered-frame CPU times during the persistence interval, inc
 
 Five inspected PNGs total 852,777 bytes; the existing artifact manager bounds reviewed runs and reclaims successful routine diagnostics:
 
-- [Save progress](artifacts/persistence-save-progress.png)
-- [Open progress and cancellation](artifacts/persistence-open-progress.png)
-- [Cancel Save while later playback remains visible](artifacts/persistence-cancel-save.png)
-- [Restored workspace](artifacts/persistence-restored.png)
-- [Corrupt Open preserves the workspace](artifacts/persistence-corrupt-preserved.png)
+- **Save progress** (archived capture: `persistence-save-progress.png`)
+- **Open progress and cancellation** (archived capture: `persistence-open-progress.png`)
+- **Cancel Save while later playback remains visible** (archived capture: `persistence-cancel-save.png`)
+- **Restored workspace** (archived capture: `persistence-restored.png`)
+- **Corrupt Open preserves the workspace** (archived capture: `persistence-corrupt-preserved.png`)
 
 ## Reproduce and verify
 
@@ -148,11 +150,11 @@ Recommended next milestone: demand-model calibration with explicit fit/holdout p
 - [apps/sandbox/viewer.cpp](../apps/sandbox/viewer.cpp)
 - [benchmarks/CMakeLists.txt](../benchmarks/CMakeLists.txt)
 - [benchmarks/persistence_benchmark.cpp](../benchmarks/persistence_benchmark.cpp)
-- [docs/artifacts/persistence-cancel-save.png](artifacts/persistence-cancel-save.png)
-- [docs/artifacts/persistence-corrupt-preserved.png](artifacts/persistence-corrupt-preserved.png)
-- [docs/artifacts/persistence-open-progress.png](artifacts/persistence-open-progress.png)
-- [docs/artifacts/persistence-restored.png](artifacts/persistence-restored.png)
-- [docs/artifacts/persistence-save-progress.png](artifacts/persistence-save-progress.png)
+- **docs/artifacts/persistence-cancel-save.png** (archived capture: `persistence-cancel-save.png`)
+- **docs/artifacts/persistence-corrupt-preserved.png** (archived capture: `persistence-corrupt-preserved.png`)
+- **docs/artifacts/persistence-open-progress.png** (archived capture: `persistence-open-progress.png`)
+- **docs/artifacts/persistence-restored.png** (archived capture: `persistence-restored.png`)
+- **docs/artifacts/persistence-save-progress.png** (archived capture: `persistence-save-progress.png`)
 - [docs/persistence-before-after.csv](persistence-before-after.csv)
 - [docs/persistence-benchmarks.csv](persistence-benchmarks.csv)
 - [docs/persistence-memory.csv](persistence-memory.csv)

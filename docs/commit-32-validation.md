@@ -1,5 +1,7 @@
 # Commit 32 completion and validation
 
+> Publication curation: additional captures cited in this engineering record remain in Commit #33. See [screenshot history and recovery](screenshot-gallery.md#historical-captures).
+
 Scope: frozen demand-model diagnostics and clearly separated predictive uncertainties. Baseline HEAD was clean at `be1bb002b7565d6cbe9afc054c31a1257a86dbc1`. Target local message: `feat(analysis): add demand diagnostics and predictive uncertainty`. The resulting SHA and post-commit clean-tree status are supplied in the delivery. No push/publication or next milestone is included.
 
 | # | Requested item | Result/evidence |
@@ -89,14 +91,14 @@ Largest measured diagnostic JSON was 1,023,521 bytes; its project was 1,205,684 
 
 Final Review source: `8ebb166139134f1a8e46f76de75709df`. Its 28-step SDL workflow covers source selection/configuration, Run/Cancel/progress, counts/residuals/reference/prediction views, CPU parity, source navigation, report retention/metadata, JSON/CSV export, wrong-fingerprint rejection, project Save/Open and fresh-process reopen, 640/1280/1920 resize, minimize/restore and shutdown. Both successful processes report Vulkan validation 0/0.
 
-- [Setup/frozen rate/confidence](artifacts/diagnostics-setup.png)
+- **Setup/frozen rate/confidence** (archived capture: `diagnostics-setup.png`)
 - [Observed/expected counts](artifacts/diagnostics-counts.png)
-- [Signed residuals and gaps](artifacts/diagnostics-residuals.png)
-- [Actual seeded reference distribution](artifacts/diagnostics-reference.png)
+- **Signed residuals and gaps** (archived capture: `diagnostics-residuals.png`)
+- **Actual seeded reference distribution** (archived capture: `diagnostics-reference.png`)
 - [Distinct predictive uncertainties](artifacts/diagnostics-prediction.png)
-- [Conservative summary/provenance](artifacts/diagnostics-summary.png)
-- [Fresh-process restored metadata/evidence](artifacts/diagnostics-restored.png)
-- [640-pixel prediction view with scrolling](artifacts/diagnostics-compact.png)
+- **Conservative summary/provenance** (archived capture: `diagnostics-summary.png`)
+- **Fresh-process restored metadata/evidence** (archived capture: `diagnostics-restored.png`)
+- **640-pixel prediction view with scrolling** (archived capture: `diagnostics-compact.png`)
 
 PNG files are copied unchanged from real framebuffer captures. Test-mode temporary runs are reclaimed using ownership/path checks; bounded Review evidence remains locally. Only curated captures, raw benchmark CSVs and bounded analytical reference/example reports are committed. No generated full projects, million-row inputs or cross-build temporary exports are committed.
 

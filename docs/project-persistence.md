@@ -1,5 +1,7 @@
 # Project persistence
 
+> Publication curation: additional captures cited in this engineering record remain in Commit #33. See [screenshot history and recovery](screenshot-gallery.md#historical-captures).
+
 SimForge writes project format **2**, extension **.simforge**, and reads formats **1 and 2**. Version 1 migrates its retained report to a stable history entry. The existing scenario/snapshot/clock/report schemas and compatibility identifier `warehouse-2-analysis-1` remain unchanged; unknown versions fail explicitly. Study history and independent confirmation are documented in [study-history-and-confirmation.md](study-history-and-confirmation.md). Commit #29 streaming, background operations, cancellation, ownership, bounds and current measurements are documented in [persistence-performance.md](persistence-performance.md).
 
 ## Saved data
@@ -101,8 +103,8 @@ Validation results: Windows Debug **322/322**, Windows Release **322/322**, rend
 
 Curated real Vulkan readbacks:
 
-- [File menu and project location](artifacts/project-file-menu.png)
-- [Restored custom run](artifacts/project-restored.png)
-- [Continued restored simulation](artifacts/project-continued.png)
+- **File menu and project location** (archived capture: `project-file-menu.png`)
+- **Restored custom run** (archived capture: `project-restored.png`)
+- **Continued restored simulation** (archived capture: `project-continued.png`)
 
 The original milestone had one current report and synchronous saves. Current v2 study history, v1 migration, background Save/Open and measured limits are documented in [persistence-performance.md](persistence-performance.md). Remaining limits include no recent-project list, one recovery slot and no universal power-loss guarantee. Preview camera/scroll positions are temporary; per-playable-run cameras and editor/panel selections are persistent. No external asset/GPU data, database, AI integration or publishing is added.

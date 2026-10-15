@@ -1,5 +1,7 @@
 # Interactive Warehouse Viewer
 
+> Publication curation: additional captures cited in this engineering record remain in Commit #33. See [screenshot history and recovery](screenshot-gallery.md#historical-captures).
+
 Commit #20 adds retained custom playback, run selection, candidate/file launches
 and explicit preview separation. See [custom scenario playback](custom-scenario-playback.md)
 for current ownership, controls, screenshots, headless equivalence and measurements.
@@ -237,16 +239,16 @@ Earlier Commit #15 captures remain in `artifacts/interactive-warehouse-*.png`.
 
 | Capture | State / purpose |
 | --- | --- |
-| [Overview](artifacts/refined-warehouse-overview.png) | Untouched tick zero; undefined utilization N/A |
-| [Queue buildup](artifacts/refined-warehouse-queue-buildup.png) | 2 h: 25 arrivals, 15 completed, eight waiting, two processing; two waiting hidden |
-| [Shipment inspector](artifacts/refined-warehouse-selected.png) | Paused at 20 min; shipment 2 arrival 10 min/start 15 min; completion N/A |
-| [Completed horizon](artifacts/refined-warehouse-final.png) | 8 h: 96 arrivals, 63 completed, 32 waiting, one processing; 26 waiting hidden |
-| [Compact 640](artifacts/refined-warehouse-size-640.png) | Essential playback, separate time row and scene |
-| [1024](artifacts/refined-warehouse-size-1024.png), [1600](artifacts/refined-warehouse-size-1600.png), [1920](artifacts/refined-warehouse-size-1920.png) | Responsive desktop layout; large view exposes Performance |
-| [Warehouse focus](artifacts/refined-warehouse-focus.png) | Reclaimed scene width with camera pose retained |
-| [100%](artifacts/refined-warehouse-dpi-100.png), [125%](artifacts/refined-warehouse-dpi-125.png), [200%](artifacts/refined-warehouse-dpi-200.png) | Diagnostic UI scales at 1280x720; panel scrolling at high scale |
+| **Overview** (archived capture: `refined-warehouse-overview.png`) | Untouched tick zero; undefined utilization N/A |
+| **Queue buildup** (archived capture: `refined-warehouse-queue-buildup.png`) | 2 h: 25 arrivals, 15 completed, eight waiting, two processing; two waiting hidden |
+| **Shipment inspector** (archived capture: `refined-warehouse-selected.png`) | Paused at 20 min; shipment 2 arrival 10 min/start 15 min; completion N/A |
+| **Completed horizon** (archived capture: `refined-warehouse-final.png`) | 8 h: 96 arrivals, 63 completed, 32 waiting, one processing; 26 waiting hidden |
+| **Compact 640** (archived capture: `refined-warehouse-size-640.png`) | Essential playback, separate time row and scene |
+| **1024** (archived capture: `refined-warehouse-size-1024.png`), **1600** (archived capture: `refined-warehouse-size-1600.png`), **1920** (archived capture: `refined-warehouse-size-1920.png`) | Responsive desktop layout; large view exposes Performance |
+| **Warehouse focus** (archived capture: `refined-warehouse-focus.png`) | Reclaimed scene width with camera pose retained |
+| **100%** (archived capture: `refined-warehouse-dpi-100.png`), **125%** (archived capture: `refined-warehouse-dpi-125.png`), **200%** (archived capture: `refined-warehouse-dpi-200.png`) | Diagnostic UI scales at 1280x720; panel scrolling at high scale |
 
-![Refined operational dashboard at completed horizon](artifacts/refined-warehouse-final.png)
+**Refined operational dashboard at completed horizon** (archived capture: `refined-warehouse-final.png`)
 
 ## Before/after measurements
 

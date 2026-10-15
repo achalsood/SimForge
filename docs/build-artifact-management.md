@@ -1,5 +1,7 @@
 # Build footprint and artifact management
 
+> Publication curation: additional captures cited in this engineering record remain in Commit #33. See [screenshot history and recovery](screenshot-gallery.md#historical-captures).
+
 This maintenance change preserves simulation, rendering, Debug information,
 warnings, validation and all previous tests. Measurements use file lengths in
 **MiB (1,048,576 bytes)**, not filesystem allocated/compressed size.
@@ -92,8 +94,8 @@ at 1280×720, 1600×900 and 1920×1080. Copy selected verified PNGs to
 `docs/artifacts/` before their review run ages out. Existing approved PNGs are
 untouched. Direct-encoder examples verified in this task:
 
-- [Simulation](artifacts/artifact-management-simulation.png)
-- [Analysis](artifacts/artifact-management-analysis.png)
+- **Simulation** (archived capture: `artifact-management-simulation.png`)
+- **Analysis** (archived capture: `artifact-management-analysis.png`)
 
 The explicit low-level `--graphics-capture NEW_FILE.png` and `.ppm` exports remain
 available for compatibility and caller-owned destinations. Managed testing and

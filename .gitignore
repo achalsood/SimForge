@@ -1,12 +1,36 @@
 # Build output
 build/
 out/
+build-*/
+cmake-build-*/
+dist/
+vcpkg_installed/
+/vcpkg/
+.cache/
+node_modules/
+# Local scratch projects and generated benchmark datasets belong here.
+scratch/
+tmp/
+benchmark-results/
+benchmark-data/
+# Personal project outputs at the repository root; retain curated fixtures below.
+/*.simforge
+/*.simforge.tmp
+/*.simforge.bak
 # Managed diagnostics stay under build/test-artifacts; never ignore curated docs PNGs.
 test-artifacts/
 *.spv
 *.obj
 *.ilk
 *.pdb
+*.exe
+*.dll
+*.lib
+*.exp
+*.o
+*.a
+*.so
+*.dylib
 
 # IDEs
 .vscode/
@@ -25,6 +49,8 @@ CMakeFiles/
 cmake_install.cmake
 CTestTestfile.cmake
 compile_commands.json
+CMakeUserPresets.json
+Testing/
 
 # Ninja
 .ninja_deps
@@ -37,3 +63,25 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Python environments and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local credentials and recordings; curated documentation PNGs remain explicit.
+.env
+.env.*
+!.env.example
+*.pfx
+*.p12
+*.pem
+id_rsa
+id_ed25519
+.aws/
+.ssh/
+*.mp4
+*.mov
+*.webm

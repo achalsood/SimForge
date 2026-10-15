@@ -1,5 +1,7 @@
 # Offline natural-language warehouse scenarios
 
+> Publication curation: additional captures cited in this engineering record remain in Commit #33. See [screenshot history and recovery](screenshot-gallery.md#historical-captures).
+
 SimForge interprets a bounded English grammar on the CPU. It produces a reviewable
 configuration; simulation results come from the existing warehouse engine. There
 is no model, hosted inference, network request, Python runtime, or new dependency.
@@ -435,18 +437,18 @@ visible approval controls, and actual six-bay/twenty-worker/three-forklift playb
 
 These are real application captures, not generated mockups:
 
-* [Conversational addition](artifacts/scenario-language-conversation-addition.png)
-* [Conversational multiplication](artifacts/scenario-language-conversation-multiplication.png)
-* [Compound association](artifacts/scenario-language-conversation-compound.png)
-* [Missing-quantity diagnostic](artifacts/scenario-language-conversation-ambiguous.png)
-* [Negated request](artifacts/scenario-language-conversation-negated.png)
-* [Approved custom playback](artifacts/scenario-language-conversation-playback.png)
-* [Compact high-DPI review](artifacts/scenario-language-conversation-compact.png)
+* **Conversational addition** (archived capture: `scenario-language-conversation-addition.png`)
+* **Conversational multiplication** (archived capture: `scenario-language-conversation-multiplication.png`)
+* **Compound association** (archived capture: `scenario-language-conversation-compound.png`)
+* **Missing-quantity diagnostic** (archived capture: `scenario-language-conversation-ambiguous.png`)
+* **Negated request** (archived capture: `scenario-language-conversation-negated.png`)
+* **Approved custom playback** (archived capture: `scenario-language-conversation-playback.png`)
+* **Compact high-DPI review** (archived capture: `scenario-language-conversation-compact.png`)
 
-Earlier Commit 22 captures remain available: [input](artifacts/scenario-language-input.png),
-[review](artifacts/scenario-language-review.png), [error](artifacts/scenario-language-error.png),
-[approved editor](artifacts/scenario-language-applied.png), and
-[playback](artifacts/scenario-language-playback.png).
+Earlier Commit 22 captures remain available: **input** (archived capture: `scenario-language-input.png`),
+**review** (archived capture: `scenario-language-review.png`), **error** (archived capture: `scenario-language-error.png`),
+**approved editor** (archived capture: `scenario-language-applied.png`), and
+**playback** (archived capture: `scenario-language-playback.png`).
 
 ## Known limitations and next milestone
 

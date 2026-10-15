@@ -1,5 +1,7 @@
 # Commit 30 delivery and validation
 
+> Publication curation: additional captures cited in this engineering record remain in Commit #33. See [screenshot history and recovery](screenshot-gallery.md#historical-captures).
+
 Validated on October 14, 2026 in `D:\Projects\SimForge`. Starting HEAD was `bbd6f865046d6a7394dc74d815e25d67fb7e4b62` and the working tree was clean. The requested local commit message is `feat(workloads): add demand calibration and holdout validation`. No push, publication, release or subsequent milestone is part of this change.
 
 ## Delivery checklist
@@ -76,10 +78,10 @@ Every row has 30 days of continuous exposure, 20 days training and 720 chronolog
 
 ## Curated native captures
 
-- [Import](artifacts/demand-import.png), [coverage/data quality and counts](artifacts/demand-quality.png), [model/split](artifacts/demand-model.png).
-- [Holdout counts/residuals](artifacts/demand-holdout.png), [fitted daily profile](artifacts/demand-profile.png), [reviewed periodic conversion](artifacts/demand-conversion.png).
-- [Actual calibrated simulation](artifacts/demand-simulation.png), [restored project evidence](artifacts/demand-restored.png).
-- [640-wide compact view](artifacts/demand-compact.png), [1280-wide validation](artifacts/demand-validation-1280.png), [1920-wide validation](artifacts/demand-validation-1920.png).
+- **Import** (archived capture: `demand-import.png`), **coverage/data quality and counts** (archived capture: `demand-quality.png`), **model/split** (archived capture: `demand-model.png`).
+- [Holdout counts/residuals](artifacts/demand-holdout.png), **fitted daily profile** (archived capture: `demand-profile.png`), **reviewed periodic conversion** (archived capture: `demand-conversion.png`).
+- **Actual calibrated simulation** (archived capture: `demand-simulation.png`), **restored project evidence** (archived capture: `demand-restored.png`).
+- **640-wide compact view** (archived capture: `demand-compact.png`), **1280-wide validation** (archived capture: `demand-validation-1280.png`), **1920-wide validation** (archived capture: `demand-validation-1920.png`).
 
 Each PNG is below 222 KiB. Managed test runs reclaim owned temporary outputs; review runs are bounded by the existing artifact manager. The owned million-row native performance fixture is deleted after import. Only curated documentation PNGs and compact measured CSVs are versioned.
 
