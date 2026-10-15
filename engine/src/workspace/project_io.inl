@@ -16,6 +16,8 @@ void emit_project(const ProjectCodec::Capture& capture,const Sink& sink,ProjectT
     const auto out=[&](std::string_view text){if(text.size()>project_max_bytes-total)throw std::length_error("Project exceeds 256 MiB limit");sink(text);total+=text.size();};
     const auto payload_out=[&](std::string_view text){const auto hashing=Timer::now();crc.append(text);timings.integrity_ms+=ms(hashing);payload_bytes+=text.size();out(text);};
     auto features=Json::array({"warehouse_snapshots","clock_phase","historical_reports","independent_runs"});
+    bool poisson=has_poisson(capture.metadata),coverage=false;
+    for(const auto& run:capture.runs)poisson|=scenario::workload::poisson(std::get<scenario::WarehouseConfig>(run.definition.domain));
     bool workload=has_workload(capture.metadata),statistics=has_statistics(capture.metadata),interaction=has_interaction(capture.metadata),sensitivity=has_sensitivity(capture.metadata);
     out("{\"payload\":");payload_out("{");bool first=true;
     for(const auto& [key,value]:capture.metadata.items()) {
@@ -28,6 +30,7 @@ void emit_project(const ProjectCodec::Capture& capture,const Sink& sink,ProjectT
             for(std::size_t i=0;i<capture.studies.size();++i) {
                 control.phase("study_serialization",total,i);const auto& study=capture.studies[i];
                 const auto evidence=comparison_storage_json(*study.evidence);
+                poisson|=evidence.find("\"mode\":\"poisson\"")!=std::string::npos || evidence.find("\"mode\":\"piecewise_poisson\"")!=std::string::npos;
                 if(evidence.size()!=study.serialized_bytes || evidence.size()>max_study_bytes)invalid("study","evidence size mismatch");
                 history+=evidence.size();if(history>max_history_bytes)invalid("history","exceeds 192 MiB");
                 workload|=evidence.find("\"workload\":")!=std::string::npos;
@@ -43,6 +46,7 @@ void emit_project(const ProjectCodec::Capture& capture,const Sink& sink,ProjectT
             for(std::size_t i=0;i<capture.calibrations.size();++i) {
                 control.phase("calibration_serialization",total,i);
                 const auto& record=capture.calibrations[i];const auto evidence=analysis::demand::report_json(*record.evidence);
+                coverage|=!record.evidence->provenance.exposure.windows.empty();for(const auto& c:record.evidence->conversions)poisson|=scenario::workload::poisson(std::get<scenario::WarehouseConfig>(c.scenario.domain));
                 workload|=evidence.find("\"workload\":")!=std::string::npos;
                 if(evidence.size()!=record.serialized_bytes)invalid("calibration","evidence size mismatch");
                 if(i)payload_out(",");payload_out(evidence);
@@ -52,6 +56,7 @@ void emit_project(const ProjectCodec::Capture& capture,const Sink& sink,ProjectT
     payload_out("}");control.phase("integrity_finalization",total,capture.studies.size());
     if(workload)features.push_back("workload_v1");if(statistics)features.push_back("statistics_v1");if(interaction)features.push_back("interaction_v1");if(sensitivity)features.push_back("sensitivity_v1");
     if(capture.metadata.contains("demand_calibrations"))features.push_back("demand_calibration_v1");
+    if(poisson)features.push_back("poisson_arrivals_v2");if(coverage)features.push_back("coverage_windows_v2");
     Json header{{"crc32",crc.value()},{"engine",project_engine_version},{"features",std::move(features)},{"format","SimForge"},{"payload_size",payload_bytes},{"scenario_schema",1},{"version",project_format_version}};
     for(const auto& [key,value]:header.items()){out(",");out(Json(key).dump());out(":");out(value.dump());}out("}");
     timings.bytes=total;timings.serialization_ms=ms(began)-timings.write_ms-timings.integrity_ms;
@@ -119,6 +124,7 @@ LoadedProject read_project(const std::filesystem::path& path,bool recovery,Proje
     ScenarioWorkspace decoder;ProjectCodec::decoder_ids(decoder);
     std::vector<CalibrationStudy> calibrations;std::set<std::string> calibration_ids;
     bool calibration_active=false,calibration_seen=false;std::size_t calibration_events=0;
+    bool poisson=false,coverage=false;
     detail::Digest calibration_digest;calibration_digest.append("[");
     bool history_active=false,history_seen=false,runs_active=false,runs_seen=false,workload=false,statistics=false,interaction=false,sensitivity=false;
     auto restored=std::make_unique<ProjectCodec::RestoredRuns>();Json baseline_summary,runs_summary=Json::array();
@@ -147,8 +153,15 @@ LoadedProject read_project(const std::filesystem::path& path,bool recovery,Proje
             statistics|=key=="statistics" || key=="statistical_report_version";
             interaction|=key=="interaction" || key=="interaction_report_version";
             sensitivity|=key=="sensitivity" || key=="sensitivity_report_version";
+            coverage|=key=="coverage_windows";
+            poisson|=key=="intensities";
             if(depth==2)payload_key=key;
         }else if(event==Json::parse_event_t::object_end)objects.pop_back();
+        if(event==Json::parse_event_t::value && !objects.empty() && !objects.back().empty()) {
+            const auto& key=objects.back().back();
+            if(key=="mode" && value.is_string())poisson|=value=="poisson" || value=="piecewise_poisson";
+            if(key=="arrivals" && value.is_number_integer())poisson|=value==3 || value==4;
+        }
         if(depth==2 && payload_key=="study_history" && event==Json::parse_event_t::array_start){history_active=true;history_seen=true;}
         if(depth==2 && payload_key=="runs" && event==Json::parse_event_t::array_start){runs_active=true;runs_seen=true;}
         if(depth==2 && payload_key=="demand_calibrations" && event==Json::parse_event_t::array_start){calibration_active=true;calibration_seen=true;}
@@ -203,6 +216,7 @@ LoadedProject read_project(const std::filesystem::path& path,bool recovery,Proje
     auto features=Json::array({"warehouse_snapshots","clock_phase","historical_reports","independent_runs"});
     if(workload||has_workload(payload))features.push_back("workload_v1");if(statistics||has_statistics(payload))features.push_back("statistics_v1");if(interaction||has_interaction(payload))features.push_back("interaction_v1");if(sensitivity||has_sensitivity(payload))features.push_back("sensitivity_v1");
     if(calibration_seen)features.push_back("demand_calibration_v1");
+    if(poisson)features.push_back("poisson_arrivals_v2");if(coverage)features.push_back("coverage_windows_v2");
     if(j.at("features")!=features)invalid("features","unsupported or missing persistence features");
     const auto integrity=Timer::now();detail::Digest canonical;canonical.append("{");bool first=true;
     for(const auto& [key,value]:payload.items()){if(!first)canonical.append(",");first=false;canonical.append(Json(key).dump());canonical.append(":");if(key=="study_history" && history_seen)canonical.append(history);else if(key=="demand_calibrations" && calibration_seen)canonical.append(calibration_digest);else if(key=="baseline" && baseline_digest)canonical.append(*baseline_digest);else if(key=="runs" && runs_seen)canonical.append(runs_digest);else canonical.append(value.dump());}

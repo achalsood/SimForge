@@ -1,5 +1,7 @@
 # Reproducible warehouse workloads
 
+The generator-1 contracts below remain unchanged. See [seeded Poisson arrivals and explicit observation coverage](stochastic-arrivals-and-coverage.md) for generator 2, its count/time sampling, safety limits and supported-toolchain reproducibility contract.
+
 Commit #24 extends the existing event-driven warehouse engine with demand windows and bounded, seeded variability. It does not introduce another simulator. The engine owns all arrivals, processing requirements, queues, completions and metrics; the renderer consumes observations.
 
 ## Configuration and compatibility

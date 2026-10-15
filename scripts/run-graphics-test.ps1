@@ -1,6 +1,6 @@
 param(
  [Parameter(Mandatory=$true)][string]$Executable,
- [string]$Scenario,[switch]$Live,[switch]$ProjectRoundTrip,[switch]$Language,[switch]$Workload,[switch]$Statistical,[switch]$Sensitivity,[switch]$Interaction,[switch]$StudyHistory,[switch]$Persistence,[switch]$Calibration,[ValidateRange(120,10000)][int]$Frames=180,
+ [string]$Scenario,[switch]$Live,[switch]$ProjectRoundTrip,[switch]$Language,[switch]$Workload,[switch]$Statistical,[switch]$Sensitivity,[switch]$Interaction,[switch]$StudyHistory,[switch]$Persistence,[switch]$Calibration,[switch]$StochasticCoverage,[ValidateRange(120,10000)][int]$Frames=180,
  [ValidateSet('Test','Review')][string]$Mode='Test',
  [ValidateRange(1,100)][int]$KeepRuns=3,[string]$ArtifactRoot,[switch]$ForceFailure
 )
@@ -26,6 +26,7 @@ $oldInteraction=$env:SIMFORGE_INTERACTION_TEST_PATH
 $oldStudy=$env:SIMFORGE_STUDY_TEST_PATH
 $oldPersistence=$env:SIMFORGE_PERSISTENCE_TEST_PATH
 $oldCalibration=$env:SIMFORGE_CALIBRATION_TEST_PATH
+$oldStochasticCoverage=$env:SIMFORGE_STOCHASTIC_COVERAGE_TEST_PATH
 $exitCode=1; $start=[Diagnostics.Stopwatch]::StartNew()
 try {
  if($Language) { $env:SIMFORGE_LANGUAGE_TEST_PATH=Join-Path $dir "language.simforge" }
@@ -35,6 +36,7 @@ try {
  if($StudyHistory) { $env:SIMFORGE_STUDY_TEST_PATH=Join-Path $dir "study.simforge" }
  if($Persistence) { $env:SIMFORGE_PERSISTENCE_TEST_PATH=Join-Path $dir "persistence.simforge" }
  if($Calibration) { $env:SIMFORGE_CALIBRATION_TEST_PATH=Join-Path $dir "calibration.simforge" }
+ if($StochasticCoverage) { $env:SIMFORGE_STOCHASTIC_COVERAGE_TEST_PATH=Join-Path $dir "stochastic-coverage.simforge" }
  if($Interaction) { $env:SIMFORGE_INTERACTION_TEST_PATH=Join-Path $dir "interaction.simforge" }
  if($ProjectRoundTrip) { $env:SIMFORGE_PROJECT_TEST_PATH=Join-Path $dir "project.simforge" }
  $env:SIMFORGE_FAILURE_CAPTURE=Join-Path $dir 'failure.png'
@@ -45,8 +47,8 @@ try {
  $ErrorActionPreference='Continue'
  & $Executable @arguments *> (Join-Path $dir 'console.log')
  $exitCode=$LASTEXITCODE
- if(($ProjectRoundTrip -or $Language -or $Workload -or $Statistical -or $Sensitivity -or $Interaction -or $StudyHistory -or $Persistence -or $Calibration) -and $exitCode -eq 0) {
-   $projectFile=if($Calibration){'calibration.simforge'}elseif($Persistence){'persistence.simforge'}elseif($StudyHistory){'study.simforge'}elseif($Interaction){'interaction.simforge'}elseif($Sensitivity){'sensitivity.simforge'}elseif($Statistical){'statistical.simforge'}elseif($Workload){'workload.simforge'}elseif($Language){'language.simforge'}else{'project.simforge'}
+ if(($ProjectRoundTrip -or $Language -or $Workload -or $Statistical -or $Sensitivity -or $Interaction -or $StudyHistory -or $Persistence -or $Calibration -or $StochasticCoverage) -and $exitCode -eq 0) {
+   $projectFile=if($StochasticCoverage){'stochastic-coverage.simforge'}elseif($Calibration){'calibration.simforge'}elseif($Persistence){'persistence.simforge'}elseif($StudyHistory){'study.simforge'}elseif($Interaction){'interaction.simforge'}elseif($Sensitivity){'sensitivity.simforge'}elseif($Statistical){'statistical.simforge'}elseif($Workload){'workload.simforge'}elseif($Language){'language.simforge'}else{'project.simforge'}
    $projectArgs=@('--project',(Join-Path $dir $projectFile),'--graphics-smoke',"$Frames")
    if($Mode -eq 'Review') { $projectArgs+=@('--graphics-capture',(Join-Path $dir 'reopened.png')) }
    & $Executable @projectArgs *>> (Join-Path $dir 'console.log')
@@ -62,6 +64,7 @@ try {
  $env:SIMFORGE_STUDY_TEST_PATH=$oldStudy
  $env:SIMFORGE_PERSISTENCE_TEST_PATH=$oldPersistence
  $env:SIMFORGE_CALIBRATION_TEST_PATH=$oldCalibration
+ $env:SIMFORGE_STOCHASTIC_COVERAGE_TEST_PATH=$oldStochasticCoverage
  $manifest.status=if($exitCode -eq 0){'Success'}else{'Failure'}
  $manifest['finishedUtc']=[DateTime]::UtcNow.ToString('o'); $manifest['elapsedMs']=$start.Elapsed.TotalMilliseconds
  $manifest|ConvertTo-Json|Set-Content -LiteralPath $marker -Encoding UTF8

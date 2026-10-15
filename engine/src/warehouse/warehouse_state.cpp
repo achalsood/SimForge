@@ -26,7 +26,7 @@ WarehouseSnapshot WarehouseSimulation::capture_snapshot() const
 {
     WarehouseSnapshot result;
     result.version = snapshot_version_;
-    if(snapshot_version_==3) result.workload_generator_version=scenario::workload_generator_version;
+    if(snapshot_version_==3) result.workload_generator_version=scenario::workload::generator_version(config_);
     result.scenario_identity = scenario_identity_;
     result.tick_rate = clock_.ticks_per_second();
     result.horizon_ticks = horizon_ticks_; result.processing_ticks = processing_ticks_;
@@ -107,6 +107,7 @@ void WarehouseSimulation::swap_state(WarehouseSimulation& other) noexcept
     swap(settled_, other.settled_);
     swap(snapshot_version_, other.snapshot_version_);
     swap(workload_seed_,other.workload_seed_);swap(active_shipments_,other.active_shipments_);
+    swap(poisson_arrivals_,other.poisson_arrivals_);
 }
 void WarehouseSimulation::restore_snapshot(const WarehouseSnapshot& snapshot)
 {

@@ -41,6 +41,7 @@ struct Options
     std::optional<std::string> calibration_start;
     std::optional<std::uint64_t> calibration_seed;
     bool accept_periodic{false};
+    bool poisson_conversion{false},exclude_unestimated{false};
     std::optional<double> speed;
     std::uint64_t entities{10'000};
     std::uint64_t ticks{600};
@@ -78,6 +79,8 @@ Options parse_options(int argc, char* argv[])
         if(argument=="--calibration-start" && !options.calibration_start){if(++i==argc)throw std::invalid_argument("Missing calibration UTC start");options.calibration_start=argv[i];continue;}
         if(argument=="--calibration-seed" && !options.calibration_seed){if(++i==argc)throw std::invalid_argument("Missing calibration seed");options.calibration_seed=parse_count(argv[i]);continue;}
         if(argument=="--accept-periodic-approximation" && !options.accept_periodic){options.accept_periodic=true;continue;}
+        if(argument=="--poisson-realization" && !options.poisson_conversion){options.poisson_conversion=true;continue;}
+        if(argument=="--exclude-unestimated-hours" && !options.exclude_unestimated){options.exclude_unestimated=true;continue;}
         if(argument=="--project" && !options.project) { if(++i==argc) throw std::invalid_argument("Missing project path"); options.project=argv[i]; }
         else if(argument=="--verify-project" && !options.verify_project) {if(++i==argc)throw std::invalid_argument("Missing verification path");options.verify_project=argv[i];}
         else if (argument == "--live" && !options.live) options.live = true;
@@ -155,12 +158,13 @@ Options parse_options(int argc, char* argv[])
     if(options.calibration) {
         if(!options.headless || options.live || options.speed || options.scenario || options.project || options.verify_project || options.record || options.replay || options.warehouse_replay || options.experiment || options.compare_forklifts || options.checkpoint_seconds || entities_seen || ticks_seen || options.graphics_smoke || options.graphics_capture || options.export_seeds || options.export_marginal || options.export_interactions || options.export_interaction_seeds)
             throw std::invalid_argument("--calibrate-demand requires --headless and conflicts with other workflows");
-        const bool conversion=options.calibration_source || options.export_scenario || options.calibration_start || options.calibration_seed || options.accept_periodic;
-        if(conversion && !(options.calibration_source && options.export_scenario && options.calibration_start && options.calibration_seed && options.accept_periodic))
-            throw std::invalid_argument("Periodic scenario conversion requires source, output, UTC start, explicit seed and --accept-periodic-approximation");
+        const bool conversion=options.calibration_source || options.export_scenario || options.calibration_start || options.calibration_seed || options.accept_periodic || options.poisson_conversion || options.exclude_unestimated;
+        if(conversion && !(options.calibration_source && options.export_scenario && options.calibration_start && options.calibration_seed && (options.accept_periodic!=options.poisson_conversion)))
+            throw std::invalid_argument("Scenario conversion requires source, output, UTC start, explicit seed and exactly one of --poisson-realization / --accept-periodic-approximation");
+        if(options.exclude_unestimated && !options.poisson_conversion)throw std::invalid_argument("Explicit unestimated-hour exclusion requires Poisson conversion");
         return options;
     }
-    if(options.calibration_source || options.export_scenario || options.calibration_start || options.calibration_seed || options.accept_periodic)throw std::invalid_argument("Calibration conversion options require --calibrate-demand");
+    if(options.calibration_source || options.export_scenario || options.calibration_start || options.calibration_seed || options.accept_periodic || options.poisson_conversion || options.exclude_unestimated)throw std::invalid_argument("Calibration conversion options require --calibrate-demand");
     if ((options.live && (!options.scenario || options.headless || options.record || options.replay || options.warehouse_replay || options.experiment ||
             options.compare_forklifts || options.checkpoint_seconds || entities_seen || ticks_seen)) || (options.speed && !options.live))
         throw std::invalid_argument("--live requires a graphical --scenario; --speed requires --live; simulation workflows conflict");
@@ -400,7 +404,8 @@ int scenario_workflow(const Options& options)
                   << " | Waiting: " << metrics.waiting << " | In progress: " << metrics.in_progress << '\n';
         if(scenario::workload::advanced(config)) std::cout<<"Workload: arrivals="<<scenario::workload::arrival_name(config.workload.arrivals)
             <<" | processing="<<scenario::workload::processing_name(config.workload.processing)<<" | seed="<<definition.simulation.random_seed
-            <<" | generator="<<scenario::workload_generator_version<<(scenario::workload::stochastic(config)?" | single-seed realization":"")<<'\n';
+            <<" | generator="<<scenario::workload::generator_version(config)<<(scenario::workload::stochastic(config)?" | single-seed realization":"")<<'\n';
+        if(scenario::workload::poisson(config))std::cout<<"Expected horizon arrivals: "<<scenario::workload::expected_arrivals(config,definition.simulation.duration_seconds)<<" | Engine tick grid | PRNG: SplitMix64 arrival algorithm 2 | No forced initial arrival\n";
         const auto print_metric = [](const char* label, std::optional<double> value, double factor, const char* unit)
         {
             std::cout << label << ": ";
@@ -480,17 +485,19 @@ int run(const Options& options)
         }
         auto report=demand::calibrate(demand::load_request(*options.calibration));
         if(options.export_scenario) {
-            auto converted=demand::convert(*report,simforge::scenario::load_scenario(*options.calibration_source),"Calibrated periodic demand",*options.calibration_seed,demand::parse_timestamp(*options.calibration_start),options.accept_periodic);
+            auto source=simforge::scenario::load_scenario(*options.calibration_source);
+            auto converted=options.poisson_conversion?demand::convert_stochastic(*report,source,"Calibrated Poisson demand",*options.calibration_seed,demand::parse_timestamp(*options.calibration_start),options.exclude_unestimated):demand::convert(*report,source,"Calibrated periodic demand",*options.calibration_seed,demand::parse_timestamp(*options.calibration_start),options.accept_periodic);
             auto evidence=std::make_shared<demand::Report>(*report);evidence->conversions.push_back(converted);report=std::move(evidence);
             simforge::scenario::save_scenario(*options.export_scenario,converted.scenario);
             std::cout<<converted.semantics<<'\n';
-            for(std::size_t i=0;i<converted.fitted_per_second.size();++i)std::cout<<"Rate bin "<<i<<" fitted="<<converted.fitted_per_second[i]<<" represented="<<converted.represented_per_second[i]<<" arrivals/second\n";
+            for(std::size_t i=0;i<converted.fitted_per_second.size();++i){std::cout<<"Rate bin "<<i<<" fitted=";if(converted.fitted_available.empty() || converted.fitted_available[i])std::cout<<converted.fitted_per_second[i];else std::cout<<"unavailable";std::cout<<" represented="<<converted.represented_per_second[i]<<" arrivals/second\n";}
         }
         if(options.export_json)demand::save_export(*options.export_json,demand::report_json(*report));
         if(options.export_csv)demand::save_export(*options.export_csv,demand::report_csv(*report));
         std::cout<<"SimForge Demand Calibration | "<<report->id<<" | dataset="<<report->provenance.dataset_id<<'\n'
-            <<"Training: "<<report->training.observed<<" arrivals / "<<report->training.exposure_seconds<<" seconds | Holdout actual="<<report->holdout.observed<<" expected="<<report->holdout.expected<<" signed_error="<<report->holdout.signed_error<<'\n'
-            <<"Import_ms="<<report->timings.import_ms<<" fit_ms="<<report->timings.fit_ms<<" validation_ms="<<report->timings.validation_ms<<'\n';
+            <<"Training: "<<report->training.observed<<" arrivals / "<<report->training.exposure_seconds<<" seconds | Holdout actual="<<report->holdout.observed<<" expected=";
+        if(report->holdout.unavailable_exposure_seconds)std::cout<<"unavailable signed_error=unavailable\n";else std::cout<<report->holdout.expected<<" signed_error="<<report->holdout.signed_error<<'\n';
+        std::cout<<"Import_ms="<<report->timings.import_ms<<" fit_ms="<<report->timings.fit_ms<<" validation_ms="<<report->timings.validation_ms<<'\n';
         for(const auto& warning:report->warnings)std::cout<<warning<<'\n';return 0;
     }
     if(options.verify_project){simforge::workspace::ScenarioWorkspace workspace;simforge::workspace::Project project(workspace);project.open(*options.verify_project);

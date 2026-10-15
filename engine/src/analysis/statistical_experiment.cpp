@@ -4,7 +4,8 @@
 
 namespace simforge::analysis {
 bool workload_varies(const scenario::WarehouseConfig& c) noexcept {
-    return (c.workload.arrivals==scenario::ArrivalMode::Uniform && c.workload.arrival_min_seconds<c.workload.arrival_max_seconds) ||
+    const bool poisson_varies=scenario::workload::poisson(c) && (c.workload.rate_per_second>0 || std::any_of(c.workload.intensities.begin(),c.workload.intensities.end(),[](const auto& s){return s.rate_per_second>0;}));
+    return poisson_varies || (c.workload.arrivals==scenario::ArrivalMode::Uniform && c.workload.arrival_min_seconds<c.workload.arrival_max_seconds) ||
         (c.workload.processing==scenario::ProcessingMode::Uniform && c.workload.processing_min_seconds<c.workload.processing_max_seconds);
 }
 namespace {

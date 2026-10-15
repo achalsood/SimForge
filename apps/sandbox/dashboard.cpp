@@ -277,6 +277,8 @@ DashboardFrame draw_dashboard(const simforge::viewer::ViewerController& v, Dashb
             section("Workload");
             property("Arrivals",scenario::workload::arrival_name(config.workload.arrivals));
             property("Processing",scenario::workload::processing_name(config.workload.processing));
+            property("Generator",std::to_string(scenario::workload::generator_version(config)));
+            if(scenario::workload::poisson(config))property("Expected horizon arrivals",std::to_string(scenario::workload::expected_arrivals(config,v.definition().simulation.duration_seconds)));
             if(scenario::workload::stochastic(config)) property("Seed",std::to_string(v.definition().simulation.random_seed));
             if(config.workload.arrivals==scenario::ArrivalMode::Uniform)
                 property("Delay bounds (s)",std::to_string(config.workload.arrival_min_seconds)+" - "+std::to_string(config.workload.arrival_max_seconds));

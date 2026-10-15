@@ -20,18 +20,20 @@ std::size_t pending_limit(const scenario::WarehouseConfig& config, std::uint32_t
     return static_cast<std::size_t>(std::min({config.loading_bays, config.workers, config.forklifts, arrivals})) + 1;
 }
 }
-WarehouseSimulation::Parameters WarehouseSimulation::parameters(const scenario::ScenarioDefinition& definition)
+WarehouseSimulation::Parameters WarehouseSimulation::parameters(const scenario::ScenarioDefinition& definition,const simulation::ExecutionControl* control)
 {
     auto identity = scenario::serialize_scenario(definition); // Canonicalization also validates the definition.
     const auto* config = std::get_if<scenario::WarehouseConfig>(&definition.domain);
     if (!config) throw std::invalid_argument("WarehouseSimulation requires a warehouse scenario");
+    auto generated=scenario::workload::poisson(*config)?scenario::workload::poisson_ticks(definition,control):std::vector<std::uint64_t>{};
     return {*config, definition.simulation.tick_rate,
-            scenario::workload::arrival_bound(*config,definition.simulation.duration_seconds,definition.simulation.tick_rate),
+            scenario::workload::poisson(*config)?static_cast<std::uint32_t>(generated.size()):scenario::workload::arrival_bound(*config,definition.simulation.duration_seconds,definition.simulation.tick_rate),
             static_cast<std::uint64_t>(definition.simulation.duration_seconds) * definition.simulation.tick_rate,
-            std::move(identity), definition.simulation.random_seed};
+            std::move(identity), definition.simulation.random_seed,
+            std::move(generated)};
 }
-WarehouseSimulation::WarehouseSimulation(const scenario::ScenarioDefinition& definition)
-    : WarehouseSimulation{parameters(definition)} {}
+WarehouseSimulation::WarehouseSimulation(const scenario::ScenarioDefinition& definition,const simulation::ExecutionControl* control)
+    : WarehouseSimulation{parameters(definition,control)} {}
 WarehouseSimulation::WarehouseSimulation(Parameters params)
     : config_{params.config}, scenario_identity_{std::move(params.identity)}, clock_{params.rate}, horizon_ticks_{params.horizon},
       arrival_interval_ticks_{static_cast<std::uint64_t>(config_.shipment_interval_seconds) * params.rate},
@@ -43,8 +45,10 @@ WarehouseSimulation::WarehouseSimulation(Parameters params)
     shipments_.reserve(arrival_limit_);
     waiting_queue_.reserve(arrival_limit_);
     workload_seed_=params.seed;
+    poisson_arrivals_=std::move(params.poisson_arrivals);
     if(scenario::workload::advanced(config_)) snapshot_version_=3;
-    if(const auto first=scenario::workload::first_arrival(config_,params.rate))
+    const auto first=scenario::workload::poisson(config_) ? (poisson_arrivals_.empty()?std::optional<std::uint64_t>{}:std::optional<std::uint64_t>{poisson_arrivals_.front()}) : scenario::workload::first_arrival(config_,params.rate);
+    if(first)
         (void)scheduler_.schedule(*first, EventType::ShipmentArrival, 0);
 }
 void WarehouseSimulation::move_clock_to(std::uint64_t tick)
@@ -93,6 +97,8 @@ void WarehouseSimulation::process(const ShipmentEvent& event)
         if(config_.workload.arrivals==scenario::ArrivalMode::Constant) {
             const auto next=checked_add(event.tick,arrival_interval_ticks_);
             if(next<horizon_ticks_) (void)scheduler_.schedule(next,EventType::ShipmentArrival,event.shipment+1);
+        } else if(scenario::workload::poisson(config_)) {
+            if(event.shipment+1<poisson_arrivals_.size())(void)scheduler_.schedule(poisson_arrivals_[event.shipment+1],EventType::ShipmentArrival,event.shipment+1);
         } else if(const auto next=scenario::workload::next_arrival(config_,clock_.ticks_per_second(),horizon_ticks_,workload_seed_,event.shipment,event.tick))
             (void)scheduler_.schedule(*next,EventType::ShipmentArrival,event.shipment+1);
         start_waiting();
@@ -176,6 +182,7 @@ std::size_t WarehouseSimulation::approximate_storage_bytes() const noexcept
     return shipments_.capacity() * sizeof(ShipmentRecord) + waiting_queue_.capacity() * sizeof(ShipmentId) +
            resources_.approximate_storage_bytes() + scheduler_.approximate_storage_bytes() +
            scenario_identity_.capacity() + capacity_changes_.capacity() * sizeof(CapacityChange) +
-           config_.workload.segments.capacity()*sizeof(scenario::DemandSegment) + active_shipments_.size()*40;
+           config_.workload.segments.capacity()*sizeof(scenario::DemandSegment) + config_.workload.intensities.capacity()*sizeof(scenario::IntensitySegment) +
+           poisson_arrivals_.capacity()*sizeof(std::uint64_t) + active_shipments_.size()*40;
 }
 } // namespace simforge::warehouse

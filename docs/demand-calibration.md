@@ -1,5 +1,7 @@
 # Demand calibration and chronological validation
 
+This document preserves the Commit 30 **version-1 continuous-exposure and periodic-surrogate contract**. Commit 31 adds [seeded Poisson arrival processes and explicit coverage windows](stochastic-arrivals-and-coverage.md); its new algorithms and versions are documented separately. The version-1 estimates, fingerprints and saved evidence remain compatible.
+
 Demand Calibration connects local historical shipment arrivals to transparent count/exposure estimates, unseen-period diagnostics, and reproducible warehouse scenarios. The CPU module is independent of Vulkan, SDL and ImGui. The native UI and headless CLI use the same importer, partitioner, estimators, report validator and scenario converter.
 
 ## Workload semantics audit

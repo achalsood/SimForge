@@ -50,7 +50,9 @@ struct WorkspaceUI
     glm::vec2 editor_compare{};
     glm::vec2 run_simulation{}, simulate_result{};
     glm::vec2 workload_arrival_mode{},workload_processing_mode{},run_workload{};
-    std::array<glm::vec2,3> workload_arrival_options{};
+    glm::vec2 poisson_rate{},add_intensity{};
+    glm::vec2 seed_field{};
+    std::array<glm::vec2,5> workload_arrival_options{};
     std::array<glm::vec2,2> workload_processing_options{};
     std::array<glm::vec2,4> workload_bounds{};
     glm::vec2 export_field{}, export_json{}, export_csv{};

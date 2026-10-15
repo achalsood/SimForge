@@ -25,7 +25,7 @@ struct WarehouseMetrics
 class WarehouseSimulation
 {
 public:
-    explicit WarehouseSimulation(const scenario::ScenarioDefinition& definition);
+    explicit WarehouseSimulation(const scenario::ScenarioDefinition& definition, const simulation::ExecutionControl* control = nullptr);
     WarehouseSimulation(const WarehouseSimulation&) = delete;
     WarehouseSimulation& operator=(const WarehouseSimulation&) = delete;
     WarehouseSimulation(WarehouseSimulation&&) = delete;
@@ -70,8 +70,9 @@ private:
         std::uint64_t horizon;
         std::string identity;
         std::uint64_t seed;
+        std::vector<std::uint64_t> poisson_arrivals;
     };
-    static Parameters parameters(const scenario::ScenarioDefinition& definition);
+    static Parameters parameters(const scenario::ScenarioDefinition& definition, const simulation::ExecutionControl* control = nullptr);
     explicit WarehouseSimulation(Parameters parameters);
     explicit WarehouseSimulation(const WarehouseSnapshot& snapshot);
     void swap_state(WarehouseSimulation& other) noexcept;
@@ -97,5 +98,6 @@ private:
     std::uint32_t snapshot_version_{1};
     std::uint64_t workload_seed_{0};
     std::set<ShipmentId> active_shipments_; // Variable durations invalidate the legacy completed-prefix shortcut.
+    std::vector<std::uint64_t> poisson_arrivals_; // Immutable seed/version realization, regenerated and verified on restore.
 };
 } // namespace simforge::warehouse

@@ -54,12 +54,18 @@ Json workload_draft_json(const WorkloadDraft& d)
     if(d.segments.size()>scenario::max_demand_segments) invalid("draft workload","too many segments");
     for(const auto& value:d.bounds) (void)bounded(Json(value),4096,"workload bound");
     for(const auto& segment:d.segments) for(const auto& value:segment) (void)bounded(Json(value),4096,"workload segment");
-    return {{"arrivals",static_cast<unsigned>(d.arrivals)},{"processing",static_cast<unsigned>(d.processing)},{"bounds",d.bounds},{"segments",d.segments}};
+    Json j{{"arrivals",static_cast<unsigned>(d.arrivals)},{"processing",static_cast<unsigned>(d.processing)},{"bounds",d.bounds},{"segments",d.segments}};
+    if(d.arrivals==scenario::ArrivalMode::Poisson || d.arrivals==scenario::ArrivalMode::PiecewisePoisson || !d.intensities.empty() || d.rate_per_second!=WorkloadDraft{}.rate_per_second) {
+        if(d.intensities.size()>scenario::max_demand_segments)invalid("intensities","too many segments");
+        j["rate_per_second"]=bounded(Json(d.rate_per_second),4096,"rate");j["intensities"]=Json::array();
+        for(const auto& s:d.intensities){for(const auto& v:s)(void)bounded(Json(v),4096,"intensity field");j["intensities"].push_back(s);}
+    }
+    return j;
 }
 WorkloadDraft workload_draft_value(const Json& j)
 {
-    fields(j,{"arrivals","processing","bounds","segments"},{},"draft workload");WorkloadDraft d;
-    d.arrivals=static_cast<scenario::ArrivalMode>(integer(j.at("arrivals"),2,"draft arrival mode"));
+    fields(j,{"arrivals","processing","bounds","segments"},{"rate_per_second","intensities"},"draft workload");WorkloadDraft d;
+    d.arrivals=static_cast<scenario::ArrivalMode>(integer(j.at("arrivals"),4,"draft arrival mode"));
     d.processing=static_cast<scenario::ProcessingMode>(integer(j.at("processing"),1,"draft processing mode"));
     const auto& b=j.at("bounds");const auto& segments=j.at("segments");
     if(!b.is_array() || b.size()!=4 || !segments.is_array() || segments.size()>scenario::max_demand_segments) invalid("draft workload","invalid array bounds");
@@ -68,6 +74,8 @@ WorkloadDraft workload_draft_value(const Json& j)
         if(!s.is_array() || s.size()!=3) invalid("draft workload","invalid segment");
         d.segments.push_back({bounded(s[0],4096,"start seconds"),bounded(s[1],4096,"end seconds"),bounded(s[2],4096,"interval seconds")});
     }
+    if(j.contains("rate_per_second"))d.rate_per_second=bounded(j.at("rate_per_second"),4096,"rate");
+    if(j.contains("intensities")){const auto& a=j.at("intensities");if(!a.is_array()||a.size()>scenario::max_demand_segments)invalid("intensities","at most 64 segments");for(const auto& s:a){if(!s.is_array()||s.size()!=3)invalid("intensity","three fields required");d.intensities.push_back({bounded(s[0],4096,"start"),bounded(s[1],4096,"end"),bounded(s[2],4096,"rate")});}}
     return d;
 }
 bool has_workload(const Json& j)
@@ -76,6 +84,15 @@ bool has_workload(const Json& j)
         if(j.contains("workload") || j.contains("draft_workload") || j.contains("draft_origin_workload")) return true;
         for(const auto& child:j) if(has_workload(child)) return true;
     } else if(j.is_array()) for(const auto& child:j) if(has_workload(child)) return true;
+    return false;
+}
+bool has_poisson(const Json& j) {
+    if(j.is_object()) {
+        if(j.contains("intensities"))return true; // Retained inactive Poisson draft fields also require the new codec.
+        if(j.contains("mode") && j.at("mode").is_string() && (j.at("mode")=="poisson" || j.at("mode")=="piecewise_poisson"))return true;
+        if(j.contains("arrivals") && j.at("arrivals").is_number_integer() && (j.at("arrivals")==3 || j.at("arrivals")==4))return true;
+        for(const auto& value:j)if(has_poisson(value))return true;
+    }else if(j.is_array())for(const auto& value:j)if(has_poisson(value))return true;
     return false;
 }
 bool has_statistics(const Json& j)

@@ -1,5 +1,28 @@
 # SimForge
 
+## Calibrate a stochastic arrival process from multi-shift warehouse data.
+
+Open `examples/stochastic-coverage/homogeneous.json` and **Scenario Editor → Workload patterns**. Choose homogeneous or piecewise Poisson intensity, enter arrivals/second and an explicit seed, and run it. The expected count and actual realization are distinct; restarting the same seed reproduces the submitted workload.
+
+![Poisson rate, seed and expected count](docs/artifacts/stochastic-setup.png)
+![Piecewise intensity and zero-rate intervals](docs/artifacts/stochastic-piecewise.png)
+
+In **Analysis → Demand Calibration → Import**, select **Use explicit coverage windows**, load `examples/stochastic-coverage/multi-shift.json`, then import and validate. Inspect observed shifts, closed periods and collection interruptions. The fixture contains 210 arrivals across 23 observed hours; 49 elapsed hours are excluded.
+
+![Observed arrivals and distinct coverage statuses](docs/artifacts/stochastic-coverage.png)
+
+Choose the chronological split in **Model & split**. Fit constant intensity, then a predefined UTC daily profile. Training contains 138 arrivals across 15 observed hours; holdout contains 72 across eight hours. Rates for hours without training exposure remain unavailable. The daily profile predicts 72 holdout arrivals using its observed exposure.
+
+![Exposure-weighted intensity and unavailable hours](docs/artifacts/stochastic-intensity.png)
+![Holdout observations against exposure-adjusted predictions](docs/artifacts/stochastic-holdout.png)
+
+Save the study. In **Scenario & exports**, choose **Seeded Poisson realization**, seed `54321`, UTC alignment `2026-02-02T08:00:00Z`, and explicitly exclude unestimated UTC hours from the simulated schedule. This operating policy is separate from historical coverage. The eight-hour scenario expects 66 arrivals; this seed generates 72. Review the real realization chart and create independent 3D playback with preserved service/resources. Project Save/Open retains evidence, generator identity, seed and playback.
+
+![Actual seeded arrivals compared with fitted expectation](docs/artifacts/stochastic-realization.png)
+![Authoritative stochastic 3D playback: 72 arrivals](docs/artifacts/stochastic-simulation.png)
+
+Read the [stochastic arrival and coverage contract, CLI examples, reproducibility limits and measurements](docs/stochastic-arrivals-and-coverage.md) and [Commit 31 validation report](docs/commit-31-validation.md). Generator 2 uses the engine tick grid; universal cross-platform bitwise identity is not claimed. The periodic surrogate remains available with explicit approximation acceptance.
+
 ## Calibrate warehouse demand from historical shipment-arrival records
 
 Open **Analysis → Demand Calibration**. Select a local CSV with one `timestamp` column of UTC second timestamps, declare the continuous `[start,end)` observation window, and import it. Inspect coverage, accepted records, simultaneous arrivals, ordering and the dataset fingerprint before fitting.
@@ -13,7 +36,7 @@ Choose an explicit chronological split in **Model & split**. Fit a constant inte
 ![Holdout observed versus expected and residuals](docs/artifacts/demand-holdout.png)
 ![Fitted daily demand profile](docs/artifacts/demand-profile.png)
 
-Save the calibration study, then preview a new scenario with preserved service/resource settings and an explicit seed. Existing arrival generators are periodic or uniform; creating a calibrated **periodic surrogate** requires explicit acceptance of its semantics and displayed rate rounding. It does not reproduce Poisson arrival variability. The resulting validated scenario uses normal simulation playback and authoritative metrics, and the evidence survives project Save/Open.
+Save the calibration study, then preview a new scenario with preserved service/resource settings and an explicit seed. Creating a calibrated **periodic surrogate** requires explicit acceptance of its semantics and displayed rate rounding. It does not reproduce Poisson arrival variability; choose the seeded Poisson option described above for stochastic counts. The validated scenario uses normal simulation playback and authoritative metrics, and the evidence survives project Save/Open.
 
 ![Actual calibrated simulation state](docs/artifacts/demand-simulation.png)
 
@@ -114,8 +137,8 @@ restoration, portable persistence, ordered capacity-command replay and independe
 branches. See [warehouse snapshots and measured branch outcomes](docs/warehouse-snapshots.md).
 Existing movement snapshots and recordings remain supported.
 
-Warehouse workloads now support deterministic demand windows and seeded discrete
-uniform arrival intervals and processing requirements. The editor, headless runner,
+Warehouse workloads support deterministic demand windows, seeded discrete uniform
+intervals and processing requirements, plus homogeneous/piecewise Poisson count processes. The editor, headless runner,
 snapshots, recorded interventions, paired capacity comparisons and projects share
 one validated workload model. See [workload schema, reproducibility, examples and
 measurements](docs/workload-modeling.md).

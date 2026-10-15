@@ -13,10 +13,19 @@ inline constexpr std::size_t max_csv_bytes=32*1024*1024, max_records=1'000'000,
 inline constexpr std::int64_t max_exposure_seconds=366LL*86400;
 inline constexpr const char* software_version="SimForge-demand-1";
 enum class Model { Constant, DailyProfile };
+enum class CoverageStatus { Observed, Unobserved, Closed, Interrupted };
+struct CoverageWindow {
+    std::int64_t start{0},end{0};
+    CoverageStatus status{CoverageStatus::Observed};
+    bool operator==(const CoverageWindow&) const = default;
+};
+inline constexpr std::size_t max_coverage_windows=256;
+[[nodiscard]] const char* coverage_name(CoverageStatus);
 // UTC integer seconds; every exposure and partition uses [start,end).
 struct ImportSettings {
     std::int64_t start{0},end{0};
-    bool continuous{false}; // Must be explicitly asserted. Gaps/closed shifts unsupported.
+    bool continuous{false}; // Legacy continuous exposure, mutually exclusive with windows.
+    std::vector<CoverageWindow> windows; // Canonical ordered, contiguous explicit wall-clock coverage.
     bool operator==(const ImportSettings&) const = default;
 };
 struct Provenance {
@@ -30,6 +39,7 @@ struct Dataset {
     std::vector<std::int64_t> timestamps;
     double import_ms{0};
     std::array<std::uint64_t,64> overview_counts{}; // Bounded worker-built import chart
+    std::vector<std::uint64_t> coverage_counts; // Bounded counts per validated window, built by importer.
 };
 struct FitSettings {
     std::int64_t split{0};
@@ -44,17 +54,20 @@ struct FileRequest {
 struct Rate {
     std::uint64_t count{0},exposure_seconds{0};
     double per_second{0},lower_per_second{0},upper_per_second{0};
+    bool available{true};
 };
 struct Metrics {
     std::uint64_t observed{0},exposure_seconds{0};
     double expected{0},signed_error{0},absolute_error{0},error_per_hour{0};
     std::optional<double> deviance,log_likelihood; // null when zero predicted rate meets positive count
+    std::uint64_t unavailable_exposure_seconds{0},unavailable_count{0};
 };
 struct Bin {
     std::int64_t start{0},end{0};
     bool holdout{false};
     std::uint64_t observed{0};
     double expected{0},baseline_expected{0},residual{0};
+    bool prediction_available{true};
 };
 struct Timings { double import_ms{0},fit_ms{0},validation_ms{0}; };
 struct Conversion {
@@ -63,6 +76,12 @@ struct Conversion {
     std::int64_t utc_start{0};
     std::uint64_t seed{0};
     std::vector<double> fitted_per_second,represented_per_second;
+    bool exclude_unavailable{false};
+    std::vector<bool> fitted_available;
+    double expected_count{0};
+    std::uint32_t realized_count{0};
+    std::array<std::uint64_t,64> realized_bins{};
+    std::array<double,64> expected_bins{};
 };
 struct Report {
     std::string id;
@@ -80,6 +99,9 @@ struct Report {
 [[nodiscard]] std::string timestamp(std::int64_t);
 [[nodiscard]] std::string sha256(std::string_view,const simulation::ExecutionControl* =nullptr);
 void validate_exposure(const ImportSettings&);
+[[nodiscard]] ImportSettings normalize_exposure(ImportSettings); // Sorts without merging; rejects gaps/overlap.
+[[nodiscard]] std::uint64_t observed_exposure(const ImportSettings&,std::int64_t start,std::int64_t end);
+[[nodiscard]] CoverageStatus coverage_at(const ImportSettings&,std::int64_t);
 [[nodiscard]] std::shared_ptr<const Dataset> import_csv(std::string_view,std::string source_filename,
     const ImportSettings&,const simulation::ExecutionControl* =nullptr);
 [[nodiscard]] std::shared_ptr<const Dataset> load_csv(const std::filesystem::path&,const ImportSettings&,const simulation::ExecutionControl* =nullptr);
@@ -90,6 +112,9 @@ void validate_exposure(const ImportSettings&);
 // Explicitly accepted periodic surrogate, nearest integer SECOND (half up), no Poisson claim.
 [[nodiscard]] Conversion convert(const Report&,const scenario::ScenarioDefinition& source,
     std::string name,std::uint64_t seed,std::int64_t utc_start,bool accept_periodic_approximation);
+[[nodiscard]] Conversion convert_stochastic(const Report&,const scenario::ScenarioDefinition& source,
+    std::string name,std::uint64_t seed,std::int64_t utc_start,bool exclude_unavailable=false,
+    const simulation::ExecutionControl* = nullptr);
 [[nodiscard]] std::string report_json(const Report&);
 [[nodiscard]] std::string report_csv(const Report&);
 // Validates derived statistics by recomputing from retained bounded count/exposure evidence.

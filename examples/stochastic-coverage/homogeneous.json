@@ -1,0 +1,27 @@
+{
+    "schema_version":  1,
+    "name":  "Seeded homogeneous Poisson arrivals",
+    "domain":  "warehouse",
+    "simulation":  {
+                       "tick_rate":  60,
+                       "duration_seconds":  28800,
+                       "random_seed":  42
+                   },
+    "warehouse":  {
+                      "loading_bays":  3,
+                      "workers":  10,
+                      "forklifts":  2,
+                      "workload":  {
+                                       "generator_version":  2,
+                                       "arrivals":  {
+                                                        "mode":  "poisson",
+                                                        "rate_per_second":  0.016666666666666666
+                                                    },
+                                       "processing":  {
+                                                          "mode":  "uniform",
+                                                          "minimum_seconds":  600,
+                                                          "maximum_seconds":  1200
+                                                      }
+                                   }
+                  }
+}

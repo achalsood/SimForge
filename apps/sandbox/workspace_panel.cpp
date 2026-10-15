@@ -252,7 +252,7 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
                 ImGui::BeginDisabled(workload_timing);
                 auto value=w.draft().values[i]; if(text("##Value",value)) w.edit(static_cast<workspace::Field>(i),std::move(value));
                 ImGui::EndDisabled();
-                if(i==0) ui.name_field=center(); if(i==3) ui.forklift_field=center(); scroll(static_cast<int>(i));
+                if(i==0) ui.name_field=center(); if(i==3) ui.forklift_field=center();if(i==8)ui.seed_field=center(); scroll(static_cast<int>(i));
                 if(ImGui::IsItemHovered()) ImGui::SetTooltip("%s",info.description);
                 for(const auto& error:w.errors()) if(error.field==workspace::field_names[i]) ImGui::TextColored({viewer::design::error.x,viewer::design::error.y,viewer::design::error.z,1},"%s",error.message.c_str());
                 ImGui::PopID();
@@ -281,15 +281,25 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
                     int arrivals=static_cast<int>(workload.arrivals),processing=static_cast<int>(workload.processing);
                     ImGui::TextUnformatted("Arrival pattern");scroll(22);
                     ImGui::SetNextItemWidth(-1);
-                    constexpr std::array arrival_labels{"Fixed interval","Time-varying profile","Seeded uniform intervals"};
+                    constexpr std::array arrival_labels{"Fixed interval","Time-varying profile","Seeded uniform intervals","Homogeneous Poisson","Piecewise Poisson"};
                     const bool arrivals_open=ImGui::BeginCombo("##ArrivalPattern",arrival_labels[static_cast<std::size_t>(arrivals)]);
                     ui.workload_arrival_mode=center();
                     if(arrivals_open) {
-                        for(int i=0;i<3;++i) {if(ImGui::Selectable(arrival_labels[static_cast<std::size_t>(i)],i==arrivals)) {workload.arrivals=static_cast<scenario::ArrivalMode>(i);changed=true;}ui.workload_arrival_options[static_cast<std::size_t>(i)]=center();}
+                        for(int i=0;i<5;++i) {if(ImGui::Selectable(arrival_labels[static_cast<std::size_t>(i)],i==arrivals)) {workload.arrivals=static_cast<scenario::ArrivalMode>(i);changed=true;}ui.workload_arrival_options[static_cast<std::size_t>(i)]=center();}
                         ImGui::EndCombo();
                     }
                     ImGui::TextWrapped("All window times are simulated seconds from the start. The seed above controls repeatable random samples.");
-                    if(workload.arrivals==scenario::ArrivalMode::Uniform) {
+                    if(workload.arrivals==scenario::ArrivalMode::Poisson || workload.arrivals==scenario::ArrivalMode::PiecewisePoisson) {
+                        ImGui::TextWrapped("Generator 2 | explicit seed | engine tick grid | no forced initial arrival. Counts vary across seeds; expected counts are not realized counts.");
+                        if(workload.arrivals==scenario::ArrivalMode::Poisson){changed|=workload_text("Intensity (arrivals/second)",workload.rate_per_second);ui.poisson_rate=center();}
+                        else {
+                            ImGui::BeginChild("Poisson intensity windows",{-1,200*s},ImGuiChildFlags_Borders);
+                            for(std::size_t i=0;i<workload.intensities.size();++i){ImGui::PushID(static_cast<int>(i));changed|=workload_text("Start (s)",workload.intensities[i][0]);changed|=workload_text("End (s)",workload.intensities[i][1]);changed|=workload_text("Intensity (arrivals/second)",workload.intensities[i][2]);if(ImGui::Button("Remove intensity")){workload.intensities.erase(workload.intensities.begin()+i);changed=true;ImGui::PopID();break;}ImGui::Separator();ImGui::PopID();}ImGui::EndChild();
+                            ImGui::BeginDisabled(workload.intensities.size()>=scenario::max_demand_segments);
+                            if(ImGui::Button("Add intensity segment")){workload.intensities.push_back({workload.intensities.empty()?"0":workload.intensities.back()[1],w.draft().values[6],"0.016666666666666666"});changed=true;}ui.add_intensity=center();ImGui::EndDisabled();
+                        }
+                        if(w.errors().empty()) {auto definition=w.draft_definition();const auto& cfg=std::get<scenario::WarehouseConfig>(definition.domain);ImGui::Text("Expected horizon arrivals: %.6g",scenario::workload::expected_arrivals(cfg,definition.simulation.duration_seconds));}
+                    } else if(workload.arrivals==scenario::ArrivalMode::Uniform) {
                         changed|=workload_text("Minimum arrival interval (s)",workload.bounds[0]);ui.workload_bounds[0]=center();
                         changed|=workload_text("Maximum arrival interval (s)",workload.bounds[1]);ui.workload_bounds[1]=center();
                         ImGui::TextWrapped("Each delay is chosen uniformly on the tick grid inside these bounds. Arrivals start at tick zero.");

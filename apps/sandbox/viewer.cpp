@@ -349,6 +349,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
     };
     #include "persistence_diagnostic.inl"
     #include "calibration_diagnostic.inl"
+    #include "stochastic_coverage_diagnostic.inl"
     if(smoke_frames && project_path && std::getenv("SIMFORGE_STUDY_TEST_PATH")) {
         require(workspace.studies().size()==4 && workspace.report() && workspace.report()->confirmation,"Study history/lineage not restored");
         require(workspace.execution().progress().state==workspace::ExecutionState::Idle,"Study restore reran an experiment");
@@ -417,7 +418,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         require(workspace.view().runtime().capture_snapshot()==saved && workspace.view().orbit_camera().pose()==camera,"Aggregate analysis changed restored live state or camera");
         std::cout<<"Statistical fresh process: exact raw pairs, intervals, settings and live state restored without running an experiment or creating an average snapshot.\n";
     }
-    if(smoke_frames && project_path && !std::getenv("SIMFORGE_STATISTICAL_TEST_PATH") && !std::getenv("SIMFORGE_SENSITIVITY_TEST_PATH") && !std::getenv("SIMFORGE_INTERACTION_TEST_PATH") && !std::getenv("SIMFORGE_STUDY_TEST_PATH") && !std::getenv("SIMFORGE_PERSISTENCE_TEST_PATH") && !std::getenv("SIMFORGE_CALIBRATION_TEST_PATH")) {
+    if(smoke_frames && project_path && !std::getenv("SIMFORGE_STATISTICAL_TEST_PATH") && !std::getenv("SIMFORGE_SENSITIVITY_TEST_PATH") && !std::getenv("SIMFORGE_INTERACTION_TEST_PATH") && !std::getenv("SIMFORGE_STUDY_TEST_PATH") && !std::getenv("SIMFORGE_PERSISTENCE_TEST_PATH") && !std::getenv("SIMFORGE_CALIBRATION_TEST_PATH") && !std::getenv("SIMFORGE_STOCHASTIC_COVERAGE_TEST_PATH")) {
         const auto saved=workspace.view().runtime().capture_snapshot();const auto saved_clock=workspace.view().runtime().clock().capture_snapshot();
         const auto saved_camera=workspace.view().orbit_camera().pose();const auto active=workspace.active_run_id();
         submit();submit();diagnostic_failure_probe();capture("project-restored");
@@ -615,7 +616,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         require(std::filesystem::exists(project_ui.test_path) && project_ui.error.empty(),"Statistical project save failed");capture("statistical-project");
         std::cout<<"Statistical graphics: native setup, real progress, camera navigation, cancellation preservation, paired intervals/raw details, exports, save, resize and aggregate-only semantics verified.\n";
     }
-    if (smoke_frames && !project_path && !std::getenv("SIMFORGE_WORKLOAD_TEST_PATH") && !std::getenv("SIMFORGE_STATISTICAL_TEST_PATH") && !std::getenv("SIMFORGE_SENSITIVITY_TEST_PATH") && !std::getenv("SIMFORGE_INTERACTION_TEST_PATH") && !std::getenv("SIMFORGE_STUDY_TEST_PATH") && !std::getenv("SIMFORGE_PERSISTENCE_TEST_PATH") && !std::getenv("SIMFORGE_CALIBRATION_TEST_PATH"))
+    if (smoke_frames && !project_path && !std::getenv("SIMFORGE_WORKLOAD_TEST_PATH") && !std::getenv("SIMFORGE_STATISTICAL_TEST_PATH") && !std::getenv("SIMFORGE_SENSITIVITY_TEST_PATH") && !std::getenv("SIMFORGE_INTERACTION_TEST_PATH") && !std::getenv("SIMFORGE_STUDY_TEST_PATH") && !std::getenv("SIMFORGE_PERSISTENCE_TEST_PATH") && !std::getenv("SIMFORGE_CALIBRATION_TEST_PATH") && !std::getenv("SIMFORGE_STOCHASTIC_COVERAGE_TEST_PATH"))
     {
         submit(); submit(); diagnostic_failure_probe(); const auto overview = capture("overview");
         require(graphics.info().ui_vertices > 1000 && graphics.info().ui_draw_calls >= 3,"Dashboard emitted no meaningful UI draw data");
@@ -1092,6 +1093,8 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
     }
     workspace.execution().shutdown();
     workspace.calibration_execution().shutdown();
+    workspace_ui.calibration.preview_stop.request_stop();
+    if(workspace_ui.calibration.preview_job.valid())workspace_ui.calibration.preview_job.wait();
     graphics.shutdown(); const auto info = graphics.info();
     std::cout << "Viewer frames: " << info.presented_frames << " | 3D draws: " << info.draw_calls << " | UI draws: " << info.ui_draw_calls << " | UI vertices: " << info.ui_vertices
               << " | Scene/UI pipeline generations: " << info.pipeline_generations << '/' << info.ui_pipeline_generations

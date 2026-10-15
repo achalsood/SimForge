@@ -21,6 +21,8 @@ struct WorkloadDraft
     scenario::ProcessingMode processing{scenario::ProcessingMode::Constant};
     std::array<std::string,4> bounds{"240","480","600","1200"};
     std::vector<std::array<std::string,3>> segments; // Raw simulated start/end/interval seconds; invalid edits are retained.
+    std::string rate_per_second{"0.016666666666666666"};
+    std::vector<std::array<std::string,3>> intensities;
     bool operator==(const WorkloadDraft&) const = default;
 };
 struct Draft { std::array<std::string,9> values; WorkloadDraft workload; bool operator==(const Draft&) const = default; };

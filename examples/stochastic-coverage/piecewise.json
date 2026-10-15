@@ -1,0 +1,43 @@
+{
+    "schema_version":  1,
+    "name":  "Seeded piecewise Poisson arrivals",
+    "domain":  "warehouse",
+    "simulation":  {
+                       "tick_rate":  60,
+                       "duration_seconds":  28800,
+                       "random_seed":  42
+                   },
+    "warehouse":  {
+                      "loading_bays":  3,
+                      "workers":  10,
+                      "forklifts":  2,
+                      "workload":  {
+                                       "generator_version":  2,
+                                       "arrivals":  {
+                                                        "mode":  "piecewise_poisson",
+                                                        "segments":  [
+                                                                         {
+                                                                             "start_seconds":  0,
+                                                                             "end_seconds":  7200,
+                                                                             "rate_per_second":  0.0083333333333333332
+                                                                         },
+                                                                         {
+                                                                             "start_seconds":  7200,
+                                                                             "end_seconds":  14400,
+                                                                             "rate_per_second":  0
+                                                                         },
+                                                                         {
+                                                                             "start_seconds":  18000,
+                                                                             "end_seconds":  28800,
+                                                                             "rate_per_second":  0.025
+                                                                         }
+                                                                     ]
+                                                    },
+                                       "processing":  {
+                                                          "mode":  "uniform",
+                                                          "minimum_seconds":  600,
+                                                          "maximum_seconds":  1200
+                                                      }
+                                   }
+                  }
+}

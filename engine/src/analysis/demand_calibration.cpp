@@ -17,9 +17,14 @@ void phase(const simulation::ExecutionControl* c,const char* name){if(c)c->updat
 void require(bool condition,std::string_view message){if(!condition)throw std::invalid_argument("Demand calibration: "+std::string(message));}
 constexpr std::int64_t first_second=0,last_second=4102444800LL; // 1970-01-01 .. 2100-01-01 exclusive arrivals
 std::int64_t next_edge(std::int64_t t,const Provenance& p,const FitSettings& s) {
-    return std::min({p.exposure.end,t<s.split?s.split:p.exposure.end,
+    auto edge=std::min({p.exposure.end,t<s.split?s.split:p.exposure.end,
         (t/s.daily_bin_seconds+1)*s.daily_bin_seconds,
         p.exposure.start+((t-p.exposure.start)/s.diagnostic_bin_seconds+1)*s.diagnostic_bin_seconds});
+    if(!p.exposure.windows.empty()) {
+        const auto it=std::upper_bound(p.exposure.windows.begin(),p.exposure.windows.end(),t,[](auto value,const CoverageWindow& w){return value<w.end;});
+        if(it!=p.exposure.windows.end())edge=std::min(edge,it->end);
+    }
+    return edge;
 }
 std::string filename(std::string name) {
     // Accept only the basename in evidence, never a private absolute path.
@@ -56,17 +61,50 @@ std::string timestamp(std::int64_t value) {
         <<'T'<<std::setw(2)<<seconds/3600<<':'<<std::setw(2)<<(seconds%3600)/60<<':'<<std::setw(2)<<seconds%60<<'Z';return out.str();
 }
 void validate_exposure(const ImportSettings& s) {
-    require(s.continuous,"coverage must explicitly be continuous; unknown coverage, gaps, interruptions and closed shifts are unsupported");
+    require(s.continuous!=!s.windows.empty(),"declare continuous exposure or explicit coverage windows, exclusively");
     require(s.start>=first_second && s.end<=last_second && s.start<s.end,"exposure must be nonempty [start,end) inside supported UTC range");
     require(s.end-s.start<=max_exposure_seconds,"continuous observation duration exceeds 366 days");
+    if(s.windows.empty())return;
+    require(s.windows.size()<=max_coverage_windows,"at most 256 coverage windows");
+    auto edge=s.start;
+    for(const auto& w:s.windows) {
+        (void)coverage_name(w.status);
+        require(w.start==edge && w.end>w.start && w.end<=s.end,"windows must partition [start,end) in order, without gaps, overlaps or duplicates; declare missing time unobserved");edge=w.end;
+    }
+    require(edge==s.end,"coverage windows must cover declared observation end");
+}
+const char* coverage_name(CoverageStatus s) {
+    switch(s){case CoverageStatus::Observed:return "observed";case CoverageStatus::Unobserved:return "unobserved";case CoverageStatus::Closed:return "closed";case CoverageStatus::Interrupted:return "interrupted";}
+    throw std::invalid_argument("Unsupported coverage status");
+}
+ImportSettings normalize_exposure(ImportSettings s) {
+    require(s.windows.size()<=max_coverage_windows,"at most 256 coverage windows");
+    std::stable_sort(s.windows.begin(),s.windows.end(),[](const auto& a,const auto& b){return a.start<b.start;});validate_exposure(s);return s;
+}
+CoverageStatus coverage_at(const ImportSettings& s,std::int64_t t) {
+    require(t>=s.start && t<s.end,"timestamp outside observation interval");
+    if(s.windows.empty())return CoverageStatus::Observed;
+    const auto it=std::upper_bound(s.windows.begin(),s.windows.end(),t,[](auto value,const CoverageWindow& w){return value<w.end;});
+    require(it!=s.windows.end() && it->start<=t,"timestamp outside declared coverage");return it->status;
+}
+std::uint64_t observed_exposure(const ImportSettings& s,std::int64_t start,std::int64_t end) {
+    if(s.windows.empty())return static_cast<std::uint64_t>(std::max<std::int64_t>(0,std::min(end,s.end)-std::max(start,s.start)));
+    std::uint64_t n=0;for(const auto& w:s.windows)if(w.status==CoverageStatus::Observed)n+=static_cast<std::uint64_t>(std::max<std::int64_t>(0,std::min(end,w.end)-std::max(start,w.start)));return n;
 }
 std::string detail::dataset_identity(std::string_view digest,const ImportSettings& s) {
+    if(!s.windows.empty()) {
+        std::string key=std::string(digest)+"|utc-second|coverage|retain-duplicates|sort|2|"+std::to_string(s.start)+"|"+std::to_string(s.end);
+        for(const auto& w:s.windows)key+="|"+std::to_string(w.start)+","+std::to_string(w.end)+","+coverage_name(w.status);
+        return "dataset-"+sha256(key);
+    }
     return "dataset-"+sha256(std::string(digest)+"|utc-second|continuous|retain-duplicates|sort|1|"+std::to_string(s.start)+"|"+std::to_string(s.end));
 }
-std::shared_ptr<const Dataset> import_csv(std::string_view bytes,std::string source,const ImportSettings& settings,const simulation::ExecutionControl* control) {
+std::shared_ptr<const Dataset> import_csv(std::string_view bytes,std::string source,const ImportSettings& input,const simulation::ExecutionControl* control) {
+    const auto settings=normalize_exposure(input);
     const auto began=Clock::now();validate_exposure(settings);phase(control,"Parsing");
     require(bytes.size()<=max_csv_bytes,"CSV exceeds 32 MiB; no records were truncated");
     auto data=std::make_shared<Dataset>();data->provenance.source_filename=filename(std::move(source));data->provenance.exposure=settings;
+    data->coverage_counts.resize(settings.windows.size());
     data->provenance.sha256=sha256(bytes,control);data->provenance.dataset_id=detail::dataset_identity(data->provenance.sha256,settings);
     if(bytes.starts_with("\xef\xbb\xbf"))bytes.remove_prefix(3);
     std::size_t row=0;
@@ -87,9 +125,11 @@ std::shared_ptr<const Dataset> import_csv(std::string_view bytes,std::string sou
         row_check(data->timestamps.size()<max_records,"record limit of 1000000 exceeded; no truncation");
         std::int64_t time{};try{time=parse_timestamp(line);}catch(const std::exception& e){throw std::invalid_argument(error(e.what()));}
         row_check(time>=settings.start && time<settings.end,"arrival outside declared [start,end) exposure");
+        row_check(coverage_at(settings,time)==CoverageStatus::Observed,"arrival outside observed coverage (closed/unobserved/interrupted records are invalid)");
         data->timestamps.push_back(time);
         const auto overview=static_cast<std::size_t>((time-settings.start)*64/(settings.end-settings.start));
         ++data->overview_counts[overview];
+        if(!settings.windows.empty()){const auto it=std::upper_bound(settings.windows.begin(),settings.windows.end(),time,[](auto value,const CoverageWindow& w){return value<w.end;});++data->coverage_counts[static_cast<std::size_t>(it-settings.windows.begin())];}
     }
     require(row>0,"CSV is empty; timestamp header required (header-only zero-arrival data is valid)");
     phase(control,"Validating");data->provenance.reordered=!std::is_sorted(data->timestamps.begin(),data->timestamps.end());
@@ -126,7 +166,8 @@ void detail::validate_settings(const ImportSettings& exposure,const FitSettings&
     require(s.model==Model::Constant || s.model==Model::DailyProfile,"unsupported calibration model");
     require(s.daily_bin_seconds>=1800 && s.daily_bin_seconds<=86400 && 86400%s.daily_bin_seconds==0,"daily bin width must divide 86400 and be 1800..86400 seconds");
     require(s.diagnostic_bin_seconds>=1 && s.diagnostic_bin_seconds<=static_cast<std::uint64_t>(max_exposure_seconds),"invalid diagnostic bin seconds");
-    if(s.model==Model::DailyProfile)require(s.split-exposure.start>=86400,"daily profile needs at least one complete day of training exposure");
+    if(s.model==Model::DailyProfile)require(s.split-exposure.start>=86400,"daily profile needs at least one UTC day of training span");
+    require(observed_exposure(exposure,exposure.start,s.split)>0 && observed_exposure(exposure,s.split,exposure.end)>0,"training and holdout each require positive observed exposure");
 }
 void detail::derive(Report& r,const simulation::ExecutionControl* control) {
     validate_settings(r.provenance.exposure,r.settings);require(!r.bins.empty() && r.bins.size()<=max_bins,"diagnostic report bin limit exceeded; increase bin widths or shorten exposure");
@@ -136,11 +177,15 @@ void detail::derive(Report& r,const simulation::ExecutionControl* control) {
     for(const auto& b:r.bins) {
         require(b.start==edge && b.end==next_edge(edge,r.provenance,s) && b.holdout==(edge>=s.split),"diagnostic exposure partition or boundary ownership mismatch");
         require(b.observed<=max_records-total,"accepted arrival count exceeds dataset limit");total+=b.observed;edge=b.end;
-        if(!b.holdout) {const auto i=count==1?0:static_cast<std::size_t>((b.start%86400)/s.daily_bin_seconds);counts[i]+=b.observed;exposures[i]+=b.end-b.start;train+=b.observed;train_exposure+=b.end-b.start;}
+        const auto exposure=observed_exposure(r.provenance.exposure,b.start,b.end);
+        require(exposure || b.observed==0,"excluded coverage cannot contain arrivals");
+        if(!b.holdout) {const auto i=count==1?0:static_cast<std::size_t>((b.start%86400)/s.daily_bin_seconds);counts[i]+=b.observed;exposures[i]+=exposure;train+=b.observed;train_exposure+=exposure;}
     }
     require(edge==r.provenance.exposure.end && total==r.provenance.accepted,"counts or exposure do not match dataset provenance");
     phase(control,"Fitting");auto began=Clock::now();r.baseline=estimate_rate(train,train_exposure);r.rates.clear();r.warnings.clear();r.limitations.clear();
-    for(std::size_t i=0;i<count;++i){require(exposures[i]>0,"no training exposure for a daily rate bin");r.rates.push_back(estimate_rate(counts[i],exposures[i]));if(counts[i]<5)r.warnings.push_back("Rate bin "+std::to_string(i)+" has fewer than 5 training arrivals; uncertainty is large.");}
+    for(std::size_t i=0;i<count;++i){
+        if(!exposures[i]){r.rates.push_back({0,0,0,0,0,false});r.warnings.push_back("Rate bin "+std::to_string(i)+" unavailable: no observed training exposure.");continue;}
+        r.rates.push_back(estimate_rate(counts[i],exposures[i]));if(counts[i]<5)r.warnings.push_back("Rate bin "+std::to_string(i)+" has fewer than 5 training arrivals; uncertainty is large.");}
     if(r.provenance.reordered)r.warnings.push_back("Input was out of chronological order and stably sorted.");
     if(r.provenance.duplicates)r.warnings.push_back(std::to_string(r.provenance.duplicates)+" simultaneous arrivals retained; no automatic deduplication.");
     if(train_exposure<86400)r.warnings.push_back("Training exposure is shorter than one UTC day; daily variation is unassessed.");
@@ -149,19 +194,21 @@ void detail::derive(Report& r,const simulation::ExecutionControl* control) {
     for(auto* m:{&r.training,&r.holdout,&r.baseline_training,&r.baseline_holdout}){m->deviance=0;m->log_likelihood=0;}
     std::size_t zero=0;double pearson=0;
     for(auto& b:r.bins) {
-        if(control)control->check();const auto exposure=static_cast<std::uint64_t>(b.end-b.start);
+        if(control)control->check();const auto exposure=observed_exposure(r.provenance.exposure,b.start,b.end);
         const auto i=count==1?0:static_cast<std::size_t>((b.start%86400)/s.daily_bin_seconds);
         b.expected=r.rates[i].per_second*static_cast<double>(exposure);b.baseline_expected=r.baseline.per_second*static_cast<double>(exposure);b.residual=static_cast<double>(b.observed)-b.expected;
+        b.prediction_available=r.rates[i].available;
         add_metric(b.holdout?r.holdout:r.training,b.observed,b.expected,exposure);
+        if(exposure && !b.prediction_available){auto& m=b.holdout?r.holdout:r.training;m.unavailable_exposure_seconds+=exposure;m.unavailable_count+=b.observed;m.deviance.reset();m.log_likelihood.reset();}
         add_metric(b.holdout?r.baseline_holdout:r.baseline_training,b.observed,b.baseline_expected,exposure);
         if(b.holdout && b.expected>0)pearson+=b.residual*b.residual/b.expected;
-        if(!b.observed)++zero;
+        if(exposure && !b.observed)++zero;
         if(b.holdout && b.observed>=5 && static_cast<double>(b.observed)>3*std::max(1.0,b.expected))r.warnings.push_back("Descriptive spike: holdout interval "+timestamp(b.start)+" observed "+std::to_string(b.observed)+" arrivals, exceeding three times max(1, expected). No significance test.");
     }
     for(auto* m:{&r.training,&r.holdout,&r.baseline_training,&r.baseline_holdout})finish(*m);
     if(zero)r.warnings.push_back(std::to_string(zero)+" continuously observed diagnostic intervals had zero arrivals.");
-    if(r.holdout.signed_error>0)r.warnings.push_back("Fitted model underpredicted the total holdout arrival count.");
-    if(r.holdout.signed_error<0)r.warnings.push_back("Fitted model overpredicted the total holdout arrival count.");
+    if(!r.holdout.unavailable_exposure_seconds && r.holdout.signed_error>0)r.warnings.push_back("Fitted model underpredicted the total holdout arrival count.");
+    if(!r.holdout.unavailable_exposure_seconds && r.holdout.signed_error<0)r.warnings.push_back("Fitted model overpredicted the total holdout arrival count.");
     if(pearson>3*static_cast<double>(r.bins.size()))r.warnings.push_back("Large descriptive holdout Pearson residual sum; variability or distribution shift may exceed model assumptions. No hypothesis test.");
     r.limitations={"Continuous UTC observation only; gaps, closures, offsets, DST, leap seconds and subsecond timestamps are unsupported.",
         "Rates use training count / observed exposure only. Daily bins and diagnostic width are manually predefined.",
@@ -172,6 +219,12 @@ void detail::derive(Report& r,const simulation::ExecutionControl* control) {
         "Arrival records do not identify service durations. Source service and resource settings are preserved during conversion.",
         "Zero expected count with positive observations has infinite Poisson deviance and negative-infinite likelihood; exported null with explicit unavailable status."};
     r.id="calibration-"+sha256(r.provenance.dataset_id+"|1|"+std::to_string(s.split)+"|"+std::to_string(static_cast<int>(s.model))+"|"+std::to_string(s.daily_bin_seconds)+"|"+std::to_string(s.diagnostic_bin_seconds));
+    if(!r.provenance.exposure.windows.empty()) {
+        r.id="calibration-"+sha256(r.provenance.dataset_id+"|2|"+std::to_string(s.split)+"|"+std::to_string(static_cast<int>(s.model))+"|"+std::to_string(s.daily_bin_seconds)+"|"+std::to_string(s.diagnostic_bin_seconds));
+        r.limitations[0]="Explicit UTC coverage windows: only observed time contributes exposure. Closed, unobserved and interrupted provenance remains distinct. No implicit simulation operating schedule.";
+        r.limitations[5]="Seeded Poisson conversion preserves fitted intensity on engine ticks. Unestimated simulated hours require explicit exclusion or conversion is rejected. Periodic surrogate remains an explicit approximation.";
+        if(r.holdout.unavailable_exposure_seconds)r.warnings.push_back("Holdout includes unavailable rate bins; total fitted prediction/error and likelihood are unavailable. Constant baseline remains evaluable.");
+    }
     r.timings.validation_ms=elapsed(began);phase(control,"Report construction");
 }
 std::shared_ptr<const Report> fit(std::shared_ptr<const Dataset> data,const FitSettings& settings,const simulation::ExecutionControl* control) {
@@ -188,7 +241,8 @@ std::shared_ptr<const Report> fit(std::shared_ptr<const Dataset> data,const FitS
     }
     detail::derive(*r,control);r->timings.fit_ms=std::max(0.0,elapsed(began)-r->timings.validation_ms);r->timings.import_ms=data->import_ms;return r;
 }
-std::shared_ptr<const Dataset> load_csv(const std::filesystem::path& path,const ImportSettings& exposure,const simulation::ExecutionControl* control) {
+std::shared_ptr<const Dataset> load_csv(const std::filesystem::path& path,const ImportSettings& input,const simulation::ExecutionControl* control) {
+    const auto exposure=normalize_exposure(input);
     validate_exposure(exposure);phase(control,"Reading");const auto began=Clock::now();
     require(std::filesystem::is_regular_file(path),"arrival CSV must be a regular local file");
     require(std::filesystem::file_size(path)<=max_csv_bytes,"CSV exceeds 32 MiB");
@@ -203,19 +257,21 @@ std::shared_ptr<const Dataset> load_csv(const std::filesystem::path& path,const 
     imported->import_ms=elapsed(began);phase(control,"Publication");return imported;
 }
 std::shared_ptr<const Report> calibrate(const FileRequest& request,const simulation::ExecutionControl* control) {
-    detail::validate_settings(request.exposure,request.fit);const auto began=Clock::now();
-    auto data=load_csv(request.csv,request.exposure,control);const auto imported=elapsed(began);
+    const auto exposure=normalize_exposure(request.exposure);
+    detail::validate_settings(exposure,request.fit);const auto began=Clock::now();
+    auto data=load_csv(request.csv,exposure,control);const auto imported=elapsed(began);
     auto r=std::make_shared<Report>(*fit(std::move(data),request.fit,control));r->timings.import_ms=imported;phase(control,"Publication");return r;
 }
 Conversion convert(const Report& r,const scenario::ScenarioDefinition& source,std::string name,std::uint64_t seed,std::int64_t start,bool accepted) {
-    require(accepted,"explicitly accept periodic approximation after reviewing fitted versus represented rates; Poisson simulation is unsupported");
+    require(accepted,"explicitly accept periodic approximation after reviewing fitted versus represented rates, or choose seeded Poisson conversion");
     scenario::validate(source);require(std::holds_alternative<scenario::WarehouseConfig>(source.domain),"warehouse source scenario required");
     require(start>=first_second && start<=last_second-source.simulation.duration_seconds,"simulation UTC start/horizon outside supported range");
     // Validate report evidence before trusting supplied rates (including callers outside the UI).
     auto validated=parse_report(report_json(r));const auto& model=*validated;
+    for(const auto& v:model.rates)require(v.available,"periodic conversion cannot fabricate rates for unestimated hours");
     Conversion c;c.source=source;c.scenario=source;c.scenario.name=std::move(name);c.scenario.simulation.random_seed=seed;c.calibration_id=r.id;c.utc_start=start;c.seed=seed;
     c.semantics="Periodic surrogate v1: nearest integer-second reciprocal rate (half up), arrivals at each segment start, [start,end), profile resets phase per segment. Not a Poisson process.";
-    auto& w=std::get<scenario::WarehouseConfig>(c.scenario.domain);w.workload.arrivals=scenario::ArrivalMode::Profile;w.workload.arrival_min_seconds=w.workload.arrival_max_seconds=0;w.workload.segments.clear();w.shipment_interval_seconds=0;
+    auto& w=std::get<scenario::WarehouseConfig>(c.scenario.domain);w.workload.arrivals=scenario::ArrivalMode::Profile;w.workload.arrival_min_seconds=w.workload.arrival_max_seconds=0;w.workload.segments.clear();w.workload.rate_per_second=0;w.workload.intensities.clear();w.shipment_interval_seconds=0;
     std::vector<std::uint32_t> intervals;
     for(const auto& rate:model.rates) {
         c.fitted_per_second.push_back(rate.per_second);
@@ -231,5 +287,33 @@ Conversion convert(const Report& r,const scenario::ScenarioDefinition& source,st
         if(intervals[i]){require(w.workload.segments.size()<scenario::max_demand_segments,"conversion exceeds 64 profile segments; shorten source simulation horizon");w.workload.segments.push_back({t,end,intervals[i]});}t=end;
     }
     scenario::validate(c.scenario);return c;
+}
+Conversion convert_stochastic(const Report& r,const scenario::ScenarioDefinition& source,std::string name,std::uint64_t seed,std::int64_t start,bool exclude,const simulation::ExecutionControl* control) {
+    if(control)control->update("Validating calibration evidence");
+    scenario::validate(source);require(std::holds_alternative<scenario::WarehouseConfig>(source.domain),"warehouse source required");
+    require(start>=first_second && start<=last_second-source.simulation.duration_seconds,"simulation UTC horizon outside range");
+    auto validated=parse_report(report_json(r));const auto& model=*validated;
+    Conversion c;c.source=source;c.scenario=source;c.scenario.name=std::move(name);c.scenario.simulation.random_seed=seed;c.calibration_id=r.id;c.utc_start=start;c.seed=seed;c.exclude_unavailable=exclude;
+    c.semantics="Seeded Poisson count process v2: fitted arrivals/second, conditional uniform engine ticks, stable shipment order, [start,end).";
+    if(exclude)c.semantics+=" Explicit simulated schedule excludes unestimated UTC rate bins; historical coverage is not copied into the schedule.";
+    auto& w=std::get<scenario::WarehouseConfig>(c.scenario.domain);w.shipment_interval_seconds=0;
+    auto processing=w.workload;w.workload={};w.workload.processing=processing.processing;w.workload.processing_min_seconds=processing.processing_min_seconds;w.workload.processing_max_seconds=processing.processing_max_seconds;
+    w.workload.arrivals=model.settings.model==Model::Constant?scenario::ArrivalMode::Poisson:scenario::ArrivalMode::PiecewisePoisson;
+    for(const auto& rate:model.rates){c.fitted_per_second.push_back(rate.per_second);c.represented_per_second.push_back(rate.per_second);c.fitted_available.push_back(rate.available);}
+    if(model.settings.model==Model::Constant)w.workload.rate_per_second=model.rates.front().per_second;
+    else for(std::uint32_t t=0;t<source.simulation.duration_seconds;) {
+        const auto utc=start+t;const auto i=static_cast<std::size_t>((utc%86400)/model.settings.daily_bin_seconds);
+        const auto end=std::min(source.simulation.duration_seconds,t+model.settings.daily_bin_seconds-static_cast<std::uint32_t>(utc%model.settings.daily_bin_seconds));
+        const auto& rate=model.rates[i];require(rate.available || exclude,"simulation includes an unestimated UTC bin; explicitly exclude unestimated hours or choose an estimated operating horizon");
+        require(w.workload.intensities.size()<scenario::max_demand_segments,"at most 64 converted intensity segments");
+        w.workload.intensities.push_back({t,end,rate.available?rate.per_second:0});t=end;
+    }
+    scenario::validate(c.scenario);c.expected_count=scenario::workload::expected_arrivals(w,c.scenario.simulation.duration_seconds);
+    const auto ticks=scenario::workload::poisson_ticks(c.scenario,control);c.realized_count=static_cast<std::uint32_t>(ticks.size());const auto horizon=scenario::total_ticks(c.scenario);
+    if(control)control->update("Building realization diagnostics",{},ticks.size(),scenario::max_warehouse_shipments);
+    for(auto tick:ticks)++c.realized_bins[static_cast<std::size_t>(tick*64/horizon)];
+    auto intensities=w.workload.intensities;if(w.workload.arrivals==scenario::ArrivalMode::Poisson)intensities={{0,c.scenario.simulation.duration_seconds,w.workload.rate_per_second}};
+    for(std::size_t i=0;i<64;++i){const auto a=(horizon*i+63)/64,b=(horizon*(i+1)+63)/64;for(const auto& segment:intensities){const auto overlap=std::max<std::int64_t>(0,static_cast<std::int64_t>(std::min(b,std::uint64_t{segment.end_seconds}*c.scenario.simulation.tick_rate))-static_cast<std::int64_t>(std::max(a,std::uint64_t{segment.start_seconds}*c.scenario.simulation.tick_rate)));c.expected_bins[i]+=segment.rate_per_second*static_cast<double>(overlap)/c.scenario.simulation.tick_rate;}}
+    return c;
 }
 }

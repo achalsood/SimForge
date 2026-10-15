@@ -112,7 +112,7 @@ ComparisonRequest prepare_request(const scenario::ScenarioDefinition& definition
     Objective objective, std::vector<ScenarioCandidate> candidates, const simulation::ExecutionControl* control)
 {
     (void)objective_name(objective); validate_candidates(candidates);
-    warehouse::WarehouseSimulation runtime{definition}; runtime.advance_to(tick,control);
+    warehouse::WarehouseSimulation runtime{definition,control}; runtime.advance_to(tick,control);
     ComparisonRequest request{1, scenario::serialize_scenario(definition), runtime.capture_snapshot(), objective, std::move(candidates)};
     validate_request(request); return request;
 }
@@ -218,7 +218,7 @@ AnalysisReport run_comparison(const ComparisonRequest& request, const simulation
         if(!fresh_start) return execute_candidate(request.checkpoint,counts,control,final);
         auto d=scenario::parse_scenario(request.scenario_identity);auto& c=std::get<scenario::WarehouseConfig>(d.domain);
         c.loading_bays=counts.loading_bays;c.workers=counts.workers;c.forklifts=counts.forklifts;
-        warehouse::WarehouseSimulation runtime(d);runtime.run(control);if(final) *final=runtime.capture_snapshot();return runtime.metrics();
+        warehouse::WarehouseSimulation runtime(d,control);runtime.run(control);if(final) *final=runtime.capture_snapshot();return runtime.metrics();
     };
     AnalysisReport report; report.request = request;
     std::sort(report.request.candidates.begin(), report.request.candidates.end(), [](const auto& a, const auto& b) { return a.name < b.name; });
