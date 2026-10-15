@@ -3,11 +3,13 @@
 #include <glm/vec2.hpp>
 #include <future>
 #include <atomic>
+#include "diagnostics_panel.hpp"
 struct RealizationProgress {
     std::atomic<int> phase{0};
     std::atomic<std::uint64_t> generated{0};
 };
 struct CalibrationUI {
+    DiagnosticsUI diagnostics;
     bool open{false},continuous{false},accepted_periodic{false};
     int tab{0},model{0};
     int conversion_mode{0}; // 0 legacy periodic; 1 explicit Poisson realization.
@@ -26,7 +28,7 @@ struct CalibrationUI {
     glm::vec2 toggle{},import{},fit{},cancel{},save{},preview_button{},approve{},run{},chart{};
     glm::vec2 load_request{},conversion_selector{},coverage_editor{};
     glm::vec2 preview_cancel{};
-    std::array<glm::vec2,4> tabs{};
+    std::array<glm::vec2,5> tabs{};
     double render_us{0};std::size_t rendered_frames{0};
 };
 void draw_calibration(simforge::workspace::ScenarioWorkspace&,CalibrationUI&,float);

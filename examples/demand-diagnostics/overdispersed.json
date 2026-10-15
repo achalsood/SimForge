@@ -1,0 +1,16 @@
+{
+  "csv": "overdispersed.csv",
+  "diagnostic_request_version": 1,
+  "settings": {
+    "bin_seconds": 3600,
+    "exploratory": false,
+    "nominal_coverage": 0.95,
+    "partition": "holdout",
+    "prediction_seconds": 3600,
+    "prediction_start": "2026-03-16T08:00:00Z",
+    "replications": 1000,
+    "seed": 320032,
+    "tail_threshold": 15
+  },
+  "source_calibration": "overdispersed-calibration.json"
+}

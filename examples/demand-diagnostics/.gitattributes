@@ -1,0 +1,2 @@
+# Preserve the original bytes used by calibration SHA-256 fingerprints.
+*.csv text eol=lf

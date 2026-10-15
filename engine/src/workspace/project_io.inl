@@ -51,11 +51,23 @@ void emit_project(const ProjectCodec::Capture& capture,const Sink& sink,ProjectT
                 if(evidence.size()!=record.serialized_bytes)invalid("calibration","evidence size mismatch");
                 if(i)payload_out(",");payload_out(evidence);
             }payload_out("]");
+        } else if(key=="demand_diagnostics") {
+            payload_out("[");
+            for(std::size_t i=0;i<capture.diagnostics.size();++i) {
+                control.phase("diagnostic_serialization",total,i);
+                const auto& record=capture.diagnostics[i];const auto evidence=analysis::diagnostics::report_json(*record.evidence);
+                coverage|=!record.evidence->request.source->provenance.exposure.windows.empty();
+                for(const auto& c:record.evidence->request.source->conversions)poisson|=scenario::workload::poisson(std::get<scenario::WarehouseConfig>(c.scenario.domain));
+                workload|=evidence.find("\"workload\":")!=std::string::npos;
+                if(evidence.size()!=record.serialized_bytes)invalid("diagnostic","evidence size mismatch");
+                if(i)payload_out(",");payload_out(evidence);
+            }payload_out("]");
         } else payload_out(value.dump());
     }
     payload_out("}");control.phase("integrity_finalization",total,capture.studies.size());
     if(workload)features.push_back("workload_v1");if(statistics)features.push_back("statistics_v1");if(interaction)features.push_back("interaction_v1");if(sensitivity)features.push_back("sensitivity_v1");
     if(capture.metadata.contains("demand_calibrations"))features.push_back("demand_calibration_v1");
+    if(capture.metadata.contains("demand_diagnostics"))features.push_back("demand_diagnostics_v1");
     if(poisson)features.push_back("poisson_arrivals_v2");if(coverage)features.push_back("coverage_windows_v2");
     Json header{{"crc32",crc.value()},{"engine",project_engine_version},{"features",std::move(features)},{"format","SimForge"},{"payload_size",payload_bytes},{"scenario_schema",1},{"version",project_format_version}};
     for(const auto& [key,value]:header.items()){out(",");out(Json(key).dump());out(":");out(value.dump());}out("}");
@@ -123,6 +135,9 @@ LoadedProject read_project(const std::filesystem::path& path,bool recovery,Proje
     std::size_t events=0,study_events=0,history_bytes=0;std::vector<std::vector<std::string>> objects;std::vector<StudyRecord> studies;
     ScenarioWorkspace decoder;ProjectCodec::decoder_ids(decoder);
     std::vector<CalibrationStudy> calibrations;std::set<std::string> calibration_ids;
+    std::vector<DiagnosticStudy> diagnostics;std::set<std::string> diagnostic_ids;
+    bool diagnostic_active=false,diagnostic_seen=false;std::size_t diagnostic_events=0;
+    detail::Digest diagnostic_digest;diagnostic_digest.append("[");
     bool calibration_active=false,calibration_seen=false;std::size_t calibration_events=0;
     bool poisson=false,coverage=false;
     detail::Digest calibration_digest;calibration_digest.append("[");
@@ -136,6 +151,7 @@ LoadedProject read_project(const std::filesystem::path& path,bool recovery,Proje
         if(events==1)control.phase("parsing",buffer.bytes(),0);
         if(history_active && ++study_events>4'000'000)throw std::length_error("Study JSON event limit exceeded");
         if(calibration_active && ++calibration_events>100'000)throw std::length_error("Calibration JSON event limit exceeded");
+        if(diagnostic_active && ++diagnostic_events>500'000)throw std::length_error("Diagnostic JSON event limit exceeded");
         if(event==Json::parse_event_t::object_start)objects.emplace_back();
         else if(event==Json::parse_event_t::key) {
             const auto key=value.get<std::string>();if(key.size()>4096)invalid("JSON","key length exceeds limit");
@@ -144,7 +160,7 @@ LoadedProject read_project(const std::filesystem::path& path,bool recovery,Proje
                 if(std::find(allowed.begin(),allowed.end(),key)==allowed.end())invalid(key,"unexpected project field");
             }
             if(depth==2 && !history_active && !runs_active) {
-                constexpr std::array<std::string_view,20> allowed{"identity","baseline","draft","draft_origin","candidates","runs","active_run","next_run_id","next_candidate_id","default_speed","preferences","report","preview","draft_workload","draft_origin_workload","study_history","selected_study","next_study_id","demand_calibrations","selected_calibration"};
+                constexpr std::array<std::string_view,22> allowed{"identity","baseline","draft","draft_origin","candidates","runs","active_run","next_run_id","next_candidate_id","default_speed","preferences","report","preview","draft_workload","draft_origin_workload","study_history","selected_study","next_study_id","demand_calibrations","selected_calibration","demand_diagnostics","selected_diagnostic"};
                 if(std::find(allowed.begin(),allowed.end(),key)==allowed.end())invalid(key,"unexpected payload field");
             }
             auto& keys=objects.back();if(keys.size()>=64)throw std::length_error("JSON object field limit exceeded");
@@ -165,6 +181,17 @@ LoadedProject read_project(const std::filesystem::path& path,bool recovery,Proje
         if(depth==2 && payload_key=="study_history" && event==Json::parse_event_t::array_start){history_active=true;history_seen=true;}
         if(depth==2 && payload_key=="runs" && event==Json::parse_event_t::array_start){runs_active=true;runs_seen=true;}
         if(depth==2 && payload_key=="demand_calibrations" && event==Json::parse_event_t::array_start){calibration_active=true;calibration_seen=true;}
+        if(depth==2 && payload_key=="demand_diagnostics" && event==Json::parse_event_t::array_start){diagnostic_active=true;diagnostic_seen=true;}
+        if(diagnostic_active && depth==3 && (event==Json::parse_event_t::value || event==Json::parse_event_t::array_start))invalid("diagnostic","expected report object");
+        if(diagnostic_active && depth==3 && event==Json::parse_event_t::object_end) {
+            control.phase("diagnostic_reconstruction",buffer.bytes(),diagnostics.size());
+            if(diagnostics.size()>=max_studies)invalid("diagnostics","at most 32 retained studies");
+            const auto bytes=value.dump();auto report=analysis::diagnostics::parse_report(bytes);
+            if(!diagnostic_ids.insert(report->id).second)invalid("diagnostics","duplicate diagnostic ID");
+            if(!diagnostics.empty())diagnostic_digest.append(",");diagnostic_digest.append(bytes);
+            diagnostics.push_back({std::move(report),bytes.size()});diagnostic_events=0;return false;
+        }
+        if(diagnostic_active && depth==2 && event==Json::parse_event_t::array_end){diagnostic_active=false;diagnostic_digest.append("]");}
         if(calibration_active && depth==3 && (event==Json::parse_event_t::value || event==Json::parse_event_t::array_start))invalid("calibration","expected report object");
         if(calibration_active && depth==3 && event==Json::parse_event_t::object_end) {
             control.phase("calibration_reconstruction",buffer.bytes(),calibrations.size());
@@ -212,18 +239,20 @@ LoadedProject read_project(const std::filesystem::path& path,bool recovery,Proje
     const auto version=integer(j.at("version"),UINT32_MAX,"version");if(version!=1 && version!=project_format_version)invalid("version","unsupported project version");
     const auto& payload=j.at("payload");if((version==2)!=history_seen || history_seen!=payload.contains("study_history"))invalid("history","version and history representation disagree");
     if(calibration_seen!=payload.contains("demand_calibrations") || (calibration_seen && version!=2))invalid("calibrations","v2 bounded collection required");
+    if(diagnostic_seen!=payload.contains("demand_diagnostics") || (diagnostic_seen && version!=2))invalid("diagnostics","v2 bounded collection required");
     if(bounded(j.at("engine"),64,"engine")!=project_engine_version || integer(j.at("scenario_schema"),1,"scenario schema")!=1)invalid("engine","incompatible simulation/schema version");
     auto features=Json::array({"warehouse_snapshots","clock_phase","historical_reports","independent_runs"});
     if(workload||has_workload(payload))features.push_back("workload_v1");if(statistics||has_statistics(payload))features.push_back("statistics_v1");if(interaction||has_interaction(payload))features.push_back("interaction_v1");if(sensitivity||has_sensitivity(payload))features.push_back("sensitivity_v1");
     if(calibration_seen)features.push_back("demand_calibration_v1");
+    if(diagnostic_seen)features.push_back("demand_diagnostics_v1");
     if(poisson)features.push_back("poisson_arrivals_v2");if(coverage)features.push_back("coverage_windows_v2");
     if(j.at("features")!=features)invalid("features","unsupported or missing persistence features");
     const auto integrity=Timer::now();detail::Digest canonical;canonical.append("{");bool first=true;
-    for(const auto& [key,value]:payload.items()){if(!first)canonical.append(",");first=false;canonical.append(Json(key).dump());canonical.append(":");if(key=="study_history" && history_seen)canonical.append(history);else if(key=="demand_calibrations" && calibration_seen)canonical.append(calibration_digest);else if(key=="baseline" && baseline_digest)canonical.append(*baseline_digest);else if(key=="runs" && runs_seen)canonical.append(runs_digest);else canonical.append(value.dump());}
+    for(const auto& [key,value]:payload.items()){if(!first)canonical.append(",");first=false;canonical.append(Json(key).dump());canonical.append(":");if(key=="study_history" && history_seen)canonical.append(history);else if(key=="demand_calibrations" && calibration_seen)canonical.append(calibration_digest);else if(key=="demand_diagnostics" && diagnostic_seen)canonical.append(diagnostic_digest);else if(key=="baseline" && baseline_digest)canonical.append(*baseline_digest);else if(key=="runs" && runs_seen)canonical.append(runs_digest);else canonical.append(value.dump());}
     canonical.append("}");if(integer(j.at("payload_size"),project_max_bytes,"payload size")!=canonical.bytes || integer(j.at("crc32"),UINT32_MAX,"crc32")!=canonical.crc)invalid("project","corrupt project payload");const auto final_integrity=ms(integrity);timings.integrity_ms+=final_integrity;
     LoadedProject result;control.phase("workspace_reconstruction",buffer.bytes(),studies.size());
     if(!baseline_digest || !runs_seen)invalid("runs","baseline object and runs array required");
-    result.workspace=ProjectCodec::payload(payload,result.info,result.preferences,timings,history_seen?std::optional(std::move(studies)):std::nullopt,std::move(restored),std::move(calibrations));
+    result.workspace=ProjectCodec::payload(payload,result.info,result.preferences,timings,history_seen?std::optional(std::move(studies)):std::nullopt,std::move(restored),std::move(calibrations),std::move(diagnostics));
     timings.validation_ms+=ms(validating)-final_integrity;
     if(!recovery)result.info.path=std::filesystem::absolute(path).lexically_normal();control.phase("ready_to_publish",buffer.bytes(),history_seen?result.workspace.studies().size():0);return result;
 }

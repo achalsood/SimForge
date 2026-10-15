@@ -13,6 +13,7 @@
 #include <simforge/analysis/sensitivity.hpp>
 #include <simforge/analysis/interaction.hpp>
 #include <simforge/analysis/confirmation.hpp>
+#include <simforge/analysis/demand_diagnostics.hpp>
 #include <simforge/workspace/project.hpp>
 #include <nlohmann/json.hpp>
 #include <fstream>
@@ -38,6 +39,7 @@ struct Options
     bool headless{false};
     bool live{false};
     std::optional<std::filesystem::path> calibration,calibration_source,export_scenario;
+    std::optional<std::filesystem::path> diagnostics;
     std::optional<std::string> calibration_start;
     std::optional<std::uint64_t> calibration_seed;
     bool accept_periodic{false};
@@ -72,6 +74,7 @@ Options parse_options(int argc, char* argv[])
     for (int i = 1; i < argc; ++i)
     {
         const std::string_view argument{argv[i]};
+        if(argument=="--diagnose-demand") {if(options.diagnostics || ++i==argc)throw std::invalid_argument("Missing or duplicate diagnostic request");options.diagnostics=argv[i];continue;}
         if(argument=="--calibrate-demand" || argument=="--calibration-source" || argument=="--export-scenario") {
             auto& destination=argument=="--calibrate-demand"?options.calibration:argument=="--calibration-source"?options.calibration_source:options.export_scenario;
             if(destination || ++i==argc)throw std::invalid_argument("Missing or duplicate calibration path");destination=argv[i];continue;
@@ -150,6 +153,11 @@ Options parse_options(int argc, char* argv[])
             ticks_seen = true;
         }
         else throw std::invalid_argument("Unknown or duplicate argument");
+    }
+    if(options.diagnostics) {
+        if(!options.headless || options.calibration || options.project || options.verify_project || options.live || options.scenario || options.speed || options.record || options.replay || options.warehouse_replay || options.experiment || options.compare_forklifts || options.checkpoint_seconds || entities_seen || ticks_seen || options.graphics_smoke || options.graphics_capture || options.export_seeds || options.export_marginal || options.export_interactions || options.export_interaction_seeds || options.calibration_source || options.export_scenario || options.calibration_start || options.calibration_seed || options.accept_periodic || options.poisson_conversion || options.exclude_unestimated)
+            throw std::invalid_argument("--diagnose-demand requires --headless and conflicts with other workflows");
+        return options;
     }
     if(options.verify_project && (!options.headless || options.project || options.live || options.scenario || options.speed || options.record || options.replay || options.warehouse_replay || options.experiment || options.compare_forklifts || options.checkpoint_seconds || entities_seen || ticks_seen || options.graphics_smoke || options.graphics_capture || options.export_json || options.export_csv || options.export_seeds || options.export_marginal || options.export_interactions || options.export_interaction_seeds))
         throw std::invalid_argument("--verify-project requires --headless and conflicts with other workflows");
@@ -476,6 +484,21 @@ void populate(simforge::world::World& world, std::uint64_t count)
 
 int run(const Options& options)
 {
+    if(options.diagnostics) {
+        namespace diagnostics=simforge::analysis::diagnostics;
+        const std::array outputs{&options.export_json,&options.export_csv};
+        for(std::size_t i=0;i<outputs.size();++i)if(*outputs[i]) {
+            if(std::filesystem::exists(**outputs[i]))throw std::invalid_argument("Diagnostic output already exists");
+            for(std::size_t j=0;j<i;++j)if(*outputs[j] && std::filesystem::absolute(**outputs[i]).lexically_normal()==std::filesystem::absolute(**outputs[j]).lexically_normal())throw std::invalid_argument("Diagnostic output paths must differ");
+        }
+        auto report=diagnostics::run(diagnostics::load_request(*options.diagnostics));
+        if(options.export_json)diagnostics::save_export(*options.export_json,diagnostics::report_json(*report));
+        if(options.export_csv)diagnostics::save_export(*options.export_csv,diagnostics::report_csv(*report));
+        std::cout<<"SimForge Demand Diagnostics | "<<report->id<<" | Source="<<report->request.source->id<<'\n'
+            <<report->assessment<<"\nValid bins="<<report->observed.valid_bins<<" | Replications="<<report->replications.size()<<" | Process-only coverage=";
+        if(report->process_coverage.fraction)std::cout<<*report->process_coverage.fraction;else std::cout<<"unavailable";
+        std::cout<<'\n';for(const auto& warning:report->warnings)std::cout<<warning<<'\n';return 0;
+    }
     if(options.calibration) {
         namespace demand=simforge::analysis::demand;
         const std::array outputs{&options.export_json,&options.export_csv,&options.export_scenario};

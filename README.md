@@ -1,5 +1,30 @@
 # SimForge
 
+## How to tell whether a Poisson demand model represents real warehouse arrivals.
+
+Open a completed demand calibration in **Study History**, inspect its frozen rates, then choose **Demand Diagnostics**. Configure disjoint UTC bins, training or holdout, a predefined high-count threshold, prediction coverage/horizon, replication count and explicit seed. New bin boundaries require the original CSV with its matching SHA-256; saved diagnostic results retain their own bounded counts.
+
+![Demand diagnostic setup and frozen source](docs/artifacts/diagnostics-setup.png)
+
+Run checks and compare actual counts with exposure-integrated expectations. Grey bins have missing exposure or unavailable fitted rates. Inspect standardized residuals across observed intervals; collection gaps break temporal adjacency.
+
+![Observed versus expected arrival counts](docs/artifacts/diagnostics-counts.png)
+![Standardized residuals with coverage gaps](docs/artifacts/diagnostics-residuals.png)
+
+Inspect the seeded reference distribution, zero counts, predefined upper-tail counts and supported descriptive lag correlation. Greater variability can reflect a changing mean, missing predictors or model mismatch. An unusual statistic does not prove the data is non-Poisson; repeated holdout inspection and multiple checks limit interpretation.
+
+![Fixed-parameter dispersion reference distribution](docs/artifacts/diagnostics-reference.png)
+
+Compare **process-only predictive intervals** with the separate **parameter-aware predictive envelope**. The illustrated multi-shift source predicts 9.2 future arrivals: process-only bounds are [4,16], and the conservative parameter-aware envelope is [2,20]. Neither includes unknown model misspecification or guarantees warehouse throughput. Holdout coverage reports actual inside/below/above counts.
+
+![Distinct process and parameter-aware predictive bounds](docs/artifacts/diagnostics-prediction.png)
+
+Save the diagnostic to History, add a title/notes, export JSON/CSV and save the project. Open preserves source lineage, counts, exposure, prediction methods and reference seeds without fabricating missing timestamps.
+
+![Conservative demand-model assessment and retained provenance](docs/artifacts/diagnostics-summary.png)
+
+Try the [five reproducible examples](examples/demand-diagnostics), read the [statistical methods, CLI contract and limitations](docs/demand-diagnostics.md), and inspect the [Commit 32 completion report](docs/commit-32-validation.md). Correctly generated Poisson data can still produce an unusual diagnostic; the example documentation retains such a result. Training checks use frozen parameters and are descriptive, not refitted bootstrap hypothesis tests.
+
 ## Calibrate a stochastic arrival process from multi-shift warehouse data.
 
 Open `examples/stochastic-coverage/homogeneous.json` and **Scenario Editor → Workload patterns**. Choose homogeneous or piecewise Poisson intensity, enter arrivals/second and an explicit seed, and run it. The expected count and actual realization are distinct; restarting the same seed reproduces the submitted workload.

@@ -58,7 +58,14 @@ void save_study_view(workspace::ScenarioWorkspace& w,const WorkspaceUI& ui) {
 void draw_study_history(workspace::ScenarioWorkspace& w,WorkspaceUI& ui,float s) {
     restore_view(w,ui);const bool open=ImGui::CollapsingHeader("Study History");ui.history_header=center();
     if(!open)return;
-    ImGui::Text("%zu / 32 studies | %.2f / 192 MiB",w.studies().size()+w.calibrations().size(),w.history_bytes()/1048576.0);
+    ImGui::Text("%zu / 32 studies | %.2f / 192 MiB",w.studies().size()+w.calibrations().size()+w.diagnostics().size(),w.history_bytes()/1048576.0);
+    for(const auto& diagnostic:w.diagnostics()) {
+        const auto& evidence=*diagnostic.evidence;ImGui::PushID(evidence.id.c_str());
+        if(ImGui::Selectable(("Demand diagnostics: "+evidence.title).c_str(),w.diagnostic_report()==diagnostic.evidence)){w.select_diagnostic(evidence.id);ui.calibration.open=true;ui.calibration.tab=4;ui.calibration.diagnostics.tab=4;}
+        if(ImGui::Button("Delete diagnostic..."))ImGui::OpenPopup("Delete diagnostic?");
+        if(ImGui::BeginPopupModal("Delete diagnostic?",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){ImGui::TextWrapped("Permanently delete this diagnostic? The source calibration and playable runs remain available.");if(ImGui::Button("Delete")){ui.delete_study_id=evidence.id;ImGui::CloseCurrentPopup();}ImGui::SameLine();if(ImGui::Button("Keep"))ImGui::CloseCurrentPopup();ImGui::EndPopup();}ImGui::PopID();
+    }
+    if(ui.delete_study_id.starts_with("diagnostic-")){try{w.delete_diagnostic(ui.delete_study_id,true);ui.delete_study_id.clear();}catch(const std::exception& e){ui.error=e.what();ui.delete_study_id.clear();}}
     for(const auto& calibration:w.calibrations()) {
         const auto& evidence=*calibration.evidence;ImGui::PushID(evidence.id.c_str());
         const auto label="Demand calibration: "+evidence.provenance.source_filename+" ("+(evidence.settings.model==analysis::demand::Model::Constant?"constant":"UTC daily")+")";

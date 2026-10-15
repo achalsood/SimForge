@@ -249,6 +249,7 @@ struct ProjectCodec
         Json metadata;
         std::vector<StudyRecord> studies;
         std::vector<CalibrationStudy> calibrations;
+        std::vector<DiagnosticStudy> diagnostics;
         std::vector<RunCapture> runs;
         std::string marker,saved;
     };
@@ -260,11 +261,13 @@ struct ProjectCodec
         (void)w.baseline();
         if(w.has_pending_study())throw std::logic_error("Resolve the unretained completed study before saving or recovering the project");
         if(w.has_pending_calibration())throw std::logic_error("Save or explicitly discard the completed calibration study before saving the project");
+        if(w.has_pending_diagnostic())throw std::logic_error("Save or explicitly discard the completed diagnostic before saving the project");
         for(const auto* draft:{&w.draft_,&w.draft_origin_})for(const auto& value:draft->values)(void)bounded(Json(value),4096,"draft field");
         for(const auto& c:w.candidates_){(void)bounded(Json(c.notes),4096,"candidate notes");(void)bounded(Json(c.changed_inputs),4096,"candidate changes");}
         Capture result;result.metadata=payload(w,info,prefs);result.studies=w.studies_;result.marker=marker(w,info,prefs);result.saved=timestamp();result.metadata["identity"]["saved"]=result.saved;
         const auto add=[&](const viewer::ViewerController& v,std::uint64_t id){result.runs.push_back({id,v.definition(),v.runtime().capture_snapshot(),v.runtime().clock().capture_snapshot(),v.orbit_camera().pose(),v.selection(),v.command_history()});};
         result.calibrations=w.calibrations_;
+        result.diagnostics=w.diagnostics_;
         add(*w.baseline_view_,0);for(const auto& r:w.runs_)add(*r.controller,r.id);return result;
     }
     static Json run(const RunCapture& r) {
@@ -411,6 +414,7 @@ struct ProjectCodec
             {"next_candidate_id",w.next_id_},{"default_speed",w.speed_},{"preferences",preferences_json(prefs)},{"report",nullptr},{"study_history",Json::array()},{"selected_study",w.selected_study_},{"next_study_id",w.next_study_id_},{"preview",nullptr}};
         if(w.history_bytes()>max_history_bytes) invalid("history","exceeds 192 MiB");
         if(!w.calibrations_.empty()){j["demand_calibrations"]=Json::array();j["selected_calibration"]=w.calibration_report_?w.calibration_report_->id:std::string{};}
+        if(!w.diagnostics_.empty()){j["demand_diagnostics"]=Json::array();j["selected_diagnostic"]=w.diagnostic_report_?w.diagnostic_report_->id:std::string{};}
         if(w.draft_.workload!=WorkloadDraft{}) j["draft_workload"]=workload_draft_json(w.draft_.workload);
         if(w.draft_origin_.workload!=WorkloadDraft{}) j["draft_origin_workload"]=workload_draft_json(w.draft_origin_.workload);
         for(const auto& c:w.candidates_) j["candidates"].push_back({{"id",c.id},{"definition",definition(c.definition)},{"notes",c.notes},{"changed_inputs",c.changed_inputs}});
@@ -445,9 +449,9 @@ struct ProjectCodec
         return study;
     }
     static void decoder_ids(ScenarioWorkspace& w) {w.next_id_=UINT64_MAX;}
-    static ScenarioWorkspace payload(const Json& j,ProjectInfo& info,ProjectPreferences& prefs,ProjectTimings& timings,std::optional<std::vector<StudyRecord>> decoded={},std::unique_ptr<RestoredRuns> restored={},std::vector<CalibrationStudy> calibrations={})
+    static ScenarioWorkspace payload(const Json& j,ProjectInfo& info,ProjectPreferences& prefs,ProjectTimings& timings,std::optional<std::vector<StudyRecord>> decoded={},std::unique_ptr<RestoredRuns> restored={},std::vector<CalibrationStudy> calibrations={},std::vector<DiagnosticStudy> diagnostics={})
     {
-        fields(j,{"identity","baseline","draft","draft_origin","candidates","runs","active_run","next_run_id","next_candidate_id","default_speed","preferences","report","preview"},{"draft_workload","draft_origin_workload","study_history","selected_study","next_study_id","demand_calibrations","selected_calibration"},"payload");
+        fields(j,{"identity","baseline","draft","draft_origin","candidates","runs","active_run","next_run_id","next_candidate_id","default_speed","preferences","report","preview"},{"draft_workload","draft_origin_workload","study_history","selected_study","next_study_id","demand_calibrations","selected_calibration","demand_diagnostics","selected_diagnostic"},"payload");
         const auto& identity=j.at("identity"); fields(identity,{"id","name","created","saved"},{},"project identity");
         info.id=bounded(identity.at("id"),32,"project ID");
         if(info.id.size()!=32 || info.id.find_first_not_of("0123456789abcdef")!=std::string::npos) invalid("project ID","invalid identity");
@@ -536,9 +540,12 @@ struct ProjectCodec
             }
         }
         w.calibrations_=std::move(calibrations);
-        if(w.studies_.size()+w.calibrations_.size()>max_studies || w.history_bytes()>max_history_bytes)invalid("history","combined calibration/analysis retention limit exceeded");
+        w.diagnostics_=std::move(diagnostics);
+        if(w.studies_.size()+w.calibrations_.size()+w.diagnostics_.size()>max_studies || w.history_bytes()>max_history_bytes)invalid("history","combined calibration/analysis retention limit exceeded");
         if(!w.calibrations_.empty())w.calibration_report_=w.calibrations_.back().evidence;
         if(j.contains("selected_calibration")){if(w.calibrations_.empty())invalid("selected calibration","missing retained calibration evidence");w.select_calibration(bounded(j.at("selected_calibration"),76,"selected calibration"));}
+        if(!w.diagnostics_.empty())w.diagnostic_report_=w.diagnostics_.back().evidence;
+        if(j.contains("selected_diagnostic")){if(w.diagnostics_.empty())invalid("selected diagnostic","missing retained diagnostic evidence");w.select_diagnostic(bounded(j.at("selected_diagnostic"),75,"selected diagnostic"));}
         if(!w.report_ || (prefs.result_name!="Baseline" &&
             (w.report_->statistics ? std::none_of(w.report_->statistics->candidates.begin(),w.report_->statistics->candidates.end(),[&](const auto& c){return c.name==prefs.result_name;}) :
             std::none_of(w.report_->candidates.begin(),w.report_->candidates.end(),[&](const auto& c){return c.candidate.name==prefs.result_name;}))))

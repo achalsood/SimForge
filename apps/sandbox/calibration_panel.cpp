@@ -70,16 +70,24 @@ void metrics(const demand::Report& r) {
 void draw_calibration(simforge::workspace::ScenarioWorkspace& w,CalibrationUI& ui,float) {
     const auto began=std::chrono::steady_clock::now();using namespace simforge;namespace demand=analysis::demand;
     const auto progress=w.calibration_execution().progress();
+    if(ui.tab==4) {
+        if(ImGui::SmallButton("Back to calibration")){ui.tab=2;ui.scroll_target=0;}
+        ImGui::BeginChild("Demand diagnostics content",{0,0});
+        if(ui.scroll_target==0){ImGui::SetScrollY(0);ui.scroll_target=-1;}
+        draw_diagnostics(w,ui.diagnostics);if(ui.diagnostics.navigate_source){ui.diagnostics.navigate_source=false;ui.tab=2;ui.scroll_target=0;}ImGui::EndChild();
+        ui.render_us+=std::chrono::duration<double,std::micro>(std::chrono::steady_clock::now()-began).count();++ui.rendered_frames;return;
+    }
     if(ui.preview_job.valid() && ui.preview_job.wait_for(std::chrono::seconds{0})==std::future_status::ready)action(ui,[&]{auto job=ui.preview_job;ui.preview_job={};auto result=job.get();if(w.calibration_report() && result.calibration_id==w.calibration_report()->id)ui.preview=std::move(result);});
     ImGui::TextWrapped("Demand Calibration | Local CSV | UTC seconds | Explicit [start,end) coverage");
     if(ui.preview_job.valid()){const char* phases[]{"Validating fitted evidence","Generating Poisson arrivals","Building realization diagnostics"};const auto phase=ui.preview_progress?std::clamp(ui.preview_progress->phase.load(),0,2):0;ImGui::Text("Phase: %s | Generated arrivals: %llu (safety limit 100000)",phases[phase],ui.preview_progress?ui.preview_progress->generated.load():0);if(ImGui::Button("Cancel realization preview"))ui.preview_stop.request_stop();ui.preview_cancel=center();}
     if(progress.active){ImGui::Text("Phase: %s",progress.phase.c_str());if(ImGui::Button("Cancel calibration"))w.calibration_execution().cancel();ui.cancel=center();}
     if(!progress.error.empty())ImGui::TextWrapped("Last attempt: %s",progress.error.c_str());
     if(progress.cancelled)ImGui::TextUnformatted("Cancelled; previous completed report preserved.");
-    for(int i=0;i<4;++i){if(i)ImGui::SameLine();const char* labels[]{"Import","Model & split","Validation","Scenario & exports"};if(ImGui::Button(labels[i])){ui.tab=i;ui.scroll_target=0;}ui.tabs[i]=center();}
+    const char* labels[]{"Import","Model & split","Validation","Scenario & exports","Demand Diagnostics"};for(int i=0;i<5;++i){if(i && ImGui::GetItemRectMax().x+ImGui::CalcTextSize(labels[i]).x+24<ImGui::GetWindowPos().x+ImGui::GetWindowWidth()-20)ImGui::SameLine();if(ImGui::Button(labels[i])){ui.tab=i;ui.scroll_target=0;}ui.tabs[i]=center();}
     ImGui::Separator();
     ImGui::BeginChild("Demand calibration content",{0,0});
     if(ui.scroll_target==0){ImGui::SetScrollY(0);ui.scroll_target=-1;}
+    if(ui.tab==4){draw_diagnostics(w,ui.diagnostics);ImGui::EndChild();return;}
     if(ui.tab==0) {
         input("Arrival CSV file",ui.path);if(ImGui::Button("Select CSV..."))action(ui,[&]{if(auto path=open_arrival_csv_dialog(ui.path,ui.error))ui.path=path->string();});
         ImGui::TextWrapped("Schema: one timestamp column, YYYY-MM-DDTHH:MM:SSZ. Duplicate arrivals retained. Unsupported records reject the complete import.");

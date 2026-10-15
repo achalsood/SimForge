@@ -86,6 +86,10 @@ struct CalibrationStudy {
     std::shared_ptr<const analysis::demand::Report> evidence;
     std::size_t serialized_bytes{0};
 };
+struct DiagnosticStudy {
+    std::shared_ptr<const analysis::diagnostics::Report> evidence;
+    std::size_t serialized_bytes{0};
+};
 std::string comparison_csv(const Comparison&);
 struct ExperimentRequest
 {
@@ -184,6 +188,15 @@ public:
     void discard_calibration(bool confirmed);
     bool has_pending_calibration()const;
     void record_calibration_conversion(analysis::demand::Conversion);
+    void start_diagnostics(analysis::diagnostics::Request,CalibrationExecution::Observer = {});
+    [[nodiscard]] const std::shared_ptr<const analysis::diagnostics::Report>& diagnostic_report()const noexcept{return diagnostic_report_;}
+    [[nodiscard]] const std::vector<DiagnosticStudy>& diagnostics()const noexcept{return diagnostics_;}
+    void retain_diagnostic(std::shared_ptr<const analysis::diagnostics::Report>);
+    void select_diagnostic(std::string_view);
+    void delete_diagnostic(std::string_view,bool confirmed);
+    void rename_diagnostic(std::string_view,std::string title,std::string notes);
+    void discard_diagnostic(bool confirmed);
+    bool has_pending_diagnostic()const;
     [[nodiscard]] const std::string& selected_study_id() const noexcept {return selected_study_;}
     [[nodiscard]] std::size_t history_bytes() const noexcept;
     void select_study(std::string_view id);
@@ -240,6 +253,8 @@ private:
     std::vector<CalibrationStudy> calibrations_;
     std::shared_ptr<const analysis::demand::Report> calibration_report_;
     std::shared_ptr<const analysis::demand::Dataset> calibration_dataset_;
+    std::vector<DiagnosticStudy> diagnostics_;
+    std::shared_ptr<const analysis::diagnostics::Report> diagnostic_report_;
 };
 [[nodiscard]] std::string differences(const scenario::ScenarioDefinition& baseline, const scenario::ScenarioDefinition& candidate);
 [[nodiscard]] const char* objective_label(analysis::Objective objective);

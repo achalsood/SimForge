@@ -1,0 +1,2 @@
+replications,observations,valid_bins,active_frames,mean_frame_ms,max_frame_ms,mean_diagnostic_ui_us,mean_main_thread_cpu_ms
+1000,210,8,155,4.11713,6.9467,53.1135,2.01613

@@ -38,10 +38,10 @@ void metadata(const std::string& s,std::size_t maximum,bool required=false) {
 }
 }
 std::size_t ScenarioWorkspace::history_bytes() const noexcept {
-    std::size_t bytes=0;for(const auto& s:studies_) {bytes+=s.serialized_bytes+s.title.size()+s.notes.size()+512;for(const auto& seeds:s.reserved_confirmation_seeds)bytes+=seeds.size()*21+32;}for(const auto& c:calibrations_)bytes+=c.serialized_bytes;return bytes;
+    std::size_t bytes=0;for(const auto& s:studies_) {bytes+=s.serialized_bytes+s.title.size()+s.notes.size()+512;for(const auto& seeds:s.reserved_confirmation_seeds)bytes+=seeds.size()*21+32;}for(const auto& c:calibrations_)bytes+=c.serialized_bytes;for(const auto& d:diagnostics_)bytes+=d.serialized_bytes;return bytes;
 }
 void ScenarioWorkspace::publish_study(std::shared_ptr<const Comparison> evidence,std::string title) {
-    if(studies_.size()+calibrations_.size()>=max_studies) throw std::length_error("History limit: 32 studies. Explicitly delete a study, then retain the pending result.");
+    if(studies_.size()+calibrations_.size()+diagnostics_.size()>=max_studies) throw std::length_error("History limit: 32 studies. Explicitly delete a study, then retain the pending result.");
     const auto type=study_type(*evidence);if(title.empty()) title=std::string(study_type_label(type))+" "+std::to_string(next_study_id_);
     if(type==StudyType::SingleSeed && (evidence->executions.empty() || evidence->definitions.empty()))throw std::invalid_argument("Empty completed study");
     if(evidence->confirmation) {
@@ -161,6 +161,7 @@ std::string ScenarioWorkspace::history_json() const {
     for(const auto& s:studies_)j["studies"].push_back({{"id",s.id},{"type",study_type_name(s.type)},{"title",s.title},{"notes",s.notes},{"completed",s.completed},
         {"engine",analysis::confirmation_engine_version},{"generator_version",scenario::workload_generator_version},{"reserved_confirmation_seeds",s.reserved_confirmation_seeds},{"evidence",Json::parse(comparison_storage_json(*s.evidence))}});
     if(!calibrations_.empty()){j["demand_calibrations"]=Json::array();for(const auto& c:calibrations_)j["demand_calibrations"].push_back(Json::parse(analysis::demand::report_json(*c.evidence)));}
+    if(!diagnostics_.empty()){j["demand_diagnostics"]=Json::array();for(const auto& d:diagnostics_)j["demand_diagnostics"].push_back(Json::parse(analysis::diagnostics::report_json(*d.evidence)));}
     auto bytes=j.dump();if(bytes.size()>max_history_bytes)throw std::length_error("History export exceeds 192 MiB");return bytes;
 }
 void ScenarioWorkspace::export_history_json(const std::filesystem::path& path) {analysis::detail::save_output(path,history_json());}
