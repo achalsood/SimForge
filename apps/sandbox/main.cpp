@@ -1,4 +1,9 @@
 #include <simforge/core/engine.hpp>
+#include "simforge_version.hpp"
+#if defined(_WIN32) && SIMFORGE_HAS_RENDERER
+#define NOMINMAX
+#include <Windows.h>
+#endif
 #if SIMFORGE_HAS_RENDERER
 #include "graphics.hpp"
 #include "viewer.hpp"
@@ -583,9 +588,37 @@ int run(const Options& options)
 
 int main(int argc, char* argv[])
 {
-    try { return run(parse_options(argc, argv)); }
+    try {
+        if (argc == 2 && std::string_view{argv[1]} == "--version") {
+            std::cout << "SimForge v" SIMFORGE_VERSION " | source " SIMFORGE_SOURCE_COMMIT
+                      << " | dirty " SIMFORGE_SOURCE_DIRTY << '\n';
+            return 0;
+        }
+        const auto options = parse_options(argc, argv);
+#if defined(_WIN32) && SIMFORGE_HAS_RENDERER
+        struct VulkanRuntime {
+            HMODULE module{};
+            ~VulkanRuntime() { if (module) FreeLibrary(module); }
+        } runtime;
+        if (!options.headless) {
+            runtime.module = LoadLibraryExW(L"vulkan-1.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+            if (!runtime.module) throw std::runtime_error(
+                "Cannot load the Windows Vulkan runtime. Install or update your GPU manufacturer's "
+                "Vulkan-capable graphics driver, then restart SimForge. See docs/windows-release.md. "
+                "The Vulkan SDK is not needed to run SimForge.");
+        }
+#endif
+        return run(options);
+    }
     catch (const std::exception& error)
     {
+#if defined(_WIN32) && SIMFORGE_HAS_RENDERER
+        if (argc == 1) {
+            const auto message = std::string{"SimForge could not start.\n\n"} + error.what() +
+                "\n\nFor graphics failures, update your GPU driver and check docs/windows-release.md for requirements.";
+            MessageBoxA(nullptr, message.c_str(), "SimForge startup error", MB_OK | MB_ICONERROR);
+        }
+#endif
         std::cerr << "SimForge sandbox: " << error.what()
                   << "\nUsage: simforge_sandbox [--headless [--entities N] [--ticks N]]\n"
                   << "  --headless --scenario FILE [--record OUTPUT]\n"

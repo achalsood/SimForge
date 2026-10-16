@@ -20,6 +20,8 @@ These are conditional simulation results, not guarantees about a real warehouse.
 
 ## Building and Testing Locally
 
+Windows portable release preparation is documented in the [Windows quick start](docs/windows-release.md) and [manual packaging procedure](docs/releases/windows-release-process.md). A downloadable release is pending validation and explicit publication approval; no download link is advertised yet.
+
 Automated tests are executed locally. This repository intentionally does not use hosted CI: GitHub Actions, scheduled workflows and automated release pipelines are not configured. The results below describe local Windows runs, not tests run on GitHub.
 
 Use an **x64 Visual Studio developer PowerShell/terminal** with a C++23-capable MSVC toolchain, CMake 3.25 or newer, Ninja, and vcpkg. Set `VCPKG_ROOT` to your vcpkg checkout. The manifest pins its dependency baseline; configuration installs the required dependencies. The verified environment uses Visual Studio 2026 Build Tools.

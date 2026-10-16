@@ -1,4 +1,5 @@
 #include "graphics.hpp"
+#include "simforge_version.hpp"
 #include "viewer.hpp"
 #include "dashboard.hpp"
 #include "save_dialog.hpp"
@@ -31,7 +32,7 @@ void summary(const simforge::renderer::RendererInfo& info)
               << "Validation: " << (info.validation_enabled ? "enabled" : "disabled")
               << " | Synchronization validation: " << (info.synchronization_validation ? "enabled" : "disabled")
               << "\nDepth: " << info.depth_format << " | Static GPU buffers: 2 | Asset init: " << info.asset_initialization_ms
-              << " ms | Pipeline creation: " << info.pipeline_creation_ms << " ms\n";
+              << " ms | Pipeline creation: " << info.pipeline_creation_ms << " ms\n" << std::flush;
 }
 void verify_scene(const simforge::renderer::CapturedFrame& frame)
 {
@@ -133,7 +134,7 @@ int run_graphics(std::optional<std::uint64_t> smoke_frames, const std::optional<
         expected_indices += static_cast<std::uint32_t>(mesh.indices.size());
     }
     platform::Window window;
-    window.create("SimForge Vulkan Sandbox",1280,720,platform::WindowMode::Vulkan);
+    window.create("SimForge v" SIMFORGE_VERSION " | Open a warehouse",1280,720,platform::WindowMode::Vulkan);
     renderer::Renderer graphics;
     renderer::RendererOptions options;
     options.ui = !smoke_frames || !scenario_path;
@@ -143,8 +144,8 @@ int run_graphics(std::optional<std::uint64_t> smoke_frames, const std::optional<
     std::optional<scenario::ScenarioDefinition> loaded_workspace;
     std::array<char,1025> scenario_input{};
     const char* executable_path=SDL_GetBasePath();
-    const auto example = std::filesystem::exists("examples/warehouse-baseline.json") ? std::filesystem::path{"examples/warehouse-baseline.json"} :
-        (executable_path?std::filesystem::path{executable_path}:std::filesystem::current_path())/"examples/warehouse-baseline.json";
+    if (!executable_path) throw std::runtime_error("Cannot locate the application directory: " + std::string{SDL_GetError()});
+    const auto example = std::filesystem::path{executable_path}/"examples/warehouse-baseline.json";
     const auto example_name = example.u8string();
     std::copy_n(reinterpret_cast<const char*>(example_name.data()),std::min(example_name.size(),scenario_input.size()-1),scenario_input.data());
     std::string launcher_error;
@@ -183,6 +184,7 @@ int run_graphics(std::optional<std::uint64_t> smoke_frames, const std::optional<
                     ImGui::SetNextWindowPos({20*scale,20*scale},ImGuiCond_FirstUseEver);
                     ImGui::SetNextWindowSize({std::min(460*scale,static_cast<float>(window.width())-40),0});
                     ImGui::Begin("SIMFORGE | Open a warehouse",nullptr,ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoSavedSettings);
+                    ImGui::TextDisabled("v%s | %.12s",SIMFORGE_VERSION,SIMFORGE_SOURCE_COMMIT);
                     ImGui::TextWrapped("Open a warehouse scenario to edit configurations, compare results and export reports. The static scene demo remains available behind this panel.");
                     ImGui::TextUnformatted("Local scenario JSON path"); ImGui::SetNextItemWidth(-1);
                     ImGui::InputText("##Scenario",scenario_input.data(),scenario_input.size());

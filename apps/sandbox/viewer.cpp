@@ -1,4 +1,5 @@
 #include "viewer.hpp"
+#include "simforge_version.hpp"
 #include "dashboard.hpp"
 #include "workspace_panel.hpp"
 #include "project_panel.hpp"
@@ -121,6 +122,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
     const std::filesystem::path& scenario_path, double speed, bool show_workspace, const simforge::scenario::ScenarioDefinition* prepared_definition, const std::optional<std::filesystem::path>& project_path)
 {
     using namespace simforge;
+    const auto preparation_started=std::chrono::steady_clock::now();
     const auto definition = prepared_definition ? *prepared_definition : project_path ?
         scenario::ScenarioDefinition{1,"Warehouse",{60,28800,0},scenario::WarehouseConfig{2,4,2,300,600}} : scenario::load_scenario(scenario_path);
     workspace::ScenarioWorkspace workspace{definition,speed};
@@ -140,7 +142,10 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
             if(std::filesystem::exists(capture_path(*capture_output,(std::string{"design-"}+stage+"-"+std::to_string(size)).c_str())))
                 throw std::invalid_argument("Design capture output already exists");
     }
-    platform::Window window; window.create("SimForge | Interactive warehouse",1280,720,platform::WindowMode::Vulkan);
+    if(!project_path) std::cout << "Scenario preparation wall: "
+        << std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-preparation_started).count()
+        << " ms (load/copy, validation and workspace construction)\n";
+    platform::Window window; window.create("SimForge v" SIMFORGE_VERSION " | Interactive warehouse",1280,720,platform::WindowMode::Vulkan);
     if (!SDL_SetWindowMinimumSize(window.native_handle(),640,480)) throw std::runtime_error("Set viewer minimum window size");
     renderer::Renderer graphics; renderer::RendererOptions options; options.ui = true;
     options.validation = options.require_validation = smoke_frames.has_value(); options.capture_frames = smoke_frames.has_value();
@@ -153,8 +158,12 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
     bool measure_confirmation_frames=false;double confirmation_frame_ms=0;std::uint64_t confirmation_frames=0;
     WorkspaceUI workspace_ui; ProjectUI project_ui;
     if(!smoke_frames) {
-        if(const auto* pref=SDL_GetPrefPath("SimForge","SimForge")) {project_ui.recovery_path=std::filesystem::path(pref)/"session.recovery";
-            project_ui.show_recovery=project_ui.recovery_deferred=workspace::Project::recovery_available(project_ui.recovery_path);}
+        if(auto* pref=SDL_GetPrefPath("SimForge","SimForge")) {
+            project_ui.recovery_path=std::filesystem::path(pref)/"session.recovery";
+            SDL_free(pref);
+            try { project_ui.show_recovery=project_ui.recovery_deferred=workspace::Project::recovery_available(project_ui.recovery_path); }
+            catch(const std::exception& ex) { project_ui.error=std::string{"Session recovery unavailable: "}+ex.what(); }
+        } else project_ui.error=std::string{"Session recovery unavailable: "}+SDL_GetError();
     }
     ui_state.panels.workspace = show_workspace;
     if(show_workspace) ui_state.panels.mode=viewer::ApplicationMode::Editor;
