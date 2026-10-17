@@ -739,7 +739,8 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         controller.seek(std::min<std::uint64_t>(controller.observation().horizon,7200ULL*definition.simulation.tick_rate)); submit(); capture("queue-buildup");
         design_captures("simulation");
         controller.seek(0); submit();
-        require(controller.observation().tick == 0 && controller.observation().metrics == warehouse::WarehouseSimulation{definition}.metrics(),
+        warehouse::WarehouseSimulation initial_reference{definition}; initial_reference.advance_to(0);
+        require(controller.observation().tick == 0 && controller.observation().metrics == initial_reference.metrics(),
             "Backward seek zero disagrees with the scenario's initial workload state");
         click(dashboard.reset); require(controller.runtime().capture_snapshot() == warehouse::WarehouseSimulation{definition}.capture_snapshot(),"Reset did not restore pristine runtime");
         require(!controller.selection(),"Reset retained selection");
