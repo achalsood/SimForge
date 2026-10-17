@@ -313,7 +313,14 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
                             ImGui::BeginDisabled(workload.intensities.size()>=scenario::max_demand_segments);
                             if(ImGui::Button("Add intensity segment")){workload.intensities.push_back({workload.intensities.empty()?"0":workload.intensities.back()[1],w.draft().values[6],"0.016666666666666666"});changed=true;}ui.add_intensity=center();ImGui::EndDisabled();
                         }
-                        if(w.errors().empty()) {auto definition=w.draft_definition();const auto& cfg=std::get<scenario::WarehouseConfig>(definition.domain);ImGui::Text("Expected horizon arrivals: %.6g",scenario::workload::expected_arrivals(cfg,definition.simulation.duration_seconds));}
+                        if(w.errors().empty()) {
+                            try {
+                                auto definition=w.draft_definition();const auto& cfg=std::get<scenario::WarehouseConfig>(definition.domain);
+                                ImGui::Text("Expected horizon arrivals: %.6g",scenario::workload::expected_arrivals(cfg,definition.simulation.duration_seconds));
+                            } catch(const std::invalid_argument&) {
+                                ImGui::TextDisabled("Validate the draft to update expected arrivals.");
+                            }
+                        }
                     } else if(workload.arrivals==scenario::ArrivalMode::Uniform) {
                         changed|=workload_text("Minimum arrival interval (s)",workload.bounds[0]);ui.workload_bounds[0]=center();
                         changed|=workload_text("Maximum arrival interval (s)",workload.bounds[1]);ui.workload_bounds[1]=center();

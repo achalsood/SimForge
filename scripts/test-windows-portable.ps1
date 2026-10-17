@@ -50,11 +50,20 @@ function Measure-Launch([string]$Application,[string]$WorkingDirectory,[string]$
     $stdout=Join-Path $evidence "$Label-stdout.log"; $stderr=Join-Path $evidence "$Label-stderr.log"
     $start=[Diagnostics.Stopwatch]::StartNew()
     $process=Start-Process -FilePath $Application -WorkingDirectory $WorkingDirectory -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+    # Keep the native handle while the process lives so Windows PowerShell can
+    # retrieve its exit status after the window has closed.
+    [void]$process.Handle
     try {
         $window=[IntPtr]::Zero
         while ($start.Elapsed.TotalSeconds -lt 30 -and -not $process.HasExited) {
             $window=[SimForgeReleaseWindow]::Find([uint32]$process.Id)
-            $rendererReady=(Test-Path -LiteralPath $stdout) -and ([IO.File]::ReadAllText($stdout) -match 'Pipeline creation:')
+            $rendererReady=$false
+            if (Test-Path -LiteralPath $stdout) {
+                $stream=[IO.File]::Open($stdout,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::ReadWrite)
+                $reader=[IO.StreamReader]::new($stream)
+                try { $rendererReady=$reader.ReadToEnd() -match 'Pipeline creation:' }
+                finally { $reader.Dispose() }
+            }
             if ($window -ne [IntPtr]::Zero -and -not [SimForgeReleaseWindow]::IsHungAppWindow($window) -and $rendererReady) { break }
             Start-Sleep -Milliseconds 20
         }
@@ -75,7 +84,7 @@ function Measure-Launch([string]$Application,[string]$WorkingDirectory,[string]$
         if (-not $process.WaitForExit(15000)) { throw "Normal close did not exit: $Label" }
         $process.WaitForExit()
         $record['exitCode']=$process.ExitCode
-        if ($process.ExitCode -ne 0) { throw "Abnormal exit: $Label" }
+        if ($process.ExitCode -ne 0) { throw "Abnormal exit: $Label (code: $($process.ExitCode))" }
         return $record
     } finally { if (-not $process.HasExited) { $process.Kill(); $process.WaitForExit() }; $process.Dispose() }
 }

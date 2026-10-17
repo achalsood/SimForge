@@ -738,7 +738,9 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
         require(controller.observation().tick == frozen,"Paused wall time advanced runtime"); capture("paused");
         controller.seek(std::min<std::uint64_t>(controller.observation().horizon,7200ULL*definition.simulation.tick_rate)); submit(); capture("queue-buildup");
         design_captures("simulation");
-        controller.seek(0); submit(); require(controller.observation().tick == 0 && controller.observation().metrics.arrived == 1,"Backward seek zero did not replay arrival zero");
+        controller.seek(0); submit();
+        require(controller.observation().tick == 0 && controller.observation().metrics == warehouse::WarehouseSimulation{definition}.metrics(),
+            "Backward seek zero disagrees with the scenario's initial workload state");
         click(dashboard.reset); require(controller.runtime().capture_snapshot() == warehouse::WarehouseSimulation{definition}.capture_snapshot(),"Reset did not restore pristine runtime");
         require(!controller.selection(),"Reset retained selection");
         click(dashboard.play); require(!controller.runtime().clock().paused(),"Resume button failed");

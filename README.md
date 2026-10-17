@@ -20,7 +20,7 @@ These are conditional simulation results, not guarantees about a real warehouse.
 
 ## Building and Testing Locally
 
-Windows portable release preparation is documented in the [Windows quick start](docs/windows-release.md) and [manual packaging procedure](docs/releases/windows-release-process.md). A downloadable release is pending validation and explicit publication approval; no download link is advertised yet.
+Windows portable release preparation is documented in the [Windows quick start](docs/windows-release.md), [manual packaging procedure](docs/releases/windows-release-process.md) and [validation record](docs/releases/v0.1.0-validation.md). The ZIP is prepared locally; final validation and explicit publication approval precede public download availability.
 
 Automated tests are executed locally. This repository intentionally does not use hosted CI: GitHub Actions, scheduled workflows and automated release pipelines are not configured. The results below describe local Windows runs, not tests run on GitHub.
 
