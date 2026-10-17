@@ -159,7 +159,7 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
     WorkspaceUI workspace_ui; ProjectUI project_ui;
     if(!smoke_frames) {
         if(auto* pref=SDL_GetPrefPath("SimForge","SimForge")) {
-            project_ui.recovery_path=std::filesystem::path(pref)/"session.recovery";
+            project_ui.recovery_path=std::filesystem::u8path(pref)/"session.recovery";
             SDL_free(pref);
             try { project_ui.show_recovery=project_ui.recovery_deferred=workspace::Project::recovery_available(project_ui.recovery_path); }
             catch(const std::exception& ex) { project_ui.error=std::string{"Session recovery unavailable: "}+ex.what(); }
@@ -167,7 +167,8 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
     }
     ui_state.panels.workspace = show_workspace;
     if(show_workspace) ui_state.panels.mode=viewer::ApplicationMode::Editor;
-    workspace_ui.path = scenario_path.string();
+    const auto scenario_path_utf8 = scenario_path.u8string();
+    workspace_ui.path.assign(reinterpret_cast<const char*>(scenario_path_utf8.data()),scenario_path_utf8.size());
     if(project_path) { const auto& p=project.preferences();
         ui_state.panels={p.metrics,p.inspector,p.metrics_explicit,p.focus,p.workspace,static_cast<viewer::ApplicationMode>(p.application_mode)};
         workspace_ui.mode=static_cast<int>(p.comparison_mode);workspace_ui.objective=static_cast<int>(p.objective);
@@ -893,12 +894,17 @@ int run_viewer(std::optional<std::uint64_t> smoke_frames, const std::optional<st
             window.resize(1280,720); submit();
             const auto json = capture_output->parent_path()/(capture_output->stem().string()+"-comparison.json");
             const auto csv = capture_output->parent_path()/(capture_output->stem().string()+"-comparison.csv");
-            workspace_ui.scroll_target=15; submit(); submit();
-            enter_text(workspace_ui.export_field,json.string().c_str()); click(workspace_ui.export_json);
+            const auto json_utf8=json.u8string(),csv_utf8=csv.u8string();
+            workspace_ui.scroll_target=90; submit(); submit();
+            enter_text(workspace_ui.export_field,reinterpret_cast<const char*>(json_utf8.c_str()));
+            require(workspace_ui.export_path==std::string{json_utf8.begin(),json_utf8.end()},"JSON export field did not receive its diagnostic path");
+            workspace_ui.scroll_target=15; submit(); submit(); click(workspace_ui.export_json);
             require(std::filesystem::exists(json) && workspace_ui.error.empty(),"Graphical JSON export failed");
             click(workspace_ui.export_json); require(!workspace_ui.error.empty() && bool(workspace.report()),"Existing-file export did not preserve the report and show failure");
-            workspace_ui.scroll_target=15; submit(); submit();
-            enter_text(workspace_ui.export_field,csv.string().c_str()); click(workspace_ui.export_csv);
+            workspace_ui.scroll_target=90; submit(); submit();
+            enter_text(workspace_ui.export_field,reinterpret_cast<const char*>(csv_utf8.c_str()));
+            require(workspace_ui.export_path==std::string{csv_utf8.begin(),csv_utf8.end()},"CSV export field did not receive its diagnostic path");
+            workspace_ui.scroll_target=15; submit(); submit(); click(workspace_ui.export_csv);
             require(std::filesystem::exists(csv) && workspace_ui.error.empty(),"Graphical CSV export failed");
             workspace::ScenarioWorkspace::verify_export(workspace.json());
         }

@@ -1,6 +1,6 @@
 # SimForge v0.1.0 for Windows
 
-SimForge lets you run a warehouse simulation, watch its activity in 3D, and compare operational changes. This guide describes the portable Windows x64 package. Publication is pending explicit owner approval; see the validation record for current readiness.
+SimForge lets you run a warehouse simulation, watch its activity in 3D, and compare operational changes. This guide describes the portable Windows x64 package. Check the repository's Releases page for download availability.
 
 ## Requirements
 
@@ -13,7 +13,7 @@ You do not need Visual Studio, CMake, Ninja, vcpkg, a compiler, shader tools or 
 
 ## Download, extract and launch
 
-After publication, open **Releases** on the [SimForge repository](https://github.com/achalsood/SimForge), choose **SimForge v0.1.0 — First Windows Release**, and download `SimForge-v0.1.0-windows-x64.zip` and `SimForge-v0.1.0-SHA256.txt`.
+Open **Releases** on the [SimForge repository](https://github.com/achalsood/SimForge), choose **SimForge v0.1.0 — First Windows Release**, and download `SimForge-v0.1.0-windows-x64.zip` and `SimForge-v0.1.0-SHA256.txt`.
 
 Optionally verify the download in PowerShell with `Get-FileHash .\SimForge-v0.1.0-windows-x64.zip -Algorithm SHA256` and compare its hash with the checksum file. Right-click the ZIP, choose **Extract All**, and open the extracted `SimForge-v0.1.0-windows-x64` folder. Double-click **simforge_sandbox.exe**. Keep `SDL3.dll`, `examples` and the other supplied files together. Launch from the extracted folder, not from inside the ZIP. The console window shows diagnostics; closing the application window exits normally.
 

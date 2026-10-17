@@ -14,7 +14,7 @@ $allowedEvidence=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../build/test-
 if (-not $evidence.StartsWith($allowedEvidence+'\',[StringComparison]::OrdinalIgnoreCase)) { throw 'Evidence must be in a fresh child of build/test-artifacts for the existing artifact safety policy.' }
 if (Test-Path -LiteralPath $evidence) { throw 'Evidence directory already exists; choose a new one.' }
 New-Item -ItemType Directory -Path $evidence | Out-Null
-$isolation=Join-Path ([IO.Path]::GetTempPath()) ('SimForge release with spaces '+[guid]::NewGuid().ToString('N'))
+$isolation=Join-Path ([IO.Path]::GetTempPath()) ("SimForge release caf$([char]0xE9) with spaces "+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $isolation | Out-Null
 Copy-Item -LiteralPath $zip -Destination $isolation
 Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -83,8 +83,10 @@ try {
     $env:PATH="$env:WINDIR\System32;$env:WINDIR"
     foreach ($variable in $savedEnvironment.Keys | Where-Object { $_ -ne 'PATH' }) { [Environment]::SetEnvironmentVariable($variable,$null,'Process') }
     $results+=Measure-Launch $exe $package 'package-own-directory'
-    $results+=Measure-Launch $exe $isolation 'package-unrelated-directory'
-    $results+=Measure-Launch $buildExe $isolation 'local-release-unrelated-directory'
+    foreach ($trial in 1..3) {
+        $results+=Measure-Launch $exe $isolation "package-unrelated-directory-$trial"
+        $results+=Measure-Launch $buildExe $isolation "local-release-unrelated-directory-$trial"
+    }
     foreach ($scenario in @('warehouse-baseline.json','warehouse-constrained.json','stochastic-coverage/homogeneous.json')) {
         & (Join-Path $package 'simforge_headless.exe') --headless --scenario (Join-Path $package "examples/$scenario") *> (Join-Path $evidence (($scenario.Replace('/','-'))+'.log'))
         if ($LASTEXITCODE -ne 0) { throw "Packaged scenario failed: $scenario" }
@@ -109,7 +111,7 @@ try {
             }
             $arguments+=@('-Scenario',(Join-Path $package "examples/$scenario"),'-Live')
             if ($case -eq 'checkpoint') { $arguments+='-Checkpoint' }
-            elseif ($case -eq 'baseline') { $arguments+='-ProjectRoundTrip' }
+            elseif ($case -in @('baseline','local-release')) { $arguments+='-ProjectRoundTrip' }
             if ($case -eq 'local-release') { $arguments[$arguments.IndexOf($exe)]=$buildExe }
         }
         & powershell.exe @arguments *> (Join-Path $evidence "$case-graphics.log")

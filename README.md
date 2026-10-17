@@ -24,7 +24,7 @@ Windows portable release preparation is documented in the [Windows quick start](
 
 Automated tests are executed locally. This repository intentionally does not use hosted CI: GitHub Actions, scheduled workflows and automated release pipelines are not configured. The results below describe local Windows runs, not tests run on GitHub.
 
-Use an **x64 Visual Studio developer PowerShell/terminal** with a C++23-capable MSVC toolchain, CMake 3.25 or newer, Ninja, and vcpkg. Set `VCPKG_ROOT` to your vcpkg checkout. The manifest pins its dependency baseline; configuration installs the required dependencies. The verified environment uses Visual Studio 2026 Build Tools.
+Build from a Git checkout using an **x64 Visual Studio developer PowerShell/terminal** with Git, a C++23-capable MSVC toolchain, CMake 3.25 or newer, Ninja, and vcpkg. Set `VCPKG_ROOT` to your vcpkg checkout. The manifest pins its dependency baseline; configuration installs the required dependencies. Git records source identity at configure time. The verified environment uses Visual Studio 2026 Build Tools.
 
 Renderer builds also need the official Vulkan SDK (headers 1.4.335 or newer), `VULKAN_SDK`, SDK tools including `glslc`, a Vulkan 1.1 runtime, and a driver supporting swapchain-maintenance1 presentation fences. See [Vulkan setup](docs/vulkan-renderer.md). The renderer-disabled preset does not require a GPU or Vulkan SDK.
 

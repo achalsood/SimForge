@@ -28,6 +28,12 @@ Stable input files, entry order, timestamps and metadata make repeat packaging c
 
 Test a copy of only the ZIP outside the checkout, in a directory with spaces, with an unrelated working directory and a PATH containing only Windows system paths. Verify loaded SDL comes from the package and Vulkan/MSVC from system runtime installations. Run normal launcher, samples, playback, graphics validation, Save/fresh-process Open and clean exit. Compare normal startup time to first responsive window, process memory and viewer frame measurements against the same local Release build. An automated native desktop walkthrough is not a human usability test. A development machine with restricted PATH is not a clean machine. Record unavailable VM/GPU coverage explicitly and never claim it happened.
 
+On the compatible development host with installed Khronos validation layers, the portable runner performs those checks, including three interleaved packaged/local normal startup comparisons. It retains captures, logs, projects and metrics under a fresh child of build/test-artifacts and leaves the temporary extraction for inspection:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-windows-portable.ps1 -ZipPath dist/v0.1.0/SimForge-v0.1.0-windows-x64.zip -SourceCommit YOUR_40_CHARACTER_COMMIT -EvidenceDirectory build/test-artifacts/release-v010-portable
+```
+
 The tracked validation document records the test evidence before the final preparation commit. Its own containing commit and archive checksum cannot be written into that commit without changing its identity. The generated receipt and release body provide final identity/checksum values, and the final artifact validation supplement alongside them records checks on the exact committed package. Review both.
 
 **Stop for owner approval** after local commit/build/package/validation. Do not push the source commit, create/push the tag, upload binaries or create/publish the GitHub release before approval. The requested user gate is mandatory. No push or tag is part of either script.

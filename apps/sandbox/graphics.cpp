@@ -145,7 +145,7 @@ int run_graphics(std::optional<std::uint64_t> smoke_frames, const std::optional<
     std::array<char,1025> scenario_input{};
     const char* executable_path=SDL_GetBasePath();
     if (!executable_path) throw std::runtime_error("Cannot locate the application directory: " + std::string{SDL_GetError()});
-    const auto example = std::filesystem::path{executable_path}/"examples/warehouse-baseline.json";
+    const auto example = std::filesystem::u8path(executable_path)/"examples/warehouse-baseline.json";
     const auto example_name = example.u8string();
     std::copy_n(reinterpret_cast<const char*>(example_name.data()),std::min(example_name.size(),scenario_input.size()-1),scenario_input.data());
     std::string launcher_error;

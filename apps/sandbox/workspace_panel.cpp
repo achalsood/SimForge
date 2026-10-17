@@ -539,7 +539,7 @@ void draw_workspace(workspace::ScenarioWorkspace& w, WorkspaceUI& ui, const Dash
                 }
                 if(ImGui::CollapsingHeader("Interpretation and limits")) for(const auto& line:report.limitations) ImGui::TextWrapped("%s",line.c_str());
                 text("Export destination (new file)",ui.export_path);
-                ui.export_field=center();
+                ui.export_field=center(); scroll(90);
                 if(ImGui::Button("Save JSON report...")) { ui.dialog_used=true; const auto path=save_report_dialog(false,ui.export_path,ui.error); if(path) { const auto bytes=path->u8string(); queue({WorkspaceAction::Json,std::string{bytes.begin(),bytes.end()}}); } } ImGui::SameLine();
                 if(ImGui::Button("Save CSV summary...")) { const auto path=save_report_dialog(true,ui.export_path,ui.error); if(path) { const auto bytes=path->u8string(); queue({WorkspaceAction::Csv,std::string{bytes.begin(),bytes.end()}}); } }
                 if(ImGui::Button("Export JSON to path")) queue({WorkspaceAction::Json,ui.export_path}); ui.export_json=center(); ImGui::SameLine();

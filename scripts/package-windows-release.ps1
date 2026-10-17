@@ -88,7 +88,7 @@ $jsonCopyright=@(Get-ChildItem -LiteralPath (Join-Path $installed 'include/nlohm
     foreach ($license in [regex]::Matches($text,'(?m)^// SPDX-License-Identifier: (.+)')) {
         if ($license.Groups[1].Value.Trim() -ne 'MIT') { throw 'Unreviewed nlohmann component license' }
     }
-    foreach ($credit in [regex]::Matches($text,'(?m)^// SPDX-FileCopyrightText: (.+)')) { $credit.Groups[1].Value.Trim() }
+    foreach ($credit in [regex]::Matches($text,'(?m)^// SPDX-FileCopyrightText: (.+)')) { 'SPDX-FileCopyrightText: '+$credit.Groups[1].Value.Trim() }
 } | Sort-Object -Unique)
 if ($jsonCopyright.Count -lt 5) { throw 'Missing nlohmann component attribution evidence' }
 $jsonNotices="nlohmann/json component copyright attributions from installed headers (MIT):`n`n"+($jsonCopyright -join "`n")+"`n`n"+

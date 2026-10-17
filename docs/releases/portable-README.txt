@@ -27,5 +27,5 @@ dependency terms. Roboto font license/provenance are in assets/fonts/.
 
 Tested graphics: NVIDIA GeForce RTX 5080 Laptop GPU on Windows 11 Home 26H2.
 Other machines/OS versions are unverified. Full clean-machine Vulkan testing
-remains unavailable. This executable is unsigned. See release validation before
-publication; the ZIP itself does not imply publication approval.
+remains unavailable. This executable is unsigned. See docs/windows-release.md
+for complete requirements and limitations.
