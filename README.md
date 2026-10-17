@@ -6,6 +6,12 @@ The simulation core runs independently of the renderer. Seeded workloads, comple
 
 ![Warehouse simulation and operational dashboard](docs/artifacts/visual-design-simulation-1280.png)
 
+## Download
+
+[Download SimForge v0.1.0 for Windows x64](https://github.com/achalsood/SimForge/releases/download/v0.1.0/SimForge-v0.1.0-windows-x64.zip), then extract all files and launch **simforge_sandbox.exe**. No compiler or Vulkan SDK is needed to run it.
+
+Requires the Microsoft Visual C++ v14 x64 runtime and a compatible Vulkan graphics driver. See the [requirements and quick start](docs/windows-release.md), [release page](https://github.com/achalsood/SimForge/releases/tag/v0.1.0), [SHA-256 checksum](https://github.com/achalsood/SimForge/releases/download/v0.1.0/SimForge-v0.1.0-SHA256.txt) and [validation report](docs/releases/v0.1.0-validation.md). Local graphics validation uses Windows 11 and an NVIDIA GeForce RTX 5080 Laptop GPU; other configurations remain unverified. [Build-from-source instructions](#building-and-testing-locally) are below.
+
 ## What you can do
 
 - Edit warehouse scenarios and replay arrivals, processing, queues and resource activity.
@@ -20,7 +26,7 @@ These are conditional simulation results, not guarantees about a real warehouse.
 
 ## Building and Testing Locally
 
-Windows portable release preparation is documented in the [Windows quick start](docs/windows-release.md), [manual packaging procedure](docs/releases/windows-release-process.md) and [validation record](docs/releases/v0.1.0-validation.md). The ZIP is prepared locally; final validation and explicit publication approval precede public download availability.
+The Windows release uses the existing dynamic MSVC runtime configuration. See the [manual packaging procedure](docs/releases/windows-release-process.md) and [release validation record](docs/releases/v0.1.0-validation.md) for its build, test and dependency evidence.
 
 Automated tests are executed locally. This repository intentionally does not use hosted CI: GitHub Actions, scheduled workflows and automated release pipelines are not configured. The results below describe local Windows runs, not tests run on GitHub.
 
